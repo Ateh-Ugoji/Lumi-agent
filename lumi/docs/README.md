@@ -2,6 +2,8 @@
 
 Short, logic-focused notes per module — why things are built the way they are, and the gotchas you'd otherwise find by breaking them. For the big picture (stack, request flow, full table list), read [../README.md](../README.md) and [../CLAUDE.md](../CLAUDE.md) first. For the planning specs this build follows, see [`../.agents/`](../.agents/).
 
+**Just want to get it running on your machine? Start with [`how-to-setup.md`](how-to-setup.md)** — prerequisites, env keys, both servers, troubleshooting.
+
 - [models.md](models.md) — the 11 tables, and the non-obvious invariants (voice versioning, alert-once, `posts` vs `listening_matches`)
 - [routers.md](routers.md) — the HTTP endpoints and what they're responsible for
 - [tools.md](tools.md) — agent-callable functions, how registration works, one gotcha per tool
