@@ -97,7 +97,7 @@ def test_check_keys_never_echoes_a_configured_value(tmp_path):
 def test_optional_services_are_warned_not_fatal(tmp_path):
     env_file = tmp_path / ".env"
     env_file.write_text(
-        f"DATABASE_URL={URL}\nSECRET_KEY={SECRET}\nTOKEN_ENCRYPTION_KEY={FERNET}\n"
+        f"DATABASE_URL={URL}\nSECRET_KEY={SECRET}\nTOKEN_ENCRYPTION_KEY={FERNET}\nGROQ_API_KEY=dummy-not-called\n"
     )
     code = (
         "import os, django, logging, io\n"

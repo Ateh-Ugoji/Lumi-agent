@@ -1,6 +1,6 @@
 # Contratos de Lumi (backend Django)
 
-Versión 1.0, 2026-10-27. Dueño: LUMI-ARCHITECT. Complementa `docs/SCHEMA.md` (tablas) y `lumi_ai/ports.py` (puertos de IA, versión 1.3).
+Versión 1.0, 2026-10-27. Dueño: LUMI-ARCHITECT. Complementa `docs/SCHEMA.md` (tablas) y `lumi_ai/ports.py` (puertos de IA, versión 1.5).
 
 Este documento fija lo que los otros dos equipos pueden usar sin preguntar: rutas HTTP, firmas de servicios, nombres de migraciones, el registro de keys, las convenciones de tests y los puntos donde el diseño se aparta del plan. Una ruta o función marcada **publicada** ya existe en `lumi-orquestador`. Las demás son contrato: el código llega en la tarea indicada.
 

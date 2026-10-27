@@ -9,6 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from apps.core import env
+from lumi_ai.config import AIConfig
 
 BASE_DIR = Path(__file__).resolve().parents[2]  # lumi/
 
@@ -35,6 +36,7 @@ INSTALLED_APPS = [
     "apps.accounts",
     "apps.profiles",
     "apps.chat",
+    "apps.intelligence",
     "apps.connections",
 ]
 
@@ -146,6 +148,11 @@ TOKEN_ENCRYPTION_KEY = env.get("TOKEN_ENCRYPTION_KEY")
 TOKEN_ENCRYPTION_KEY_PREVIOUS = env.get("TOKEN_ENCRYPTION_KEY_PREVIOUS")
 PUBLIC_BASE_URL = env.get("PUBLIC_BASE_URL")
 FRONTEND_URL = env.get("FRONTEND_URL")
+
+# Models, limits and AI keys come from lumi_ai.config.AIConfig, which reads its own variables
+# (GROQ_MODEL_*, OPENROUTER_MODEL, WHISPER_MODEL, PROVIDER_COOLDOWN_*, LLM_TIMEOUT_SECONDS, ...).
+# A malformed number fails here and names the variable.
+AI_CONFIG = AIConfig.from_env()
 
 # Fail at startup when a required key is missing (apps.core.startup.check). Off in tests.
 KEYS_ENFORCE_REQUIRED = True

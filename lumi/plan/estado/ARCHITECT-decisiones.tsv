@@ -33,3 +33,4 @@ ts	phase	decision	why	evidence	result
 2026-10-27T06:39:36Z	T1	docker compose, startup e2e tests, check_keys live test	close T1	uv run pytest: 843 passed, 3 deselected; compose YAML parsed, not run (no docker)	pushed
 2026-10-27T06:43:22Z	T0	dump file search	orchestrator: delete local log with env dump	grep -rIl declare -x over /workspace /tmp /home/box, git log --all -p -G for 6 patterns: 0 hits	no file found; nothing deleted (tool output only)
 2026-10-27T06:43:22Z	T3	admin read-only SafeModelAdmin, staff only, encrypted fields hidden + check lumi.E001	orchestrator order	uv run pytest 857 passed, check, makemigrations --check clean	pushed
+2026-10-27T06:44:27Z	T1	apps.intelligence in INSTALLED_APPS, AI_CONFIG from AIConfig.from_env, .env.example model vars, CONTRATOS ports 1.5	INTELLIGENCE request	pytest 914 passed; check_keys lists groq(required),openrouter,openlux,jev,neatlogs,video	pushed
