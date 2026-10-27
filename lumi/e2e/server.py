@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import os
 import sys
+import tempfile
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 
@@ -39,9 +40,34 @@ def _recreate_database(admin_url: str) -> None:
         conn.execute(f'CREATE DATABASE "{E2E_DB}"')
 
 
+def _use_real_agent() -> None:
+    """The real runtime, registry and tools. Only the model is a double (``e2e.llm_double``).
+
+    ``lumi_ai.providers.factory`` reads the Groq base URL from a module constant, so pointing it at
+    the local server makes the real ``openai`` client talk to it over HTTP. The fake key only
+    switches the provider on. ``ConnectionLinks`` is not wired by ``apps.intelligence.wiring`` yet,
+    so the real ``connect_account`` tool is registered here over the real ``DjangoConnectionLinks``.
+    """
+    from apps.connections.connect_links import DjangoConnectionLinks
+    from apps.intelligence.wiring import get_wiring
+    from e2e import llm_double
+    from lumi_ai.providers import factory
+    from lumi_ai.tools import account
+
+    port = int(os.environ["E2E_LLM_PORT"])
+    llm_double.start(port)
+    factory.GROQ_BASE_URL = f"http://127.0.0.1:{port}/v1"
+    wiring = get_wiring()
+    if wiring.registry.get("connect_account") is None:
+        wiring.registry.register(
+            account.build_connect(DjangoConnectionLinks(), wiring.loop.deps.profiles)
+        )
+
+
 def main() -> None:
     admin_url, e2e_url = _database_urls()
     kept = {k: os.environ[k] for k in KEEP if k in os.environ}
+    kept_agent = os.environ.get("E2E_AGENT", "real")
     os.environ.clear()
     os.environ.update(kept)
     os.environ.update(
@@ -50,6 +76,10 @@ def main() -> None:
             "DJANGO_SETTINGS_MODULE": "e2e.settings",
             "PUBLIC_BASE_URL": "http://localhost:8000",
             "FRONTEND_URL": "http://localhost:3010",
+            "E2E_AGENT": kept_agent,
+            "E2E_LLM_PORT": os.environ.get("E2E_LLM_PORT", "8099"),
+            "GROQ_API_KEY": "e2e-not-a-real-key",
+            "CHROMA_PATH": tempfile.mkdtemp(prefix="lumi-e2e-chroma-"),
             "META_APP_ID": "e2e-meta-app",
             "META_APP_SECRET": "e2e-meta-secret",
             "PFM_JWT_TOKEN": "e2e-pfm-token",
@@ -68,7 +98,10 @@ def main() -> None:
     from e2e import sim
 
     sim.install()
-    agent_runtime.set_runtime(sim.FakeRuntime())
+    if os.environ["E2E_AGENT"] == "fake":
+        agent_runtime.set_runtime(sim.FakeRuntime())
+    else:
+        _use_real_agent()
     port = os.environ.get("E2E_PORT", "8000")
     call_command("runserver", f"127.0.0.1:{port}", use_reloader=False, verbosity=1)
 

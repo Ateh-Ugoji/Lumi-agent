@@ -195,9 +195,16 @@ export DATABASE_URL=$(uv run python scripts/dev_postgres.py --test)   # Postgres
 cd e2e && npm install && npx playwright test
 ```
 
-Playwright abre el Chrome del equipo (`channel: "chrome"`), levanta `e2e/server.py` en el puerto 8000 y Vite en el 3010. El servidor e2e borra y recrea la base `lumi_e2e` en cada arranque y reconstruye el entorno desde cero, así que una clave de tu shell nunca llega a un proveedor. `e2e/sim.py` simula Meta y Post for Me con las respuestas grabadas de `tests/fixtures`, y las pantallas de consentimiento se contestan con redirecciones al callback real de Lumi. El agente del chat es un doble (`FakeRuntime`) que sí llama al flujo real de conexión.
+Playwright abre el Chrome del equipo (`channel: "chrome"`), levanta `e2e/server.py` en el puerto 8000 y Vite en el 3010. El servidor e2e borra y recrea la base `lumi_e2e` en cada arranque y reconstruye el entorno desde cero, así que una clave de tu shell nunca llega a un proveedor. `e2e/sim.py` simula Meta y Post for Me con las respuestas grabadas de `tests/fixtures`, y las pantallas de consentimiento se contestan con redirecciones al callback real de Lumi. Por defecto el chat usa el agente real (`E2E_AGENT=real`); con `E2E_AGENT=fake` vuelve el doble anterior (`FakeRuntime`).
 
-Los nueve pasos: registro, perfil, estado de los proveedores, conectar Facebook, conectar Post for Me, cancelar en el proveedor, un turno de chat con su tarjeta de conexión, publicar (previsualizar, confirmar) y desconectar con cierre y reingreso de sesión. El mismo recorrido sin navegador está en `apps/connections/tests/db/test_e2e_api.py` y corre con `pytest`.
+Qué es real y qué es un doble en el agente real, sin gastar nada:
+
+- Real: `apps.intelligence.runtime`, `get_wiring()`, el bucle del agente, el registro de herramientas, el cliente `openai` sobre un socket HTTP, `ToolExecution.as_dict` con su `result`, la herramienta `connect_account` sobre `DjangoConnectionLinks`, el embebedor ONNX (en caché local) y Chroma en un directorio temporal.
+- Doble: el modelo de lenguaje. `e2e/llm_double.py` es un servidor compatible con OpenAI en el puerto 8099 (`E2E_LLM_PORT`). `lumi_ai.providers.factory.GROQ_BASE_URL` apunta a él y `GROQ_API_KEY` es un valor falso que solo enciende el proveedor. Decide con una regla fija: si el último mensaje pide conectar, llama a `connect_account`; con el resultado de la herramienta responde con el enlace. `GET /_calls` lista lo que recibió.
+- Doble: Meta y Post for Me, como antes (`e2e/sim.py`).
+- Costura propia del e2e: `apps.intelligence.wiring` todavía no pasa `ToolDeps(links=...)`, así que `e2e/server.py` registra `connect_account` con el `DjangoConnectionLinks` real. Cuando INTELLIGENCE lo cablee, ese bloque sobra.
+
+Los nueve pasos: registro, perfil, estado de los proveedores, conectar Facebook, conectar Post for Me, cancelar en el proveedor, un turno de chat (con Facebook ya conectado la herramienta lo dice; tras desconectar entrega la tarjeta de conexión), publicar (previsualizar, confirmar) y desconectar con cierre y reingreso de sesión. El mismo recorrido sin navegador está en `apps/connections/tests/db/test_e2e_api.py` y corre con `pytest`.
 
 ### Qué hace Christian
 
