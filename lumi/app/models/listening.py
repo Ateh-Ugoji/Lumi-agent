@@ -23,6 +23,10 @@ class ListeningMatch(SQLModel, table=True):
     platform: str = "x"  # MVP targets X only; column kept for extensibility
     platform_post_id: str
     author_handle: str
+    # Picture for the author, read from the shared handle DB (Chroma) right
+    # after the scan — ChronicOnline and the thinking cards render this so
+    # every surface shows the same face. NULL = store didn't know it.
+    author_avatar_url: str | None = None
     caption: str
     platform_url: str
     metrics: dict[str, Any] | None = Field(default=None, sa_column=Column(JSON))

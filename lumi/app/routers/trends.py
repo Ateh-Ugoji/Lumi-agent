@@ -18,6 +18,7 @@ class TrendMatchResponse(BaseModel):
     platform: str
     platform_post_id: str
     author_handle: str
+    author_avatar_url: str | None = None
     caption: str
     platform_url: str
     metrics: dict[str, Any] | None
@@ -62,6 +63,7 @@ async def get_trend_matches(
                     platform=m.platform,
                     platform_post_id=m.platform_post_id,
                     author_handle=m.author_handle,
+                    author_avatar_url=m.author_avatar_url,
                     caption=m.caption,
                     platform_url=m.platform_url,
                     metrics=m.metrics,

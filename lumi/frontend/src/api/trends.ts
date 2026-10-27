@@ -6,6 +6,7 @@ export type TrendMatch = {
   platform: string;
   platform_post_id: string;
   author_handle: string;
+  author_avatar_url?: string | null;
   caption: string;
   platform_url: string;
   metrics: {

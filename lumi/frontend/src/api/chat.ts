@@ -6,6 +6,8 @@ export type SamplePost = {
   text?: string;
   likes?: number;
   url?: string;
+  /** Picture for the author (handle DB); blank -> UI falls back to unavatar */
+  avatar_url?: string;
 };
 
 export type ToolExecution = {

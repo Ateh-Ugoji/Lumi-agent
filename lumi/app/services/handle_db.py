@@ -277,3 +277,50 @@ async def _remember_scanned(handles: list[str], *, origin: str, query: str) -> i
                 item.update(profile)
         items.append(item)
     return remember(items, origin=origin, query=query)
+
+
+def lookup(handles: list[str]) -> dict[str, dict]:
+    """Read picture/name/followers for handles the store already knows.
+
+    Returns {lowercase handle: {avatar_url, display_name, followers}} and
+    includes ONLY rows that actually carry a picture — callers want a face
+    to render, not an empty string to fall back from. Never raises: the
+    store stays a help layered on, never a dependency of the render path.
+    """
+    try:
+        return _lookup(handles)
+    except Exception as exc:  # noqa: BLE001 — never break a render over the DB
+        log.debug("handle_db: lookup skipped (%s)", exc)
+        return {}
+
+
+def _lookup(handles: list[str]) -> dict[str, dict]:
+    collection = _collection()
+    if collection is None:
+        return {}
+
+    wanted: dict[str, str] = {}  # row id -> handle as given
+    for raw in handles:
+        handle = str(raw or "").strip().lstrip("@")
+        if not handle:
+            continue
+        wanted.setdefault(_mapping_id("x", handle), handle)
+    if not wanted:
+        return {}
+
+    got = collection.get(ids=list(wanted), include=["metadatas"])
+    out: dict[str, dict] = {}
+    for doc_id, metadata in zip(got.get("ids") or [], got.get("metadatas") or []):
+        if not metadata:
+            continue
+        avatar = str(metadata.get("avatar_url") or "")
+        if not avatar:
+            continue  # no picture stored — the caller falls back (unavatar)
+        handle = str(metadata.get("handle") or wanted.get(doc_id, "")).lower()
+        followers = metadata.get("followers")
+        out[handle] = {
+            "avatar_url": avatar,
+            "display_name": str(metadata.get("display_name") or ""),
+            "followers": followers if isinstance(followers, int) and followers >= 0 else None,
+        }
+    return out

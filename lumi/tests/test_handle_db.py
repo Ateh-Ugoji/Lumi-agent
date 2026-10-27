@@ -428,3 +428,166 @@ async def test_frameworks_search_persists_every_author(monkeypatch):
         "authors of non-qualifying posts are saved too — the search surfaced them"
     )
     assert origin == "niche" and query == "founder nigeria"
+
+# ---------------------------------------------------- lookup() (pictures)
+
+
+class _ReadCollection:
+    """Read-only Chroma subset: serves metadata lookups."""
+
+    def __init__(self, rows: dict[str, dict]):
+        self.rows = rows
+
+    def get(self, ids=None, include=None):
+        ids = [i for i in (ids or []) if i in self.rows]
+        return {"ids": ids, "metadatas": [self.rows[i] for i in ids]}
+
+
+def test_lookup_returns_only_rows_that_carry_a_picture(monkeypatch):
+    monkeypatch.setattr(
+        handle_db,
+        "_collection",
+        lambda: _ReadCollection(
+            {
+                "x:karpathy": {
+                    "handle": "Karpathy",
+                    "display_name": "Andrej",
+                    "avatar_url": "https://img/pfp.jpg",
+                    "followers": 1234,
+                },
+                "x:nopic": {"handle": "nopic", "display_name": "No Pic", "avatar_url": "", "followers": -1},
+            }
+        ),
+    )
+
+    found = handle_db.lookup(["Karpathy", "nopic", "   ", "@karpathy"])
+
+    assert found == {
+        "karpathy": {"avatar_url": "https://img/pfp.jpg", "display_name": "Andrej", "followers": 1234},
+    }, "picture-less rows are excluded (caller falls back to unavatar), keys lowercased, dupes collapsed"
+
+
+def test_lookup_never_raises_when_the_store_is_down(monkeypatch):
+    assert handle_db.lookup(["anyone"]) == {}, "no MVP_CHROMA_* config -> silent empty result"
+
+    class Broken:
+        def get(self, ids=None, include=None):
+            raise RuntimeError("chroma down")
+
+    monkeypatch.setattr(handle_db, "_collection", lambda: Broken())
+    assert handle_db.lookup(["anyone"]) == {}, "a broken store must never break the render path"
+
+
+# ------------------------------------- scan persists the picture it knows
+
+
+class _PictureSession:
+    """Serves the backfill's select(...).all() and records the commit."""
+
+    def __init__(self, rows):
+        self.rows = rows
+        self.committed = False
+
+    async def exec(self, _stmt):
+        rows = self.rows
+
+        class _Result:
+            def first(self):
+                return None
+
+            def all(self):
+                return rows
+
+        return _Result()
+
+    def add(self, _row):
+        pass
+
+    async def commit(self):
+        self.committed = True
+
+    async def refresh(self, _row):
+        pass
+
+
+def _scope_yielding(session):
+    @asynccontextmanager
+    async def _scope():
+        yield session
+
+    return _scope
+
+
+async def test_check_niche_trends_stores_the_picture_it_knows(monkeypatch):
+    from app.models.listening import ListeningMatch
+    from app.tools import listening
+
+    _spy_handle_db(monkeypatch)
+    monkeypatch.setattr(
+        handle_db,
+        "lookup",
+        lambda handles: {"sama": {"avatar_url": "https://img/sama.jpg", "display_name": "S", "followers": 1}},
+    )
+
+    class FakeXpoz:
+        async def get_user_live_posts(self, username, limit=10):
+            return [{"id": f"{username}-1", "text": "viral", "likeCount": 999, "authorUsername": username}]
+
+        async def aclose(self):
+            pass
+
+    monkeypatch.setattr("app.services.xpoz.XpozClient", FakeXpoz)
+
+    row = ListeningMatch(
+        profile_id=1,
+        platform="x",
+        platform_post_id="sama-1",
+        author_handle="sama",
+        caption="viral",
+        platform_url="https://x.com/sama/status/sama-1",
+    )
+    session = _PictureSession([row])
+    monkeypatch.setattr(listening, "session_scope", _scope_yielding(session))
+
+    result = await listening.check_niche_trends(profile_id=1, handles=["sama"], min_likes=50)
+
+    assert result["new_matches_found"] == 1
+    assert result["viral_posts"][0]["avatar_url"] == "https://img/sama.jpg", (
+        "the SSE sample posts carry the stored picture so the thinking card can morph to it"
+    )
+    assert row.author_avatar_url == "https://img/sama.jpg", "the match row stores it for ChronicOnline"
+    assert session.committed
+
+
+async def test_scan_leaves_rows_null_when_the_store_does_not_know_the_face(monkeypatch):
+    from app.models.listening import ListeningMatch
+    from app.tools import listening
+
+    _spy_handle_db(monkeypatch)
+    monkeypatch.setattr(handle_db, "lookup", lambda handles: {})  # store has never seen them
+
+    class FakeXpoz:
+        async def get_user_live_posts(self, username, limit=10):
+            return [{"id": f"{username}-1", "text": "viral", "likeCount": 999, "authorUsername": username}]
+
+        async def aclose(self):
+            pass
+
+    monkeypatch.setattr("app.services.xpoz.XpozClient", FakeXpoz)
+
+    row = ListeningMatch(
+        profile_id=1,
+        platform="x",
+        platform_post_id="sama-1",
+        author_handle="sama",
+        caption="viral",
+        platform_url="https://x.com/sama/status/sama-1",
+    )
+    session = _PictureSession([row])
+    monkeypatch.setattr(listening, "session_scope", _scope_yielding(session))
+
+    result = await listening.check_niche_trends(profile_id=1, handles=["sama"], min_likes=50)
+
+    assert result["new_matches_found"] == 1, "no picture must never break the scan"
+    assert row.author_avatar_url is None, "unknown face stays NULL — the UI falls back to unavatar"
+    assert "avatar_url" not in result["viral_posts"][0]

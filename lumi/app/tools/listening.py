@@ -336,6 +336,39 @@ async def check_niche_trends(
     except Exception as exc:  # noqa: BLE001 — never fail a scan over the handle DB
         logger.debug("handle_db save skipped: %s", exc)
 
+    # Picture sync: give the rows this scan wrote the picture the handle DB
+    # knows for their authors, so ChronicOnline, the thinking cards and the
+    # store all show the same face. Handles the store has never seen stay
+    # NULL here — the UI falls back to unavatar for them. Best-effort, like
+    # every other DB write on this path.
+    try:
+        pictures = handle_db.lookup([*authors.values(), *handles])
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("handle_db avatar lookup skipped: %s", exc)
+        pictures = {}
+    if pictures:
+        for post in saved_matches:
+            avatar = pictures.get(str(post.get("author") or "").lower(), {}).get("avatar_url")
+            if avatar:
+                post["avatar_url"] = avatar
+        try:
+            async with session_scope() as session:
+                rows = (
+                    await session.exec(
+                        select(ListeningMatch).where(
+                            ListeningMatch.profile_id == profile_id,
+                            ListeningMatch.author_avatar_url.is_(None),
+                        )
+                    )
+                ).all()
+                for row in rows:
+                    avatar = pictures.get(str(row.author_handle or "").lower(), {}).get("avatar_url")
+                    if avatar:
+                        row.author_avatar_url = avatar
+                await session.commit()
+        except Exception as exc:  # noqa: BLE001 — never fail a scan over a picture
+            logger.debug("avatar persist skipped: %s", exc)
+
     result = {
         "profile_id": profile_id,
         "new_matches_found": len(saved_matches),
