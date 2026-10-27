@@ -213,3 +213,4 @@ ARCHITECT verificó que ningún archivo de INTELLIGENCE ni de CONNECT importa `a
 - (b) Moverlo a `lumi/legacy/` como referencia, fuera de la suite de tests.
 - (c) Esperar.
 El orquestador eligió (c) mientras Christian decide. Entretanto, ARCHITECT completa la matriz de paridad contra los 418 tests legados y congela en un fixture el esquema de `legacy_regen.py`. No se borra ni se mueve nada.
+- Restricción (07:40 UTC): INTELLIGENCE y CONNECT confirmaron que su código no importa `app.*`. Pero el frontend todavía llama a rutas del FastAPI viejo en la pantalla de voz y en el conector de Google, y CONNECT las pasa a `/api/v1` en su T11. Lo que decida Christian se aplica recién cuando T11 esté cerrada.
