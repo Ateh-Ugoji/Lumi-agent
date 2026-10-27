@@ -266,3 +266,11 @@ El orquestador eligió (c) mientras Christian decide. Entretanto, ARCHITECT comp
 - **Primera conexión social real**: la decide Christian, y solo cuando el arreglo esté en la rama.
 - **Pendiente de portar los avatares de main `632217e`**: `listening_matches.author_avatar_url` y trends le tocan a ARCHITECT; `handle_db` le toca a CONNECT.
 - `AGENTS.md:88` y `README.md:119` describen el backend legado y no se tocan.
+
+## Revisión horaria, 27 oct 2026, 10:10 UTC
+- `main` no avanzó desde `632217e`. Rama al día en `d1aa288`.
+- **CONNECT** (último `d1aa288`, 10:07): **el alto 1 de OAuth ya está en la rama** (`a2ba0b5`, `c5bf3e0`, `25d3eb6`, `d6dcc30`, `3e67db4`): el callback público no intercambia el código, la página del frontend hace `POST /complete` con el Token del dueño del `state`, `user_id` obligatorio al consumir, `state_expired` alcanzable, y test con un mutante que acepta un `state` ajeno. Después: guardia autouse que deja los tests de connections sin red (`9db3bba`), conserva el refresh token rotado de X si falla el guardado (`fa4d9d2`), `POST /connections/{provider}/link` con selector de Página (`d544c76`), e2e que desconecta todas las Páginas de Facebook (`509432b`), y `HandleDirectory` reemplaza `handle_db` con avatares por `get_or_create_handle` (solo rellena): 6 de 10 huecos de `handle_db` cubiertos (`d1aa288`). Pendiente: T11 frontend, T12, T14, 4 huecos de `handle_db`, `refresh_expiring` en Celery beat.
+- **ARCHITECT** (último `9fd5c17`, 09:37): `author_avatar_url` se lee de `social_handles.avatar_url`, sin columna ni migración (decisión R3); quitado `PUBLIC_BASE_URL` de los settings; tests sin keys con `conftest.py` raíz. Pendiente: T4 a T12 (`services.py` de perfiles y chat y sus rutas) y `how-to-setup.md` al final.
+- **INTELLIGENCE** (último `f4a660c`, 08:08): lleva ~2 h sin commits. Espera las keys y las 4 decisiones de Christian, y T10 sigue sin fuente de URLs de medios. Hay trabajo que no depende de Christian: según el estado de CONNECT, INTELLIGENCE aún no llama a `build_mcp_gateway()` ni a `resolve_pending`, y CONNECT pidió que sus escrituras usen `@aio`. Se pide al padre que se lo indique.
+- Con el alto 1 en la rama, la primera conexión social real ya la puede decidir Christian (necesita sus keys de proveedores).
+- Sigue sin aparecer `/workspace/lumi-data/lumi.db` ni un dump.
