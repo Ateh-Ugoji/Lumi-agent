@@ -38,7 +38,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Literal, Protocol, get_args, runtime_checkable
 
-PORTS_VERSION = "1.0"
+PORTS_VERSION = "1.1"  # 1.1: SemanticJudge
 
 # ---------------------------------------------------------------------------
 # Shared vocabulary
@@ -1005,6 +1005,36 @@ class VideoAnalyzer(Protocol):
         self, media_url: str, *, context: str | None = None
     ) -> VideoAnalysis:
         """Return the structured analysis; raise :class:`VideoUnavailable` when it cannot run."""
+        ...
+
+
+# ---------------------------------------------------------------------------
+# Semantic judge ("Jev")
+# ---------------------------------------------------------------------------
+
+
+@runtime_checkable
+class SemanticJudge(Protocol):
+    """Answers structured questions about a state; never generates text.
+
+    Both methods are best-effort: ``None`` means "no verdict" (judge unreachable, malformed
+    answer, no key) and the caller falls back to its deterministic path. They never raise.
+    """
+
+    async def ask_noul(
+        self, state: dict[str, Any], questions: dict[str, str]
+    ) -> dict[str, float] | None:
+        """Score each question 0..1 about ``state``: ``{name: instructions} -> {name: score}``."""
+        ...
+
+    async def ask_choice(
+        self,
+        state: dict[str, Any],
+        name: str,
+        instructions: str,
+        criteria: dict[str, str],
+    ) -> str | None:
+        """Pick one key of ``criteria`` for ``state``, or ``None``."""
         ...
 
 

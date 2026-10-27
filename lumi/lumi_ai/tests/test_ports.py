@@ -29,6 +29,7 @@ GATEWAYS = [
     ports.McpGateway,
     ports.ConnectionLinks,
     ports.VideoAnalyzer,
+    ports.SemanticJudge,
 ]
 
 
