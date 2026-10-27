@@ -355,18 +355,16 @@ class DjangoHandleStore:
             platform, query
         )
 
+    # The four writers below run under ``aio``: ``scan_trends`` and ``search_frameworks`` reach them
+    # through ``HandleDirectory`` inside a tool call, and a timed-out call must not commit.
     async def put_entry(self, entry: CacheEntry) -> None:
-        await sync_to_async(self._put_entry, thread_sensitive=True)(entry)
+        await aio(self._put_entry)(entry)
 
     async def remember_live(self, rows: list[HandleRow]) -> None:
-        await sync_to_async(self._remember, thread_sensitive=True)(
-            rows, HandleOrigin.LIVE, True, True
-        )
+        await aio(self._remember)(rows, HandleOrigin.LIVE, True, True)
 
     async def remember_new(self, rows: list[HandleRow]) -> None:
-        await sync_to_async(self._remember, thread_sensitive=True)(
-            rows, HandleOrigin.CACHE, False
-        )
+        await aio(self._remember)(rows, HandleOrigin.CACHE, False)
 
     def _profile_handles(self, platform: str, prefix: str) -> list[str]:
         profiles = SocialProfile.objects.filter(
@@ -500,9 +498,7 @@ class DjangoHandleStore:
     async def remember_rows(self, rows: list[HandleRow], origin: str) -> None:
         """Add-if-absent under ``origin``: what a handle already holds is never replaced."""
         # Only a row the provider just returned (``source == "live"``) refreshes a picture.
-        await sync_to_async(self._remember, thread_sensitive=True)(
-            rows, origin, False, True
-        )
+        await aio(self._remember)(rows, origin, False, True)
 
     async def pictures(self, platform: str, handles: list[str]) -> list[HandleRow]:
         """Rows of ``handles`` that carry a picture. A handle with no picture is left out."""
