@@ -49,6 +49,12 @@ class AIConfig:
     mcp_discovery_timeout_seconds: float = 3.0
     memory_worthy_threshold: float = 0.6
 
+    # --- voice profile ---
+    voice_min_posts: int = 5
+    voice_sample_posts: int = 10  # posts shown to the model, spread over the history
+    voice_corpus_limit: int = 200  # newest posts considered before sampling
+    voice_reply_samples: int = 10
+
     # --- providers ---
     provider_cooldown_seconds: float = (
         300.0  # after a 401/402/403/429 a candidate rests this long

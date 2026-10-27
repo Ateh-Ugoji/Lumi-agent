@@ -20,6 +20,7 @@ from lumi_ai.ports import (
     PostOut,
     StyleAnswerIn,
     UserRequestOut,
+    VoiceProfileOut,
 )
 
 NOW = datetime(2026, 10, 27, 12, 0, tzinfo=UTC)
@@ -34,11 +35,12 @@ def make_post(
     days_ago: int = 1,
     kind: str | None = "original",
     profile_id: int = 1,
+    platform: str = "x",
 ) -> PostOut:
     return PostOut(
         id=pid,
         profile_id=profile_id,
-        platform="x",
+        platform=platform,  # type: ignore[arg-type]
         external_id=f"ext{pid}",
         text=text,
         published_at=NOW - timedelta(days=days_ago),
@@ -58,10 +60,24 @@ class FakePosts:
         self.calls: list[tuple[str, Any]] = []
 
     async def list_posts(
-        self, profile_id, *, platform=None, kinds=None, since=None, limit=50
+        self,
+        profile_id,
+        *,
+        platform=None,
+        kinds=None,
+        since=None,
+        limit=50,
+        include_deleted=False,
     ):
         self.calls.append(("list_posts", profile_id))
         rows = [p for p in self.posts if p.profile_id == profile_id]
+        if platform is not None:
+            rows = [p for p in rows if p.platform == platform]
+        if kinds is not None:
+            rows = [p for p in rows if p.kind in kinds]
+        else:
+            rows = [p for p in rows if p.kind in (None, "original")]
+        rows = sorted(rows, key=lambda p: p.published_at, reverse=True)
         if since is not None:
             rows = [p for p in rows if p.published_at >= since]
         return rows[:limit]
@@ -133,12 +149,28 @@ class FakeVoice:
     def __init__(self):
         self.answers: list[StyleAnswerIn] = []
         self.current = None
+        self.saved: list[VoiceProfileOut] = []
 
     async def current_voice(self, profile_id, platform=None):
-        return self.current
+        for voice in reversed(self.saved):
+            if voice.profile_id == profile_id and voice.platform == platform:
+                return voice
+        return self.current if platform is None else None
 
-    async def save_voice(self, *a, **k):
-        raise NotImplementedError
+    async def save_voice(self, profile_id, platform, payload, source, example_post_ids):
+        version = len(self.saved) + 1
+        voice = VoiceProfileOut(
+            id=version,
+            profile_id=profile_id,
+            platform=platform,
+            version=version,
+            payload=dict(payload),
+            source=source,
+            example_post_ids=tuple(example_post_ids),
+            created_at=NOW,
+        )
+        self.saved.append(voice)
+        return voice
 
     async def save_style_answers(self, profile_id, answers):
         self.answers.extend(answers)
