@@ -33,6 +33,13 @@ Rama: `lumi-orquestador`. Registro de decisiones: `ARCHITECT-decisiones.tsv`.
 | `AGENT_KEYS_SETUP.md` | El paso 3 usa `scripts/dev_postgres.py` (se entrega en el resto de T1). |
 | `how-to-setup.md` | Se actualiza tras el port. |
 
+## Lista de T12 (al borrar `lumi/app/`)
+
+- Actualizar `docs/how-to-setup.md`: Postgres obligatorio (la línea 14 aún habla de SQLite), `manage.py`, `check_keys`. CONNECT cubre la parte del frontend.
+- Quitar el plugin `lumi_pytest_env` y su `addopts`.
+- Ejecutar `collectstatic` en el build de Railway (estáticos del admin con whitenoise).
+- Docker se valida solo como YAML; no hay Docker en la máquina de trabajo.
+
 ## Matriz de paridad
 
 Pendiente (se llena antes de T12).
