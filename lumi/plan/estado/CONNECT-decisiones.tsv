@@ -29,3 +29,4 @@ ts	phase	decision	why	evidence	result
 2026-10-27T07:08:53Z	mcp	test_transport patched only gateway.CONNECTORS so a fake bearer hit drivemcp.googleapis.com once (401); now both patched plus loopback-only guard	no real credential, no cost	test_transport.py	fixed
 2026-10-27T07:08:53Z	mcp	session open moved inside wait_for in _execute	MCP_CALL_TIMEOUT=0 test hung	test_gateway timeout tests	fixed
 2026-10-27T07:16:27Z	T8	importador connections.mcp_auth_accounts (200) y pfm_accounts (210); provider google en 0005; id pfm en external_account_id en claro	external_account_id es la clave única de las llamadas PFM; el id no es un token; cifrar exige duplicarlo	1395 pruebas pasan; mutante demo- muerto	bdd8abe
+2026-10-27T07:19:59Z	T11	media PFM solo con tipo declarado; X sin media hasta MediaKind|None	tipo adivinado seria dato inventado	test_ingest	commit local

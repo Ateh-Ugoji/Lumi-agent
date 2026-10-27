@@ -14,14 +14,14 @@ import {
 } from "glimm";
 import { MicRecorder } from "../../voice/recorder";
 import { stopSpeaking } from "../../voice/speak";
-import { transcribeWav } from "../../api/voice";
 import styles from "./PromptBar.module.css";
 import {
   getSavedHandles,
   searchHandles,
   selectHandle,
+  transcribeWav,
   type HandleRow,
-} from "../../api/agent";
+} from "../../api";
 
 const RAINBOW = accentChain([
   ACCENTS.red,
@@ -703,7 +703,8 @@ export default function PromptBar({
     event.target.value = "";
   };
 
-  const canSend = draft.trim().length > 0 || attachments.length > 0;
+  // While the agent is working a second turn would run in parallel, so sending is off.
+  const canSend = !busy && (draft.trim().length > 0 || attachments.length > 0);
   const send = () => {
     if (!canSend) return;
     onSend?.(draft.trim());
@@ -722,7 +723,9 @@ export default function PromptBar({
       // when the user taps stop manually we stop it here.
       const blob = fromEndpointer ?? (recorder ? await recorder.stop() : null);
       const text = blob ? (await transcribeWav(blob)).trim() : "";
-      if (text) {
+      if (text && busy) {
+        setVoiceError("Lumi is still working on the last request. Try again in a moment.");
+      } else if (text) {
         stopSpeaking(); // barge-in: silence any reply still speaking
         onSend?.(text, { voice: true });
       } else {

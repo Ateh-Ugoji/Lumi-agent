@@ -119,18 +119,6 @@
   box-shadow: var(--spec-sm);
 }
 
-.navBadge {
-  min-width: 18px;
-  padding: 1px 6px;
-  border-radius: 999px;
-  background: var(--accent);
-  color: #fff;
-  font-family: "DM Sans", sans-serif;
-  font-size: 10.5px;
-  font-weight: 600;
-  text-align: center;
-}
-
 .panel {
   flex: 1;
   min-width: 0;
@@ -239,16 +227,6 @@
   box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.22);
 }
 
-.inputStatic {
-  opacity: 0.75;
-  cursor: default;
-}
-
-.inputStatic:focus {
-  border-color: var(--glass-border);
-  box-shadow: none;
-}
-
 .cardActions {
   display: flex;
   align-items: center;
@@ -327,137 +305,6 @@
   box-shadow: var(--spec-sm);
 }
 
-.seatsHead {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 8px;
-}
-
-.seatsLabel {
-  font-size: 12.5px;
-  color: var(--text-dim);
-}
-
-.seatBar {
-  height: 8px;
-  border-radius: 999px;
-  background: var(--glass-mid);
-  border: 1px solid var(--glass-border);
-  overflow: hidden;
-  margin-bottom: 16px;
-}
-
-.seatFill {
-  display: block;
-  height: 100%;
-  background: var(--green);
-  border-radius: 999px;
-  transition: width 0.3s var(--ease-standard);
-}
-
-.inviteForm {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 8px;
-}
-
-.inviteForm .input {
-  flex: 1;
-  min-width: 0;
-}
-
-.error {
-  font-size: 12.5px;
-  color: var(--red, #ef4444);
-  margin: 0 0 8px;
-}
-
-.list {
-  margin-top: 14px;
-  border-top: 1px solid var(--glass-border);
-  padding-top: 12px;
-}
-
-.listHead {
-  font-family: "DM Sans", sans-serif;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-  margin-bottom: 4px;
-}
-
-.listRow {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 0;
-}
-
-.memberAvatar {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  flex-shrink: 0;
-  border-radius: 999px;
-  background: var(--glass-mid);
-  border: 1px solid var(--glass-border);
-  color: var(--text-dim);
-  font-family: "DM Sans", sans-serif;
-  font-size: 11px;
-  font-weight: 600;
-}
-
-.listName {
-  flex: 1;
-  min-width: 0;
-  font-size: 13px;
-  color: var(--text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.statusChip {
-  flex-shrink: 0;
-  font-family: "DM Sans", sans-serif;
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--text-dim);
-  background: var(--glass-mid);
-  border: 1px solid var(--glass-border);
-  border-radius: 999px;
-  padding: 3px 9px;
-}
-
-.roleChip {
-  flex-shrink: 0;
-  font-family: "DM Sans", sans-serif;
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--text-dim);
-  background: var(--glass-mid);
-  border: 1px solid var(--glass-border);
-  border-radius: 999px;
-  padding: 3px 9px;
-}
-
-.roleChipOwner {
-  flex-shrink: 0;
-  font-family: "DM Sans", sans-serif;
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--green);
-  background: rgba(22, 163, 74, 0.12);
-  border: 1px solid rgba(22, 163, 74, 0.35);
-  border-radius: 999px;
-  padding: 3px 9px;
-}
-
 .textBtn {
   flex-shrink: 0;
   font-family: "DM Sans", sans-serif;
@@ -481,57 +328,6 @@
 
 .textBtnDanger:hover {
   color: var(--red, #ef4444);
-}
-
-.planRow {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 14px;
-}
-
-.planName {
-  font-family: "DM Sans", sans-serif;
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--text);
-}
-
-.planPrice {
-  font-family: "DM Sans", sans-serif;
-  font-size: 22px;
-  font-weight: 600;
-  color: var(--text);
-}
-
-.planUnit {
-  font-size: 12.5px;
-  font-weight: 400;
-  color: var(--text-dim);
-}
-
-.planMeta {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 12px 14px;
-  background: var(--glass-mid);
-  border: 1px solid var(--glass-border);
-  border-radius: 10px;
-  margin-bottom: 16px;
-}
-
-.planMetaRow {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  font-size: 12.5px;
-  color: var(--text-dim);
-}
-
-.planMetaRow span:last-child {
-  color: var(--text);
 }
 
 @media (max-width: 760px) {
@@ -574,4 +370,115 @@
   .inviteForm .btn {
     width: 100%;
   }
+}
+
+.cardHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.chipOn,
+.chipOff {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 3px 9px;
+  border-radius: 999px;
+}
+
+.chipOn {
+  color: var(--green);
+  background: rgba(22, 163, 74, 0.12);
+  border: 1px solid rgba(22, 163, 74, 0.35);
+}
+
+.chipOff {
+  color: var(--text-muted);
+  border: 1px solid var(--glass-border);
+}
+
+.accountList {
+  list-style: none;
+  margin: 0 0 14px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.accountRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--glass-mid);
+  font-size: 13px;
+  color: var(--text);
+}
+
+.select {
+  height: 36px;
+  padding: 0 10px;
+  border-radius: 10px;
+  border: 1px solid var(--glass-border);
+  background: var(--glass-mid);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+}
+
+.noteText,
+.mutedText {
+  margin: 0 0 12px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+
+.errorText {
+  margin: 0 0 12px;
+  font-size: 12.5px;
+  color: var(--red, #ef4444);
+}
+
+.scopeList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 14px;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.bannerOk,
+.bannerError {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-size: 13px;
+}
+
+.bannerOk {
+  color: var(--green);
+  background: rgba(22, 163, 74, 0.12);
+  border: 1px solid rgba(22, 163, 74, 0.35);
+}
+
+.bannerError {
+  color: var(--red, #ef4444);
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+}
+
+.cardActions .input {
+  width: auto;
+  flex: 1;
+  min-width: 140px;
 }

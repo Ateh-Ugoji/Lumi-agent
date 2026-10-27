@@ -2,3 +2,8 @@ node_modules
 dist
 *.log
 .DS_Store
+
+# local dev environment (holds machine paths), never committed
+devenv.sh
+lumi/e2e/test-results/
+lumi/e2e/playwright-report/

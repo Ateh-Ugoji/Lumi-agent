@@ -1,24 +1,9 @@
-const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8000";
+import { request } from "./http.ts";
 
-/** Upload a recorded WAV to the backend for Groq Whisper transcription.
- *  Throws the server's honest error text on failure — the caller shows it. */
+/** Upload a recorded WAV for transcription. Throws an `ApiError` with the server's message. */
 export async function transcribeWav(blob: Blob): Promise<string> {
   const form = new FormData();
   form.append("file", blob, "clip.wav");
-  const res = await fetch(`${API_BASE}/voice/transcribe`, {
-    method: "POST",
-    body: form,
-  });
-  if (!res.ok) {
-    let detail = res.statusText || String(res.status);
-    try {
-      const body = (await res.json()) as { detail?: string };
-      if (body?.detail) detail = body.detail;
-    } catch {
-      /* keep status text */
-    }
-    throw new Error(detail);
-  }
-  const data = (await res.json()) as { text: string };
+  const data = await request<{ text: string }>("/voice/transcribe", { method: "POST", form });
   return data.text;
 }

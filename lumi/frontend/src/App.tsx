@@ -30,16 +30,25 @@ import {
   SUBLINE_STORE_KEY,
 } from "./constants/sublines";
 import {
-  streamChatMessage,
-  sendChatMessage,
-  getProfiles,
-  getProfileAnalytics,
-  generateChatTitle,
+  ApiError,
+  analyticsFrom,
+  connectLinksFrom,
   deleteChatHistory,
-  type StreamEvent,
-  type ProfileSummary,
+  generateChatTitle,
+  getProfileAnalytics,
+  parseConnectReturn,
+  sendChatMessage,
+  streamChatMessage,
+  stripConnectReturn,
+  type ConnectLink,
+  type ConnectReturn,
   type ProfileAnalytics,
-} from "./api/agent";
+  type StreamEvent,
+} from "./api";
+import { useAuth } from "./auth/AuthContext";
+import { useProfiles } from "./hooks/useProfiles";
+import PublishStudio from "./components/Publish/PublishStudio";
+import { ACTIVE_KEY, CHATS_KEY, DRAFTS_KEY } from "./session";
 import styles from "./App.module.css";
 import { speak, stopSpeaking } from "./voice/speak";
 import { useSmoothText } from "./reveal/useSmoothText";
@@ -51,6 +60,8 @@ type Message = {
   text: string;
   insights?: boolean;
   analytics?: ProfileAnalytics | null;
+  /** Connect links the server returned for this reply; only these are drawn as connect cards. */
+  connectLinks?: ConnectLink[];
   sim?: { scriptId: string; elapsedMs: number; customScript?: SimScript };
   thinking?: string;
 };
@@ -80,10 +91,6 @@ const pickPills = () => {
 let nextId = 1;
 let nextChatId = 1;
 let sessionPick: number | null = null;
-
-const CHATS_KEY = "lumi_agent_chats";
-const ACTIVE_KEY = "lumi_agent_active";
-const DRAFTS_KEY = "lumi_agent_drafts";
 
 const loadDrafts = (): Record<string, string> => {
   try {
@@ -161,10 +168,9 @@ function XIcon({ className }: { className?: string }) {
   );
 }
 
-/** Detect if a markdown link is a "Connect X" / OAuth / platform auth link */
-function isConnectLink(text: string, _url: string): boolean {
-  const low = text.toLowerCase();
-  return low.includes("connect") || low.includes("link") || low.includes("authorize");
+/** The connect link the server returned for this URL, if any. The label text is never a signal. */
+function connectLinkFor(url: string, links: ConnectLink[] | undefined): ConnectLink | undefined {
+  return links?.find((link) => link.url === url);
 }
 
 /**
@@ -177,6 +183,7 @@ function isConnectLink(text: string, _url: string): boolean {
 function AgentMessage({
   text,
   analytics,
+  connectLinks,
   onPill,
   animate = false,
   scrollRef,
@@ -186,6 +193,7 @@ function AgentMessage({
 }: {
   text: string;
   analytics?: ProfileAnalytics | null;
+  connectLinks?: ConnectLink[];
   onPill?: (t: string) => void;
   /** True only for the freshly-streamed reply: reveal it gradually. */
   animate?: boolean;
@@ -221,10 +229,11 @@ function AgentMessage({
           // [label](url)
           const label = m[4];
           const url = m[5];
-          if (isConnectLink(label, url)) {
+          const connect = connectLinkFor(url, connectLinks);
+          if (connect) {
             parts.push(
               <a key={m.index} href={url} target="_blank" rel="noopener noreferrer" className={styles.connectCard}>
-                <XIcon className={styles.connectCardIcon} />
+                {connect.platform === "x" && <XIcon className={styles.connectCardIcon} />}
                 {label}
               </a>
             );
@@ -252,7 +261,7 @@ function AgentMessage({
       });
       return <p key={pi} className={styles.msgText}>{withBreaks}</p>;
     });
-  }, [visible]);
+  }, [visible, connectLinks]);
 
   // While revealing, keep the growing text pinned to the bottom — only if the
   // user was already near the bottom (never fight manual scrolling).
@@ -347,29 +356,45 @@ export default function App() {
   const [pills, setPills] = useState<string[]>(pickPills);
   const [subline, setSubline] = useState<string | null>(null);
   const [sublineShown, setSublineShown] = useState(false);
-  const [view, setView] = useState<"chat" | "chronic" | "settings">("chat");
+  const [view, setView] = useState<"chat" | "chronic" | "publish" | "settings">("chat");
   const [settingsSection, setSettingsSection] =
     useState<SettingsSection>("profile");
-  const [profiles, setProfiles] = useState<ProfileSummary[]>([]);
-  const [profilesLoaded, setProfilesLoaded] = useState(false);
+  const { user, logout } = useAuth();
+  const {
+    profiles,
+    activeId: activeProfileId,
+    active: activeProfile,
+    select: selectProfile,
+    create: createProfile,
+    refresh: refreshProfiles,
+  } = useProfiles();
   const [analytics, setAnalytics] = useState<ProfileAnalytics | null>(null);
+  const [connectReturn, setConnectReturn] = useState<ConnectReturn | null>(null);
 
   useEffect(() => {
-    getProfiles()
-      .then((data) => {
-        setProfiles(data);
-        setProfilesLoaded(true);
-        // Fetch analytics for the first (active) profile
-        if (data.length > 0) {
-          getProfileAnalytics(data[0].id).then((a) => {
-            if (a) setAnalytics(a);
-          });
-        }
-      })
-      .catch(() => setProfilesLoaded(true));
-  }, [view]);
+    setAnalytics(null);
+    if (activeProfileId === null) return;
+    let cancelled = false;
+    getProfileAnalytics(activeProfileId).then((a) => {
+      if (!cancelled && a) setAnalytics(a);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeProfileId]);
 
-  const hasConnectedAccounts = profiles.length > 0;
+  // The OAuth callback sends the browser back with ?connected= or ?error=. Show the result in
+  // Settings and clean the URL so a reload does not repeat it.
+  useLayoutEffect(() => {
+    const found = parseConnectReturn(window.location.search);
+    if (!found) return;
+    setConnectReturn(found);
+    setSettingsSection(
+      found.kind === "connected" && found.provider === "google" ? "connectors" : "social",
+    );
+    setView("settings");
+    window.history.replaceState(null, "", stripConnectReturn(window.location.href));
+  }, []);
 
   const runCounterRef = useRef(0);
   const settledReplyRef = useRef(0);
@@ -581,7 +606,13 @@ export default function App() {
 
   const send = (raw: string) => {
     const text = raw.trim();
-    if (!text) return;
+    if (!text || busy) return;
+    if (activeProfileId === null) {
+      // Chat works on a profile. Without one, send the user where it is created.
+      setSettingsSection("profile");
+      setView("settings");
+      return;
+    }
     pendingChatIdRef.current = activeId;
     const targetChatId = activeId;
     const currentChat = chats.find((c) => c.id === targetChatId);
@@ -633,6 +664,7 @@ export default function App() {
       ],
     };
 
+    const chatProfileId = activeProfileId;
     const startTime = performance.now();
     const liveSteps: SimStep[] = [...initialScript.steps];
 
@@ -651,9 +683,8 @@ export default function App() {
 
     (async () => {
       try {
-        const activeProfileId = profiles.length > 0 ? profiles[0].id : 1;
         let streamError: string | null = null;
-        const result = await streamChatMessage(activeProfileId, text, (evt: StreamEvent) => {
+        const result = await streamChatMessage(chatProfileId, text, (evt: StreamEvent) => {
           if (evt.type === "error") {
             // Agent failures arrive as a normal SSE event, not a rejected HTTP
             // request. Dropping them makes a crashed run look like a success
@@ -668,13 +699,14 @@ export default function App() {
             let kind: SimStepKind = "action";
             // The connected account's platform drives the header icon: steps
             // marked "social" crossfade the ball into that platform's logo.
-            const activePlatform: string = profiles[0]?.platform || "x";
+            const activePlatform: string = activeProfile?.platform || "x";
             let platforms: string[] = [activePlatform];
 
             if (toolName === "connect_account") {
-              label = "Generating secure X authorization link...";
+              const target = String(args.platform || activeProfile?.platform || "x");
+              label = `Generating secure ${target} authorization link...`;
               kind = "action";
-              platforms = ["x"];
+              platforms = [target];
             } else if (toolName === "check_niche_trends") {
               label = `Searching high-impression peer posts (${args.query || "niche"})`;
               kind = "social";
@@ -714,7 +746,7 @@ export default function App() {
             } else if (toolName === "repurpose_caption") {
               label = `Repurposing caption for ${args.target_platform || "socials"}`;
               kind = "writing";
-              platforms = [args.target_platform || "x"];
+              platforms = [String(args.target_platform || "x")];
             }
 
 
@@ -777,9 +809,6 @@ export default function App() {
         };
 
         const target = pendingChatIdRef.current;
-        const analyticsExec = result.tool_executions?.find(
-          (e) => e.name === "get_analytics" && e.result,
-        );
 
         const replyText = streamError
           ? `⚠️ ${streamError}`
@@ -801,7 +830,8 @@ export default function App() {
                       id: replyId,
                       role: "agent",
                       text: replyText,
-                      analytics: analyticsExec ? analyticsExec.result : undefined,
+                      analytics: analyticsFrom(result.tool_executions),
+                      connectLinks: connectLinksFrom(result.tool_executions),
                       sim: {
                         scriptId: completedScript.id,
                         elapsedMs: elapsed,
@@ -844,14 +874,29 @@ export default function App() {
         }
         console.warn("Live stream failed, falling back to direct chat:", err);
         const target = pendingChatIdRef.current;
-        const activeProfileId = profiles.length > 0 ? profiles[0].id : 1;
+        if (err instanceof ApiError && err.status >= 400 && err.status < 500) {
+          // The server answered and refused: running the turn again would only repeat the refusal.
+          const refusedId = nextId++;
+          setRevealingId(refusedId);
+          setChats((prev) =>
+            prev.map((c) =>
+              c.id === target
+                ? {
+                    ...c,
+                    messages: [
+                      ...c.messages,
+                      { id: refusedId, role: "agent", text: `⚠️ ${err.message}` },
+                    ],
+                  }
+                : c,
+            ),
+          );
+          return;
+        }
 
         try {
-          const direct = await sendChatMessage(activeProfileId, text);
+          const direct = await sendChatMessage(chatProfileId, text);
           const elapsed = Math.round(performance.now() - startTime);
-          const directAnalyticsExec = direct.tool_executions?.find(
-            (e) => e.name === "get_analytics" && e.result,
-          );
           const directId = nextId++;
           setRevealingId(directId);
           setChats((prev) =>
@@ -865,7 +910,8 @@ export default function App() {
                         id: directId,
                         role: "agent",
                         text: direct.content || "Done!",
-                        analytics: directAnalyticsExec ? directAnalyticsExec.result : undefined,
+                        analytics: analyticsFrom(direct.tool_executions),
+                        connectLinks: connectLinksFrom(direct.tool_executions),
                       },
                     ],
                   }
@@ -958,9 +1004,6 @@ export default function App() {
       delete draftsRef.current[idStr];
       persistDrafts();
     }
-    if (profiles.length > 0) {
-      deleteChatHistory(profiles[0].id).catch(() => {});
-    }
   };
 
   const live = activeRun
@@ -1009,20 +1052,30 @@ export default function App() {
 
           recents={recents}
           userProfile={
-            profiles.length > 0
-              ? { name: profiles[0].name, handle: profiles[0].handle }
-              : null
+            activeProfile ? { name: activeProfile.name, handle: activeProfile.handle } : null
           }
-          activeNav={view === "settings" ? "settings" : view === "chronic" ? "chronic" : "home"}
+          activeNav={
+            view === "settings"
+              ? "settings"
+              : view === "chronic"
+                ? "chronic"
+                : view === "publish"
+                  ? "publish"
+                  : "home"
+          }
           onNavigate={(key) => {
             if (key === "settings") setView("settings");
             else if (key === "chronic") setView("chronic");
+            else if (key === "publish") setView("publish");
             else setView("chat");
           }}
           onOpenSettings={(section) => {
             setSettingsSection(section as SettingsSection);
             setView("settings");
           }}
+          onSignOut={() => void logout()}
+          footerLabel="Log out"
+          onFooterClick={() => void logout()}
         />
         <main className={styles.main}>
           {view === "settings" ? (
@@ -1030,10 +1083,29 @@ export default function App() {
               section={settingsSection}
               onSectionChange={setSettingsSection}
               onBack={() => setView("chat")}
+              user={user}
+              profiles={profiles}
+              activeProfileId={activeProfileId}
+              onSelectProfile={selectProfile}
+              onCreateProfile={createProfile}
+              onClearHistory={deleteChatHistory}
+              onLogout={() => void logout()}
+              returned={connectReturn}
+              onDismissReturn={() => setConnectReturn(null)}
+              onConnectionsChanged={() => void refreshProfiles()}
+            />
+          ) : view === "publish" ? (
+            <PublishStudio
+              profileId={activeProfileId}
+              handle={activeProfile?.handle ?? null}
+              onOpenConnections={() => {
+                setSettingsSection("social");
+                setView("settings");
+              }}
             />
           ) : view === "chronic" ? (
             <ChronicOnline
-              profileId={profiles.length > 0 ? profiles[0].id : 1}
+              profileId={activeProfileId}
               onRepurpose={(caption, author) => {
                 setView("chat");
                 send(
@@ -1110,6 +1182,7 @@ export default function App() {
                             <AgentMessage
                               text={m.text}
                               analytics={m.analytics ?? (m.insights ? analytics : null)}
+                              connectLinks={m.connectLinks}
                               onPill={(t) => handleInput(t)}
                               animate={m.id === revealingId}
                               scrollRef={streamRef}

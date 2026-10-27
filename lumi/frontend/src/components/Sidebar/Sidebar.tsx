@@ -18,7 +18,6 @@ import {
   IconHome,
   IconMagnifyingGlass,
   IconMoon,
-  IconPlusMedium,
   IconPopsicle,
   IconRadar,
   IconSettingsGear,
@@ -39,6 +38,7 @@ const NAV_ITEMS: {
 }[] = [
   { key: "home", label: "Home", icon: <IconHome size={18} /> },
   { key: "chronic", label: "Chronic Online", icon: <IconRadar size={18} /> },
+  { key: "publish", label: "Publish", icon: <IconEditBig size={18} /> },
   { key: "settings", label: "Settings", icon: <IconSettingsGear size={18} /> },
 ];
 
@@ -62,6 +62,7 @@ type SidebarNavProps = {
   footerLabel?: string;
   footerIcon?: ReactNode;
   onFooterClick?: () => void;
+  onSignOut?: () => void;
   recents?: SidebarRecent[];
   userProfile?: { name: string; handle: string } | null;
 };
@@ -137,22 +138,23 @@ function WorkspaceMenu({
   position,
   onClose,
   onOpenSettings,
+  onSignOut,
 }: {
   position: { top: number; left: number };
   onClose: () => void;
   onOpenSettings?: (section: string) => void;
+  onSignOut?: () => void;
 }) {
   const rows: { label: string; icon: ReactNode; section?: string }[] = [
-    { label: "New workspace", icon: <IconPlusMedium size={16} /> },
     {
-      label: "Workspace settings",
+      label: "Profiles",
       icon: <IconSettingsGear size={16} />,
-      section: "workspace",
+      section: "profile",
     },
     {
-      label: "Invite team members",
+      label: "Connected accounts",
       icon: <IconUserAdd size={16} />,
-      section: "invitations",
+      section: "social",
     },
   ];
   return createPortal(
@@ -203,7 +205,10 @@ function WorkspaceMenu({
         <button
           data-menu-row
           type="button"
-          onClick={onClose}
+          onClick={() => {
+            onSignOut?.();
+            onClose();
+          }}
           className={styles.menuRow}
         >
           <span className={styles.menuIcon}>
@@ -227,9 +232,10 @@ export default function SidebarNav({
   activeNav,
   onNavigate,
   onOpenSettings,
-  footerLabel = "Upgrade",
+  footerLabel = "New chat",
   footerIcon,
   onFooterClick,
+  onSignOut,
   recents = [],
   userProfile = null,
 }: SidebarNavProps) {
@@ -404,6 +410,7 @@ export default function SidebarNav({
               position={workspacePosition}
               onClose={() => setWorkspaceOpen(false)}
               onOpenSettings={onOpenSettings}
+              onSignOut={onSignOut}
             />
           )}
 
