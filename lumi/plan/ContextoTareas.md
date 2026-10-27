@@ -241,3 +241,7 @@ El orquestador eligió (c) mientras Christian decide. Entretanto, ARCHITECT comp
   2. Secretos de Meta en los logs de httpx a nivel INFO.
   3. El presupuesto de Xpoz se reinicia en cada request.
   Además hay 4 medios: la sincronización de PFM se fía de PFM y usa un `external_id` adivinable, un token ilegible bloquea el refresh, la confirmación de escrituras MCP va por lista negra y `?say=` dispara prompts. El arreglo del punto 1 cambia CONTRATOS §11 y lo coordina con ARCHITECT.
+- **08:07, OAuth (ARCHITECT y CONNECT):** el diseño acordado es el siguiente. El proveedor redirige a una página del frontend, y esa página hace un POST autenticado con `{code, state}`. El backend acepta solo el `state` del mismo usuario, lo consume de forma atómica y tiene un test que reproduce el ataque. Lleva PKCE y un TTL corto.
+  - Esto cambia CONTRATOS §4 y §11: los callbacks dejan de ser públicos, y los `redirect_uri` registrados en cada proveedor pasan a `FRONTEND_URL`.
+  - Hasta que esté arreglado, no se abre ninguna conexión social real a usuarios.
+  - Cuando se suba el cambio, el orquestador tiene que actualizar las URLs de callback en `API_KEYS.md`, `AGENT_KEYS_SETUP.md` y las decisiones de Christian, incluido el callback de PFM.
