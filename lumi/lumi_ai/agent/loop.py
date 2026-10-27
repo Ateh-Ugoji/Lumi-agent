@@ -24,7 +24,7 @@ from lumi_ai.agent.context import (
     slim_for_context,
 )
 from lumi_ai.agent.prompts import build_fast_prompt, build_system_prompt
-from lumi_ai.agent.result import SSEEvent, ToolExecution, TurnResult
+from lumi_ai.agent.result import SSEEvent, ToolExecution, TurnResult, shipped_result
 from lumi_ai.agent.support import (
     Completer,
     TimedJudge,
@@ -458,9 +458,7 @@ class _Turn:
                         reason=reason if isinstance(reason, str) else None,
                         ok=not tool_failed(result),
                         sample_posts=samples,
-                        result=result
-                        if name == "get_analytics" and isinstance(result, dict)
-                        else None,
+                        result=shipped_result(name, result),
                     )
                 )
                 await self._emit("tool_done", {"tool": name, "sample_posts": samples})
@@ -514,7 +512,7 @@ class _Turn:
                     arguments=dict(resolution.arguments),
                     reason=CONFIRMED_REASON,
                     ok=not tool_failed(result),
-                    result=result,
+                    result=shipped_result(tool, result),
                 )
             )
             await self._save(

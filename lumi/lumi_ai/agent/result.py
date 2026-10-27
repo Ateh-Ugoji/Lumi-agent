@@ -7,6 +7,31 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
+#: Tools whose result the frontend draws from structured data, and the fields it may receive.
+#: ``None`` means the whole result (``get_analytics``: the UI draws the exact numbers the agent saw).
+#: Every other tool ships no result, and an error result ships nothing: its text is internal.
+SHIPPED_RESULT_FIELDS: dict[str, tuple[str, ...] | None] = {
+    "get_analytics": None,
+    "connect_account": ("already_connected", "platform", "connect_url", "handle"),
+}
+
+
+def shipped_result(tool: str, result: Any) -> dict[str, Any] | None:
+    """The part of ``result`` that may reach the frontend (see ``SHIPPED_RESULT_FIELDS``)."""
+    if tool not in SHIPPED_RESULT_FIELDS or not isinstance(result, Mapping):
+        return None
+    if result.get("error"):
+        return None
+    fields = SHIPPED_RESULT_FIELDS[tool]
+    if fields is None:
+        return dict(result)
+    # Scalars only: a nested value could carry anything.
+    return {
+        k: result[k]
+        for k in fields
+        if k in result and (result[k] is None or isinstance(result[k], str | bool))
+    }
+
 
 @dataclass(frozen=True, slots=True)
 class ToolExecution:
@@ -17,7 +42,7 @@ class ToolExecution:
     reason: str | None = None
     ok: bool = True
     sample_posts: Sequence[Mapping[str, Any]] = ()
-    #: Raw result, shipped only for ``get_analytics`` so the UI draws the exact numbers the agent saw.
+    #: Already filtered by :func:`shipped_result`; never put a raw tool result here.
     result: Mapping[str, Any] | None = None
 
     def as_dict(self) -> dict[str, Any]:

@@ -623,6 +623,69 @@ async def test_analytics_result_ships_in_the_execution_for_the_chart():
     assert shipped["result"]["total_impressions"] == 120
 
 
+async def test_connect_account_ships_only_its_allowlisted_fields():
+    async def connect_account(ctx, platform="x"):
+        return {
+            "already_connected": False,
+            "platform": "x",
+            "connect_url": "https://example.test/oauth/start?state=abc",
+            "handle": "ana",
+            "debug": "internal detail",
+            "nested": {"token": "secret"},
+        }
+
+    rig = make_rig(
+        [use(call("connect_account")), say("Here is your link.")],
+        [tool("connect_account", connect_account)],
+    )
+    shipped = (await rig.run("connect my x account")).tool_executions[0].as_dict()
+    assert shipped["result"] == {
+        "already_connected": False,
+        "platform": "x",
+        "connect_url": "https://example.test/oauth/start?state=abc",
+        "handle": "ana",
+    }
+
+
+async def test_connect_account_error_text_never_reaches_the_frontend():
+    async def connect_account(ctx, platform="x"):
+        return {
+            "error": "ConnectionError: postgres://user:pw@db/internal",
+            "platform": "x",
+        }
+
+    rig = make_rig(
+        [use(call("connect_account")), say("It failed.")],
+        [tool("connect_account", connect_account)],
+    )
+    execution = (await rig.run("connect my x account")).tool_executions[0]
+    assert execution.ok is False and "result" not in execution.as_dict()
+
+
+async def test_other_tools_ship_no_result_at_all():
+    async def get_posts(ctx):
+        return {"posts": [{"id": 1}], "secret": "internal"}
+
+    rig = make_rig(
+        [use(call("get_posts")), say("Done.")], [tool("get_posts", get_posts)]
+    )
+    shipped = (await rig.run("show posts")).tool_executions[0].as_dict()
+    assert "result" not in shipped
+
+
+async def test_a_confirmed_mcp_write_result_is_not_shipped():
+    mcp = FakeMcp()
+    mcp.pending = McpPendingResolution(
+        note="SYSTEM NOTE: done.",
+        tool="mcp__gdocs__create_doc",
+        arguments={"title": "Plan"},
+        result={"status": "ok", "id": "d1", "token": "t"},
+    )
+    rig = make_rig([say("Done.")], [tool("ok")], mcp=mcp)
+    result = await rig.run("yes, go ahead")
+    assert "result" not in result.tool_executions[0].as_dict()
+
+
 async def test_a_broken_event_listener_never_kills_the_turn():
     rig = make_rig([use(call("ok")), say("Still works fine.")], [tool("ok")])
 
