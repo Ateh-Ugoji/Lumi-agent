@@ -2,7 +2,7 @@
 
 Registro de tareas del orquestador (Grok Bot). Cualquier agente que retome este trabajo debe leer este archivo completo y su PLAN antes de actuar, y actualizar lo que le toca al terminar cada tarea.
 
-Última actualización: 2026-10-27 07:15 UTC.
+Última actualización: 2026-10-27 09:10 UTC.
 
 Ubicación: `lumi/plan/` en la rama `lumi-orquestador` (copia de trabajo en `/workspace/lumi-plan/`). Planes por bot en esa misma carpeta: [PLAN_LUMI-ARCHITECT.md](PLAN_LUMI-ARCHITECT.md), [PLAN_LUMI-INTELLIGENCE.md](PLAN_LUMI-INTELLIGENCE.md), [PLAN_LUMI-CONNECT.md](PLAN_LUMI-CONNECT.md). Guías de keys en `lumi/docs/API_KEYS.md` y `lumi/docs/AGENT_KEYS_SETUP.md`.
 
@@ -251,3 +251,11 @@ El orquestador eligió (c) mientras Christian decide. Entretanto, ARCHITECT comp
 - Falta portar al backend Django lo que main añadió en el legado: columna `listening_matches.author_avatar_url` (migración alembic `b7f3a91c5d20`), avatar en `services/handle_db.py`, `tools/listening.py`, `routers/trends.py` y `agent/loop.py`, con su test `tests/test_handle_db.py`. Le toca a ARCHITECT (trends) y a CONNECT (handles). Esto suma tests legados al mapa de paridad.
 - Últimos commits: ARCHITECT 08:07, INTELLIGENCE 08:08, CONNECT hasta `888b7f4` (subido a las 08:10). CONNECT ya arregló los altos 2 (secretos de Meta fuera de la URL y loggers HTTP a WARNING) y 3 (tope diario de Xpoz por usuario y global desde el ledger), y el medio de PFM (`external_id` aleatorio y verificación local de cada cuenta). Además montó ConnectionLinks y un e2e con el agente real y un modelo simulado por HTTP. Sigue con el alto 1 (`state` de OAuth). Ninguno lleva más de 2 horas sin commits.
 - Sigue sin aparecer `/workspace/lumi-data/lumi.db`.
+
+## Revisión horaria, 27 oct 2026, 09:10 UTC
+- `main` no avanzó desde `632217e`. Rama al día en `90a6180`.
+- **ARCHITECT** (último `ca41934`, 08:50): `posts.last_checked_at` (filas 24 y 25 de paridad confirmadas); paridad con estado `retired` y motivo (`niche_schemas`: 1 portado y 10 retirados; legado congelado en 422); CONTRATOS fila 5: `OAuthState.consume` filtra también por `user_id`; `pfm_links` en SCHEMA; topes de Xpoz en `.env.example` (`XPOZ_RUN_CREDIT_BUDGET=12`, topes por red opcionales, `XPOZ_DAILY_CREDIT_CAP_USER=60`, `XPOZ_DAILY_CREDIT_CAP_GLOBAL=300`), con lo que queda resuelto el aviso de CONNECT sobre el valor 10; `claim_due_polls` con CTE `MATERIALIZED` para que `LIMIT ... FOR UPDATE SKIP LOCKED` corra una sola vez. Pendiente: T4 a T12 (`services.py` de perfiles y chat y sus rutas), portar el avatar de autor de main (trends) y actualizar `how-to-setup.md` al final.
+- **CONNECT** (último `90a6180`, 08:52): cerró los medios de la revisión de seguridad. Medio 5: un token ilegible ya no bloquea refresh ni status, y hay comando `rotate_tokens`. Medio 6: la confirmación de escrituras MCP pasa a lista blanca de herramientas de solo lectura, con argumentos completos y una escritura viva por perfil. Medio 7: se quitó el efecto `?say=` del frontend. Bajo: `SdkMcpTransport` solo abre sesión hacia hosts permitidos por https. **Sigue abierto el alto 1** (atar el `state` de OAuth a la sesión: callbacks vía página del frontend + POST autenticado, PKCE). Cuando se suba, el orquestador actualiza las URLs de callback en `API_KEYS.md` y `AGENT_KEYS_SETUP.md`. Pendientes en su estado: programar `connections.refresh_expiring` en Celery beat, portar el avatar de main en handles, y que INTELLIGENCE use `build_mcp_gateway()` y `resolve_pending`.
+- **INTELLIGENCE** (último `f4a660c`, 08:08): códigos `voice.transcription_*`, `VIDEO_TIMEOUT_SECONDS` en `from_env`, paridad de `test_niche_schemas`. Sigue esperando las keys y las 4 decisiones de Christian (Gemini de pago para video, términos de uso de video de terceros, autorizar tests live, posts reales para calibrar jueces). T10 sigue sin fuente de URLs de medios. Lleva ~1 h sin commits, menos de 2 h.
+- Ningún bot lleva más de 2 horas sin commits ni reportó un bloqueo nuevo que el orquestador pueda destrabar. No se escribió a ningún bot.
+- Sigue sin aparecer `/workspace/lumi-data/lumi.db` ni un dump.
