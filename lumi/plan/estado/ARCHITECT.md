@@ -69,10 +69,11 @@ Nota sobre la fila 18: `reach_series` y `saves_series` siguen recorriendo todas 
 - **CONNECT** (`apps/connections/handles`): al buscar o refrescar un handle, guardar `avatar_url` en `social_handles` por `get_or_create_handle`, igual que hoy. Es lo que sustituye al `lookup` de `handle_db` del legado: no hace falta ninguna tabla nueva.
 - **Frontend**: `TrendMatch.author_avatar_url?: string | null` ya está en `api/trends.ts`; `ChronicOnline` usa la foto guardada y unavatar de respaldo.
 - **CONNECT, refresco de fotos** (`/handles/search`, ronda 5): `profiles.services.update_handle_avatar(handle_id, url) -> bool` sustituye la foto cuando llega una URL http(s) válida y distinta, e ignora vacíos. `get_or_create_handle` sigue siendo solo de relleno.
-- **CONNECT, foto de la cuenta de PFM**: en `sync_pfm_accounts`, tras `row.save()`, si la fila está `active` y enlazada: `update_profile_avatar(row.social_profile_id, acc.profile_photo_url, username=acc.username)`. Sin columna nueva (CONTRATOS 11, fila 28).
+- **CONNECT, foto de la cuenta de PFM: hecho** en `3dda0e1` (con `d9ab891`). Llama a `update_profile_avatar(..., username=acc.username)` solo si la fila está `active` y enlazada. Solo refrescan fotos los datos del proveedor (`source="live"`). CONTRATOS 11, fila 28.
 - **INTELLIGENCE, 4 huecos de `test_handle_db`: cerrados** en `4971a13` (HandleBook, PORTS 1.12). Paridad: 364 cubiertos, 45 reemplazados, 3 desviaciones, 10 retirados, 0 huecos (422).
-- **INTELLIGENCE, códigos de error de trabajos**: `sync_failed` y `voice_failed` (`apps/intelligence/tasks.py`) no llevan prefijo de dominio. Propuesta: `profiles.sync_failed` y `voice.learn_failed`. Están en `PENDING_RENAME` de `test_error_codes.py`; al renombrar hay que borrar la entrada y ajustar `test_api.py`.
-- **INTELLIGENCE, foto de la fuente**: `get_or_create_handle` solo rellena, así que la foto guardada gana a la de un escaneo. Si debe ganar la fresca, `update_handle_avatar` tras `get_or_create_handle` en `save_peer_posts` (CONTRATOS 11, fila 29).
+- **INTELLIGENCE, códigos de error de trabajos: hecho** en `b92761e`. `profiles.sync_failed` y `voice.learn_failed`; `PENDING_RENAME` quedó vacío y CONTRATOS 3.2 lo refleja.
+- **INTELLIGENCE, foto de la fuente: cerrado** con la opción (b), gana la foto guardada, en `f8c50ea` con su prueba. CONTRATOS 11, fila 29.
+- **CONNECT, `POST /handles/select` (abierto, fila 30)**: el cuerpo del cliente rellena la foto vacía de un handle público y reemplaza `display_name` y `followers` de uno ya conocido. Propuesta: que `select` no pase esos tres campos a `get_or_create_handle`, y que marque la fila `cache`, no `live`.
 
 ## Notas del esqueleto
 
