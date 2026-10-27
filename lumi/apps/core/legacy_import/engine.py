@@ -7,6 +7,7 @@ import code owned by other teams.
 
 from __future__ import annotations
 
+import json
 import logging
 from collections import Counter
 from collections.abc import Callable, Iterable
@@ -17,6 +18,7 @@ from typing import Any
 from django.apps import apps as django_apps
 from django.db import connection, models, transaction
 
+from apps.core.choices import LegacyOutcome
 from apps.core.legacy_import.reader import LegacyDb
 from apps.core.models import LegacyImportMap
 
@@ -164,9 +166,24 @@ class ImportContext:
         )
 
     def remember(
-        self, source_table: str, source_pk: Any, target_table: str, target_pk: int
+        self,
+        source_table: str,
+        source_pk: Any,
+        target_table: str,
+        target_pk: int,
+        *,
+        outcome: str = LegacyOutcome.IMPORTED,
+        row: dict[str, Any] | None = None,
     ) -> None:
+        """Record where a legacy row went.
+
+        Pass ``row`` whenever the new tables do not hold everything the row said (the
+        database refuses a merged or skipped entry without it). ``row`` is stored as JSON,
+        encrypted, so a discarded token never sits in plain text.
+        """
         pk = str(source_pk)
+        if outcome != LegacyOutcome.IMPORTED and row is None:
+            raise ValueError(f"{source_table} {pk}: {outcome} needs the legacy row")
         self.mapped(source_table, target_table)[pk] = target_pk
         self._pending.append(
             LegacyImportMap(
@@ -174,13 +191,43 @@ class ImportContext:
                 source_pk=pk,
                 target_table=target_table,
                 target_pk=target_pk,
+                outcome=outcome,
+                payload=None if row is None else _dump(row),
             )
         )
 
-    def skip(self, source_table: str, source_pk: Any, reason: str) -> None:
-        self.remember(source_table, source_pk, SKIPPED, 0)
+    def merge(
+        self,
+        source_table: str,
+        row: dict[str, Any],
+        target_table: str,
+        target_pk: int,
+        reason: str | None = None,
+    ) -> None:
+        """The row folded into ``target_pk``. Its full content stays in the map."""
+        self.remember(
+            source_table,
+            row["id"],
+            target_table,
+            target_pk,
+            outcome=LegacyOutcome.MERGED,
+            row=row,
+        )
+        self.table(source_table).merged += 1
+        if reason:
+            self.warn(f"{source_table} {row['id']}: {reason}")
+
+    def skip(self, source_table: str, row: dict[str, Any], reason: str) -> None:
+        self.remember(
+            source_table,
+            row["id"],
+            SKIPPED,
+            0,
+            outcome=LegacyOutcome.SKIPPED,
+            row=row,
+        )
         self.table(source_table).skipped += 1
-        self.warn(f"{source_table} {source_pk}: {reason}")
+        self.warn(f"{source_table} {row['id']}: {reason}")
 
     def flush(self) -> None:
         if self._pending:
@@ -203,6 +250,10 @@ class ImportContext:
                     f"{model._meta.db_table}: el id {taken[0]} ya existe y no viene de "
                     "este origen. Importa sobre una base vacía o libera ese id."
                 )
+
+
+def _dump(row: dict[str, Any]) -> str:
+    return json.dumps(row, ensure_ascii=False, default=str, sort_keys=True)
 
 
 def sync_sequence(model: type[models.Model]) -> None:
@@ -259,6 +310,10 @@ class VerifyRow:
     legacy: int
     accounted: int
     status: str  # "ok", "difiere" or "sin importador"
+    imported: int = 0
+    merged: int = 0
+    skipped: int = 0
+    without_payload: int = 0  # merged or skipped rows that lost their payload
 
     @property
     def ok(self) -> bool:
@@ -266,29 +321,62 @@ class VerifyRow:
 
 
 def verify_import(path: str) -> list[VerifyRow]:
-    """Compare the row count of each legacy table with the rows the id map accounts for."""
+    """Prove that every legacy row is imported, merged or skipped, with its payload kept.
+
+    A table is ``ok`` when the distinct legacy ids in the map equal the legacy row count and no
+    merged or skipped row lacks its payload. ``merged`` and ``skipped`` rows count as accounted
+    for: their content is in ``legacy_import_map.payload``.
+    """
     covered = {t for imp in importers() for t in imp.tables}
     legacy = LegacyDb(path)
     try:
         counts = {t: legacy.count(t) for t in LEGACY_TABLES}
+        ids = {t: legacy.ids(t) for t in LEGACY_TABLES}
     finally:
         legacy.close()
-    accounted: Counter[str] = Counter()
-    pairs = (
+    # One outcome per legacy row: the strongest wins (imported over merged over skipped).
+    rank = {
+        LegacyOutcome.IMPORTED: 0,
+        LegacyOutcome.MERGED: 1,
+        LegacyOutcome.SKIPPED: 2,
+    }
+    best: dict[str, dict[str, str]] = {t: {} for t in LEGACY_TABLES}
+    bare: Counter[str] = Counter()
+    for table, pk, outcome, has_payload in (
         LegacyImportMap.objects.filter(source_table__in=LEGACY_TABLES)
-        .values_list("source_table", "source_pk")
-        .distinct()
-    )
-    for table, _ in pairs:
-        accounted[table] += 1
+        .values_list(
+            "source_table", "source_pk", "outcome", models.Q(payload__isnull=False)
+        )
+        .iterator()
+    ):
+        current = best[table].get(pk)
+        if current is None or rank[outcome] < rank[current]:
+            best[table][pk] = outcome
+        if outcome != LegacyOutcome.IMPORTED and not has_payload:
+            bare[table] += 1
     rows = []
     for table in LEGACY_TABLES:
-        n, got = counts[table], accounted[table]
-        if n == got:
+        mine = best[table]
+        n = counts[table]
+        got = len(mine.keys() & ids[table])
+        stray = len(mine.keys() - ids[table])
+        kinds = Counter(mine.values())
+        if n == got and not stray and not bare[table]:
             status = "ok"
         elif table not in covered:
             status = "sin importador"
         else:
             status = "difiere"
-        rows.append(VerifyRow(table, n, got, status))
+        rows.append(
+            VerifyRow(
+                table,
+                n,
+                got,
+                status,
+                imported=kinds[LegacyOutcome.IMPORTED],
+                merged=kinds[LegacyOutcome.MERGED],
+                skipped=kinds[LegacyOutcome.SKIPPED],
+                without_payload=bare[table],
+            )
+        )
     return rows

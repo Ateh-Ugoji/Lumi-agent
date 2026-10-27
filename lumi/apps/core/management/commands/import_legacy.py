@@ -8,6 +8,7 @@ The SQLite file is opened read-only. The output carries counts and ids, never va
 
 from __future__ import annotations
 
+from django.core.exceptions import ImproperlyConfigured
 from django.core.management.base import BaseCommand, CommandError
 
 from apps.core.legacy_import import ImportConflict, run_import, verify_import
@@ -48,6 +49,9 @@ class Command(BaseCommand):
                 dry_run=options["dry_run"],
                 memory_md=options["memory_md"],
             )
+        except ImproperlyConfigured as exc:
+            # Discarded rows keep an encrypted copy, so the import needs TOKEN_ENCRYPTION_KEY.
+            raise CommandError(str(exc)) from exc
         except FileNotFoundError as exc:
             raise CommandError(str(exc)) from exc
         except ImportConflict as exc:
@@ -65,7 +69,9 @@ class Command(BaseCommand):
         rows = verify_import(path)
         for row in rows:
             self.stdout.write(
-                f"{row.table}: origen {row.legacy}, registradas {row.accounted}, {row.status}"
+                f"{row.table}: origen {row.legacy}, registradas {row.accounted} "
+                f"(importadas {row.imported}, fusionadas {row.merged}, omitidas {row.skipped}), "
+                f"{row.status}"
             )
         bad = [r for r in rows if not r.ok]
         if bad:

@@ -184,7 +184,7 @@ Desviación del plan, que propone `rest_framework.authtoken`: la tabla de DRF gu
 
 Índices: (`user`, `-created_at`); (`profile`, `kind`, `-created_at`); parcial (`status`) donde `status in ('queued','running')`. Único parcial `uq_background_jobs_active_dedupe` sobre `dedupe_key` donde `dedupe_key is not null and status in ('queued','running')`.
 
-**`legacy_import_map`** (`core.LegacyImportMap`). Lo escribe el importador de T8. Hace el importador repetible y permite que la verificación recorra las tablas que se fusionan.
+**`legacy_import_map`** (`core.LegacyImportMap`). Lo escribe el importador de T8. Hace el importador repetible y garantiza cero pérdida verificable: ninguna fila legada se descarta sin dejar su contenido aquí. `--verify` cuenta las filas fusionadas y omitidas como contabilizadas solo si tienen `payload`. El `payload` va cifrado porque puede traer `pfm_account_id` o tokens.
 
 | Columna | Tipo | Reglas |
 | --- | --- | --- |
@@ -192,7 +192,9 @@ Desviación del plan, que propone `rest_framework.authtoken`: la tabla de DRF gu
 | `source_table` | varchar(80) NN | Tabla legada. |
 | `source_pk` | varchar(120) NN | Clave legada como texto. |
 | `target_table` | varchar(80) NN | Tabla nueva. |
-| `target_pk` | bigint NN | Clave nueva. |
+| `target_pk` | bigint NN | Clave nueva. `0` en las omitidas. |
+| `outcome` | varchar(10) NN | `imported`, `merged` o `skipped`. `ck_legacy_import_map_outcome`. |
+| `payload` | text (cifrado) | La fila legada completa en JSON, cifrada con Fernet (`EncryptedTextField`). Obligatoria si `outcome` no es `imported` (`ck_legacy_import_map_payload`). En `imported` solo si el importador cambió algún valor. |
 | `imported_at` | timestamptz NN | |
 
 Único (`source_table`, `source_pk`, `target_table`). Se puede borrar en T12.
@@ -453,7 +455,7 @@ Las colecciones actuales (`handle_mappings`, caché de handles, posts de pares, 
 
 ## 10. Mapa legado a nuevo
 
-El importador usa este mapa (`MIGRACION_LEGADA.md` lo detalla en T8). En todas las tablas, `id` legado se conserva como `id` nuevo cuando la tabla nueva es de correspondencia 1:1 y queda registrado en `legacy_import_map`. Los enums legados en mayúsculas pasan a minúsculas.
+El importador usa este mapa (`MIGRACION_LEGADA.md` lo detalla en T8). En todas las tablas, `id` legado se conserva como `id` nuevo cuando la tabla nueva es de correspondencia 1:1 y queda registrado en `legacy_import_map`. Excepción aceptada por el orquestador: los ids solo se conservan en `social_profiles`, `posts` y `chat_messages`; el resto recibe ids nuevos y el mapa guarda la relación. Los enums legados en mayúsculas pasan a minúsculas.
 
 **Usuario.** Si el origen no trae usuarios, el importador crea el usuario `importado` (email `importado@lumi.invalid`, contraseña inutilizable) y le asigna todos los perfiles y las cuentas MCP.
 

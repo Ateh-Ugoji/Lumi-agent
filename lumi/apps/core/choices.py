@@ -37,3 +37,11 @@ class JobStatus(models.TextChoices):
     SUCCEEDED = "succeeded"
     FAILED = "failed"
     CANCELLED = "cancelled"
+
+
+class LegacyOutcome(models.TextChoices):
+    """What the T8 importer did with one legacy row (``legacy_import_map.outcome``)."""
+
+    IMPORTED = "imported"
+    MERGED = "merged"  # folded into an existing row; the payload keeps what the merge dropped
+    SKIPPED = "skipped"  # left out on purpose; the payload keeps the whole row

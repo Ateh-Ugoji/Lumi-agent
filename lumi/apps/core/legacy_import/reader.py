@@ -39,6 +39,12 @@ class LegacyDb:
             return 0
         return self._conn.execute(f'SELECT COUNT(*) FROM "{table}"').fetchone()[0]
 
+    def ids(self, table: str) -> set[str]:
+        if table not in self._tables:
+            return set()
+        cursor = self._conn.execute(f'SELECT "id" FROM "{table}"')
+        return {str(r[0]) for r in cursor}
+
     def rows(self, table: str, order_by: str = "id") -> Iterator[dict[str, Any]]:
         """Yield rows as dicts. A missing table yields nothing (older files lack some)."""
         if table not in self._tables:

@@ -132,8 +132,9 @@ class LegacyImportMapAdmin(SafeModelAdmin):
         "source_pk",
         "target_table",
         "target_pk",
+        "outcome",
         "imported_at",
     )
-    list_filter = ("source_table", "target_table")
+    list_filter = ("source_table", "target_table", "outcome")
     search_fields = ("source_pk", "target_pk")
     ordering = ("-id",)

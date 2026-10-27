@@ -5,7 +5,8 @@ from django.db import models
 from django.db.models import Q
 from django.db.models.functions import Now
 
-from apps.core.choices import JobStatus
+from apps.core.choices import JobStatus, LegacyOutcome
+from apps.core.fields import EncryptedTextField
 
 
 class TimestampedModel(models.Model):
@@ -100,11 +101,26 @@ class LegacyImportMap(models.Model):
     source_pk = models.CharField(max_length=120)
     target_table = models.CharField(max_length=80)
     target_pk = models.BigIntegerField()
+    outcome = models.CharField(
+        max_length=10, choices=LegacyOutcome, default=LegacyOutcome.IMPORTED
+    )
+    # The whole legacy row as JSON, encrypted (it can hold tokens). Required whenever the
+    # new tables do not hold everything the row said: merged, skipped or adjusted rows.
+    payload = EncryptedTextField(null=True, blank=True)
     imported_at = models.DateTimeField(db_default=Now())
 
     class Meta:
         db_table = "legacy_import_map"
         constraints = [
+            models.CheckConstraint(
+                condition=models.Q(outcome__in=["imported", "merged", "skipped"]),
+                name="ck_legacy_import_map_outcome",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(outcome="imported")
+                | models.Q(payload__isnull=False),
+                name="ck_legacy_import_map_payload",
+            ),
             models.UniqueConstraint(
                 fields=["source_table", "source_pk", "target_table"],
                 name="uq_legacy_import_map_source_target",

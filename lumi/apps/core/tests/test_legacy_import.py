@@ -1,4 +1,5 @@
 import hashlib
+import json
 from io import StringIO
 
 import pytest
@@ -24,6 +25,14 @@ from apps.profiles.models import (
 from .legacy_db import build_legacy_db
 
 pytestmark = pytest.mark.django_db
+
+
+@pytest.fixture(autouse=True)
+def encryption_key(settings):
+    from cryptography.fernet import Fernet
+
+    settings.TOKEN_ENCRYPTION_KEY = Fernet.generate_key().decode()
+    settings.TOKEN_ENCRYPTION_KEY_PREVIOUS = ""
 
 
 @pytest.fixture
@@ -196,11 +205,16 @@ def test_source_file_is_never_modified(legacy):
     assert sha(legacy) == before
 
 
-def test_output_has_no_secrets(legacy):
+def test_output_and_stored_columns_hold_no_plain_secret(legacy):
+    from django.db import connection
+
     out = run(legacy)
-    assert "pfm-secret" not in out and "pfm-secret" not in str(
-        list(LegacyImportMap.objects.values())
-    )
+    assert "pfm-secret" not in out
+    with connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT payload FROM legacy_import_map WHERE payload IS NOT NULL"
+        )
+        assert not any("pfm-secret" in raw for (raw,) in cursor.fetchall())
 
 
 def test_user_option_names_the_owner(legacy):
@@ -257,3 +271,151 @@ def test_legacy_tables_list_matches_the_legacy_models():
 
     assert set(LEGACY_TABLES) == set(SQLModel.metadata.tables)
     assert connection.vendor == "postgresql"
+
+
+def test_import_needs_the_encryption_key(legacy, settings):
+    settings.TOKEN_ENCRYPTION_KEY = ""
+    with pytest.raises(CommandError, match="TOKEN_ENCRYPTION_KEY"):
+        run(legacy)
+    assert not LegacyImportMap.objects.exists()
+
+
+# ------------------------------------------------------------------ zero verifiable loss
+
+
+def legacy_rows(path):
+    """Every legacy row as the importer saw it, after the same JSON round trip."""
+    from apps.core.legacy_import import LegacyDb
+
+    db = LegacyDb(str(path))
+    try:
+        return {
+            table: {
+                str(row["id"]): json.loads(json.dumps(row, default=str))
+                for row in db.rows(table)
+            }
+            for table in LEGACY_TABLES
+        }
+    finally:
+        db.close()
+
+
+def test_every_legacy_row_is_imported_or_kept_with_its_payload(legacy):
+    run(legacy)
+    source = legacy_rows(legacy)
+    entries = {}
+    for entry in LegacyImportMap.objects.all():
+        entries.setdefault((entry.source_table, entry.source_pk), []).append(entry)
+    for table, rows in source.items():
+        for pk, row in rows.items():
+            found = entries.get((table, pk))
+            if not found and table in {
+                "profiles", "profile_snapshots", "profile_baseline", "posts",
+                "metric_snapshots", "user_activity", "listening_matches",
+                "poll_config", "chat_messages",
+            }:  # fmt: skip
+                pytest.fail(f"{table} {pk} has no entry in legacy_import_map")
+            for entry in found or []:
+                if entry.outcome in ("merged", "skipped"):
+                    assert json.loads(entry.payload) == row, (table, pk)
+    outcomes = {e.outcome for es in entries.values() for e in es}
+    assert outcomes == {"imported", "merged", "skipped"}
+
+
+def test_the_duplicate_metric_reading_of_post_12_is_not_lost(legacy):
+    run(legacy)
+    # Post 12 merged into post 10. Reading 1 (post 10) and reading 3 (post 12) share a time.
+    # Reading 3 wins the row, reading 1 stays whole in the map.
+    winner = MetricSnapshot.objects.get(post_id=10, captured_at__day=3)
+    assert winner.likes == 7
+    lost = LegacyImportMap.objects.get(source_table="metric_snapshots", source_pk="1")
+    assert (lost.outcome, lost.target_pk) == ("merged", winner.pk)
+    body = json.loads(lost.payload)
+    assert (body["post_id"], body["likes"], body["comments"], body["views"]) == (
+        10,
+        5,
+        1,
+        100,
+    )
+    assert body["age_hours"] == 24.0
+    post12 = LegacyImportMap.objects.get(source_table="posts", source_pk="12")
+    assert (post12.outcome, post12.target_pk) == ("merged", 10)
+    assert json.loads(post12.payload)["caption"] == "hello again"
+
+
+def test_merged_profile_keeps_its_pfm_id_only_encrypted(legacy):
+    from django.db import connection
+
+    run(legacy)
+    entry = LegacyImportMap.objects.get(source_table="profiles", source_pk="3")
+    assert json.loads(entry.payload)["pfm_account_id"] == "pfm-secret-333"
+    with connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT payload FROM legacy_import_map WHERE source_pk = '3' AND source_table = 'profiles'"
+        )
+        raw = cursor.fetchone()[0]
+    assert "pfm-secret" not in raw
+
+
+def test_adjusted_rows_keep_the_original_values(legacy):
+    run(legacy)
+    negative = LegacyImportMap.objects.get(
+        source_table="metric_snapshots", source_pk="4"
+    )
+    assert (
+        negative.outcome == "imported" and json.loads(negative.payload)["likes"] == -3
+    )
+    odd_kind = LegacyImportMap.objects.get(source_table="posts", source_pk="13")
+    assert json.loads(odd_kind.payload)["kind"] == "weird"
+    clamped = LegacyImportMap.objects.get(source_table="poll_config", source_pk="3")
+    assert json.loads(clamped.payload)["interval_minutes"] == 99999
+    reused = LegacyImportMap.objects.get(
+        source_table="listening_matches", source_pk="1"
+    )
+    assert reused.payload is None  # its post was new, nothing was dropped
+
+
+def test_database_refuses_a_discarded_row_without_payload(legacy):
+    from django.db import IntegrityError, transaction
+
+    with pytest.raises(IntegrityError), transaction.atomic():
+        LegacyImportMap.objects.create(
+            source_table="posts", source_pk="1", target_table="posts", target_pk=1,
+            outcome="merged",
+        )  # fmt: skip
+
+
+def test_remember_refuses_a_merge_without_the_row():
+    from apps.core.legacy_import import ImportContext
+
+    ctx = ImportContext(None, None)
+    with pytest.raises(ValueError, match="needs the legacy row"):
+        ctx.remember("posts", 1, "posts", 1, outcome="merged")
+
+
+def test_verify_counts_merged_and_skipped_as_accounted_for(legacy):
+    run(legacy)
+    out = run(legacy, "--verify")
+    assert (
+        "metric_snapshots: origen 5, registradas 5 (importadas 3, fusionadas 1, omitidas 1)"
+        in out
+    )
+    assert (
+        "profiles: origen 5, registradas 5 (importadas 2, fusionadas 1, omitidas 2)"
+        in out
+    )
+
+
+def test_verify_flags_a_missing_payload(legacy):
+    from django.db import connection
+
+    run(legacy)
+    with connection.cursor() as cursor:
+        cursor.execute(
+            "ALTER TABLE legacy_import_map DROP CONSTRAINT ck_legacy_import_map_payload"
+        )
+        cursor.execute(
+            "UPDATE legacy_import_map SET payload = NULL WHERE source_table = 'posts' AND outcome = 'merged'"
+        )
+    with pytest.raises(CommandError, match="posts \\(difiere\\)"):
+        run(legacy, "--verify")

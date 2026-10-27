@@ -89,7 +89,7 @@ def import_profiles(ctx: ImportContext) -> None:
     done = ctx.mapped("profiles", "social_profiles")
     by_key: dict[tuple[str, str], int] = {}  # handle key -> social_profiles.id
     claimed: dict[tuple[str, str], int] = {}  # handle key -> legacy id still to create
-    deferred: list[tuple[int, tuple[str, str]]] = []
+    deferred: list[tuple[dict[str, Any], tuple[str, str]]] = []
     new_rows: list[dict[str, Any]] = []
     rows = list(ctx.legacy.rows("profiles"))
     t.read = len(rows)
@@ -114,7 +114,7 @@ def import_profiles(ctx: ImportContext) -> None:
             continue
         platform = str(row.get("platform") or "x").lower()
         if platform not in Platform.values:
-            ctx.skip("profiles", pk, f"plataforma desconocida {platform!r}")
+            ctx.skip("profiles", row, f"plataforma desconocida {platform!r}")
             continue
         try:
             key = (
@@ -122,18 +122,20 @@ def import_profiles(ctx: ImportContext) -> None:
                 services.normalize_handle(platform, row.get("handle") or ""),
             )
         except services.InvalidHandle:
-            ctx.skip("profiles", pk, "handle no válido")
+            ctx.skip("profiles", row, "handle no válido")
             continue
         if key in by_key:
-            ctx.remember("profiles", pk, "social_profiles", by_key[key])
-            t.merged += 1
-            ctx.warn(
-                f"profiles {pk}: mismo handle que el perfil {by_key[key]} "
-                "(se fusiona y sus hijos pasan al otro)"
+            ctx.merge(
+                "profiles",
+                row,
+                "social_profiles",
+                by_key[key],
+                f"mismo handle que el perfil {by_key[key]} "
+                "(se fusiona y sus hijos pasan al otro)",
             )
             continue
         if key in claimed:
-            deferred.append((pk, key))
+            deferred.append((row, key))
             continue
         claimed[key] = pk
         new_rows.append({**row, "_platform": platform, "_key": key})
@@ -154,16 +156,20 @@ def import_profiles(ctx: ImportContext) -> None:
             user=ctx.user, handle_id=handle_id
         ).first()
         if existing:
-            ctx.remember("profiles", pk, "social_profiles", existing.pk)
-            by_key[key] = existing.pk
-            t.merged += 1
-            ctx.warn(
-                f"profiles {pk}: el usuario ya tenía ese handle (perfil {existing.pk})"
+            ctx.merge(
+                "profiles",
+                row,
+                "social_profiles",
+                existing.pk,
+                f"el usuario ya tenía ese handle (perfil {existing.pk})",
             )
+            by_key[key] = existing.pk
             continue
         tz = row.get("timezone") or None
         tz_source = row.get("timezone_source") or None
+        adjusted = False
         if tz and tz_source not in TimezoneSource.values:
+            adjusted = True
             tz_source = TimezoneSource.INFERRED
             ctx.warn(
                 f"profiles {pk}: zona horaria sin origen válido, se marca 'inferred'"
@@ -181,20 +187,33 @@ def import_profiles(ctx: ImportContext) -> None:
             timezone_source=tz_source,
             **extra,
         )
-        ctx.remember("profiles", pk, "social_profiles", pk)
+        ctx.remember(
+            "profiles",
+            pk,
+            "social_profiles",
+            pk,
+            row=_original(row) if adjusted else None,
+        )
         by_key[key] = pk
         t.imported += 1
-    for pk, key in deferred:
-        ctx.remember("profiles", pk, "social_profiles", by_key[key])
-        t.merged += 1
-        ctx.warn(
-            f"profiles {pk}: mismo handle que el perfil {by_key[key]} "
-            "(se fusiona y sus hijos pasan al otro)"
+    for row, key in deferred:
+        ctx.merge(
+            "profiles",
+            row,
+            "social_profiles",
+            by_key[key],
+            f"mismo handle que el perfil {by_key[key]} "
+            "(se fusiona y sus hijos pasan al otro)",
         )
     sync_sequence(SocialProfile)
 
 
 # ------------------------------------------------------------ snapshots and baselines
+
+
+def _original(row: dict[str, Any]) -> dict[str, Any]:
+    """The legacy row without the helper keys the importer adds while it works."""
+    return {k: v for k, v in row.items() if not k.startswith("_")}
 
 
 def import_snapshots_and_baselines(ctx: ImportContext) -> None:
@@ -217,7 +236,7 @@ def _import_handle_snapshots(
         target = targets.get(row["profile_id"])
         when = to_dt(row.get("captured_at"))
         if target is None or when is None:
-            ctx.skip("profile_snapshots", row["id"], "sin perfil importado o sin fecha")
+            ctx.skip("profile_snapshots", row, "sin perfil importado o sin fecha")
             continue
         pending.append((row, target[1], when))
 
@@ -251,11 +270,13 @@ def _import_handle_snapshots(
     created_keys = {(o.handle_id, o.captured_at) for o in to_create}
     for row, handle_id, when in pending:
         key = (handle_id, when)
-        ctx.remember("profile_snapshots", row["id"], "handle_snapshots", existing[key])
         if winner[key]["id"] == row["id"] and key in created_keys:
+            ctx.remember(
+                "profile_snapshots", row["id"], "handle_snapshots", existing[key]
+            )
             t.imported += 1
         else:
-            t.merged += 1
+            ctx.merge("profile_snapshots", row, "handle_snapshots", existing[key])
     if t.merged:
         ctx.warn(
             f"profile_snapshots: {t.merged} filas repetidas (handle, fecha) fusionadas"
@@ -273,7 +294,7 @@ def _import_baselines(ctx: ImportContext, targets: dict[int, tuple[int, int]]) -
             continue
         target = targets.get(row["profile_id"])
         if target is None:
-            ctx.skip("profile_baseline", row["id"], "sin perfil importado")
+            ctx.skip("profile_baseline", row, "sin perfil importado")
             continue
         kwargs: dict[str, Any] = {
             "profile_id": target[0],
@@ -309,23 +330,25 @@ def import_posts(ctx: ImportContext) -> None:
             continue
         target = targets.get(row["profile_id"])
         if target is None or not row.get("platform_post_id"):
-            ctx.skip("posts", row["id"], "sin perfil importado o sin id de plataforma")
+            ctx.skip("posts", row, "sin perfil importado o sin id de plataforma")
             continue
         pending.append((row, *target))
 
     existing = _existing_posts(h for _, _, h in pending)
     new_posts: list[Post] = []
     alerts: list[Alert] = []
+    adjusted_posts: set[int] = set()
+    by_id = {r["id"]: r for r, _, _ in pending}
     for row, profile_id, handle_id in pending:
         key = (handle_id, str(row["platform_post_id"]))
         if key in existing:
-            ctx.remember("posts", row["id"], "posts", existing[key])
-            t.merged += 1
+            ctx.merge("posts", row, "posts", existing[key])
             _post_alert(alerts, row, profile_id, existing[key], AlertKind.SPIKE)
             continue
         existing[key] = row["id"]
         kind = str(row.get("kind") or "original").lower()
         if kind not in PostKind.values:
+            adjusted_posts.add(row["id"])
             ctx.warn(
                 f"posts {row['id']}: tipo {kind!r} desconocido, se guarda como original"
             )
@@ -359,7 +382,13 @@ def import_posts(ctx: ImportContext) -> None:
     for chunk in _chunks(new_posts):
         Post.objects.bulk_create(chunk)
     for post in new_posts:
-        ctx.remember("posts", post.id, "posts", post.id)
+        ctx.remember(
+            "posts",
+            post.id,
+            "posts",
+            post.id,
+            row=_original(by_id[post.id]) if post.id in adjusted_posts else None,
+        )
         t.imported += 1
     sync_sequence(Post)
     _save_alerts(ctx, "posts", alerts)
@@ -407,7 +436,7 @@ def import_metrics(ctx: ImportContext) -> None:
         post_id = posts.get(str(row["post_id"]))
         when = to_dt(row.get("captured_at"))
         if post_id is None or when is None:
-            ctx.skip("metric_snapshots", row["id"], "sin post importado o sin fecha")
+            ctx.skip("metric_snapshots", row, "sin post importado o sin fecha")
             continue
         pending.append((row, post_id, when))
 
@@ -428,6 +457,7 @@ def import_metrics(ctx: ImportContext) -> None:
         if key not in winner or row["id"] > winner[key]["id"]:
             winner[key] = row
     negatives = 0
+    adjusted_metrics: set[int] = set()
     to_create: list[MetricSnapshot] = []
     for (post_id, when), row in winner.items():
         if (post_id, when) in existing:
@@ -436,7 +466,9 @@ def import_metrics(ctx: ImportContext) -> None:
         for column in METRIC_COLUMNS:
             raw = row.get(column)
             values[column] = _nonneg(raw)
-            negatives += raw is not None and values[column] is None
+            if raw is not None and values[column] is None:
+                negatives += 1
+                adjusted_metrics.add(row["id"])
         to_create.append(
             MetricSnapshot(
                 post_id=post_id,
@@ -453,11 +485,17 @@ def import_metrics(ctx: ImportContext) -> None:
         created_keys.add((obj.post_id, obj.captured_at))
     for row, post_id, when in pending:
         key = (post_id, when)
-        ctx.remember("metric_snapshots", row["id"], "metric_snapshots", existing[key])
         if winner[key]["id"] == row["id"] and key in created_keys:
+            ctx.remember(
+                "metric_snapshots",
+                row["id"],
+                "metric_snapshots",
+                existing[key],
+                row=_original(row) if row["id"] in adjusted_metrics else None,
+            )
             t.imported += 1
         else:
-            t.merged += 1
+            ctx.merge("metric_snapshots", row, "metric_snapshots", existing[key])
     if t.merged:
         ctx.warn(
             f"metric_snapshots: {t.merged} lecturas repetidas (post, fecha) fusionadas"
@@ -483,12 +521,10 @@ def import_activity(ctx: ImportContext) -> None:
         kind = str(row.get("kind") or "").lower()
         if target is None or not row.get("platform_post_id"):
             ctx.skip(
-                "user_activity",
-                row["id"],
-                "sin perfil importado o sin id de plataforma",
+                "user_activity", row, "sin perfil importado o sin id de plataforma"
             )
         elif kind not in {PostKind.REPLY, PostKind.RETWEET, PostKind.QUOTE}:
-            ctx.skip("user_activity", row["id"], f"tipo {kind!r} no admitido")
+            ctx.skip("user_activity", row, f"tipo {kind!r} no admitido")
         else:
             pending.append((row, *target))
 
@@ -496,10 +532,12 @@ def import_activity(ctx: ImportContext) -> None:
     for row, _profile_id, handle_id in pending:
         key = (handle_id, str(row["platform_post_id"]))
         if key in existing:
-            ctx.remember("user_activity", row["id"], "posts", existing[key])
-            t.merged += 1
-            ctx.warn(
-                f"user_activity {row['id']}: el post ya existe, gana la fila de posts"
+            ctx.merge(
+                "user_activity",
+                row,
+                "posts",
+                existing[key],
+                "el post ya existe, gana la fila de posts",
             )
             continue
         post = Post.objects.create(
@@ -566,7 +604,7 @@ def import_listening(ctx: ImportContext) -> None:
         platform = str(row.get("platform") or "x").lower()
         if target is None or not row.get("platform_post_id"):
             ctx.skip(
-                "listening_matches", pk, "sin perfil importado o sin id de plataforma"
+                "listening_matches", row, "sin perfil importado o sin id de plataforma"
             )
             continue
         try:
@@ -574,7 +612,7 @@ def import_listening(ctx: ImportContext) -> None:
                 platform, row.get("author_handle") or ""
             )
         except services.InvalidHandle:
-            ctx.skip("listening_matches", pk, "autor con handle no válido")
+            ctx.skip("listening_matches", row, "autor con handle no válido")
             continue
         profile_id = target[0]
         handle_id = handles.get((platform, normalized))
@@ -590,6 +628,7 @@ def import_listening(ctx: ImportContext) -> None:
             author_id=handle_id, platform_post_id=platform_post_id
         ).first()
         discovered = to_dt(row.get("discovered_at"))
+        post_is_new = post is None
         if post is None:
             post = Post.objects.create(
                 author_id=handle_id,
@@ -605,15 +644,27 @@ def import_listening(ctx: ImportContext) -> None:
                 )
         match = ListeningMatch.objects.filter(profile_id=profile_id, post=post).first()
         if match:
-            ctx.remember("listening_matches", pk, "listening_matches", match.pk)
-            t.merged += 1
-            ctx.warn(f"listening_matches {pk}: ya había una coincidencia para ese post")
+            ctx.merge(
+                "listening_matches",
+                row,
+                "listening_matches",
+                match.pk,
+                "ya había una coincidencia para ese post",
+            )
         else:
             extra = {"discovered_at": discovered} if discovered else {}
             match = ListeningMatch.objects.create(
                 profile_id=profile_id, post=post, **extra
             )
-            ctx.remember("listening_matches", pk, "listening_matches", match.pk)
+            # An existing post keeps its own caption, url and metrics, so this row's copy
+            # of them stays in the payload.
+            ctx.remember(
+                "listening_matches",
+                pk,
+                "listening_matches",
+                match.pk,
+                row=None if post_is_new else _original(row),
+            )
             t.imported += 1
         _post_alert(alerts, row, profile_id, post.pk, AlertKind.NICHE_MATCH)
     _save_alerts(ctx, "listening_matches", alerts)
@@ -634,16 +685,21 @@ def import_poll_config(ctx: ImportContext) -> None:
             continue
         target = targets.get(row["profile_id"])
         if target is None:
-            ctx.skip("poll_config", pk, "sin perfil importado")
+            ctx.skip("poll_config", row, "sin perfil importado")
             continue
         existing = PollConfig.objects.filter(profile_id=target[0]).first()
         if existing:
-            ctx.remember("poll_config", pk, "poll_configs", existing.pk)
-            t.merged += 1
-            ctx.warn(f"poll_config {pk}: el perfil {target[0]} ya tiene configuración")
+            ctx.merge(
+                "poll_config",
+                row,
+                "poll_configs",
+                existing.pk,
+                f"el perfil {target[0]} ya tiene configuración",
+            )
             continue
         interval = int(row.get("interval_minutes") or 5)
-        if not 1 <= interval <= 1440:
+        adjusted = not 1 <= interval <= 1440
+        if adjusted:
             ctx.warn(
                 f"poll_config {pk}: intervalo {interval} fuera de 1 a 1440, se ajusta"
             )
@@ -654,7 +710,13 @@ def import_poll_config(ctx: ImportContext) -> None:
             is_active=to_bool(row.get("is_active")),
             last_polled_at=to_dt(row.get("last_polled_at")),
         )
-        ctx.remember("poll_config", pk, "poll_configs", config.pk)
+        ctx.remember(
+            "poll_config",
+            pk,
+            "poll_configs",
+            config.pk,
+            row=_original(row) if adjusted else None,
+        )
         t.imported += 1
 
 

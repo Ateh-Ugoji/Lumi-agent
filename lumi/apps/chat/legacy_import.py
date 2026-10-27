@@ -16,6 +16,7 @@ def import_chat_messages(ctx: ImportContext) -> None:
     rows = list(ctx.legacy.rows("chat_messages"))
     t.read = len(rows)
     new: list[ChatMessage] = []
+    adjusted: dict[int, dict] = {}
     for row in rows:
         pk = row["id"]
         if ctx.is_done("chat_messages", pk, "chat_messages"):
@@ -24,11 +25,16 @@ def import_chat_messages(ctx: ImportContext) -> None:
         target = targets.get(row["profile_id"])
         role = str(row.get("role") or "").lower()
         if target is None or role not in ChatRole.values:
-            ctx.skip("chat_messages", pk, "sin perfil importado o rol desconocido")
+            ctx.skip("chat_messages", row, "sin perfil importado o rol desconocido")
             continue
         tools_used = to_json(row.get("tools_used"))
         tool_calls = to_json(row.get("tool_calls"))
         extra = {}
+        # A value in a shape the new columns cannot hold is dropped, so keep the row.
+        if (tool_calls is not None and not isinstance(tool_calls, list)) or (
+            tools_used is not None and not isinstance(tools_used, list)
+        ):
+            adjusted[pk] = row
         if created := to_dt(row.get("created_at")):
             extra["created_at"] = created
         new.append(
@@ -50,7 +56,13 @@ def import_chat_messages(ctx: ImportContext) -> None:
     for i in range(0, len(new), BATCH):
         ChatMessage.objects.bulk_create(new[i : i + BATCH])
     for message in new:
-        ctx.remember("chat_messages", message.id, "chat_messages", message.id)
+        ctx.remember(
+            "chat_messages",
+            message.id,
+            "chat_messages",
+            message.id,
+            row=adjusted.get(message.id),
+        )
         t.imported += 1
     sync_sequence(ChatMessage)
 
