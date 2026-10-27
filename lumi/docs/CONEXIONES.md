@@ -171,12 +171,14 @@ Pendiente. Se llena en T11 con las notas de la integración React y Django.
 
 ## Lo construido
 
-Estado al 2026-10-27. Todo vive en `lumi/apps/connections/` y funciona sin Django ni red (solo `apps.py` y `keys.py` tocan a Django o a `apps.core`).
+Estado al 2026-10-27. Todo vive en `lumi/apps/connections/`. El núcleo funciona sin Django ni red. Solo `apps.py`, `models.py`, `stores.py` y `keys.py` tocan a Django o a `apps.core`, y `tests/test_boundaries.py` lo vigila.
 
 | Pieza | Archivo | Qué hace |
 | --- | --- | --- |
 | Configuración | `config.py` | Lee las variables de entorno, valida formatos y excluye los secretos del `repr`. |
-| Cifrado | `crypto.py` | Fernet con rotación: `TOKEN_ENCRYPTION_KEY` cifra, `TOKEN_ENCRYPTION_KEY_PREVIOUS` solo descifra. `rotate` y `needs_rotation` para migrar valores guardados. |
+| Cifrado | `apps/core/fields.py` (ARCHITECT) | `EncryptedTextField` con Fernet y rotación: `TOKEN_ENCRYPTION_KEY` cifra, `TOKEN_ENCRYPTION_KEY_PREVIOUS` solo descifra. Los tokens de `ConnectedAccount`, `OAuthState` y `McpAuthAccount` usan ese campo. `crypto.py` es código heredado sin uso en producción, pendiente de borrar junto con la prueba de interoperabilidad de `core`. |
+| Modelos | `models.py`, `migrations/0001_initial.py` | `ConnectedAccount`, `OAuthState`, `PublishJob`, `McpAuthAccount`, `HandleSearchCache`, `HandleSearchCacheEntry`, `XpozCreditLedger`. Las reglas viven en la base: UNIQUE, CHECK y FK. |
+| Almacenes | `stores.py` | Implementaciones Django de los puertos puros. `OAuthState.consume` es un único `UPDATE ... RETURNING`. `PublishJob` es el libro de idempotencia. |
 | Cliente HTTP | `http.py` | Transporte inyectable, lista de hosts permitidos, sin redirecciones, errores tipados sin URL ni cuerpo. Escrituras sin reintento. |
 | OAuth | `oauth.py` | `state` de un solo uso con caducidad de 10 minutos, PKCE solo para X, destino posterior validado, usuario esperado en el callback. |
 | Proveedores | `providers/{meta,linkedin,x}.py` | Contrato común `SocialProvider`. X queda apagado con `X_LIVE_ENABLED=false`: cero peticiones. |
@@ -187,11 +189,9 @@ Los errores tipados vienen de `lumi_ai.ports` (dueño: INTELLIGENCE) y se reexpo
 
 Las respuestas de prueba (`tests/fixtures/*.json`) están **escritas a mano** a partir de las formas documentadas, no capturadas de llamadas reales. Cuando haya apps reales, hay que grabar respuestas verdaderas y comparar. Las pruebas con marca `live` (Meta y LinkedIn) se saltan sin `LUMI_RUN_LIVE=1` y sin su variable. No existe prueba `live` de X y no debe existir.
 
-### Dependencias de ARCHITECT (pendientes)
+### Dependencias abiertas
 
-- Modelos T3 (`ConnectedAccount`, `OAuthState`, `PublishJob`, `McpAuthAccount`, cachés): necesitan `accounts.0001_initial` y `profiles.0001_initial`, que aún no existen.
-- `OAuthState` debe implementar `OAuthStateStore.consume` con un único `UPDATE ... WHERE consumed_at IS NULL AND expires_at > now() RETURNING`.
-- `PublishJob` debe implementar `PublishLedger` (`begin` atómico con `INSERT ... ON CONFLICT DO NOTHING` sobre (`profile`, `idempotency_key`)). Pide un `status` con `pending`, `done`, `failed`, `unknown` y una columna `fingerprint` de 64 caracteres.
-- `EncryptedTextField` envuelve `TokenCipher.from_env(os.environ)`.
-- `apps.connections` debe entrar en `INSTALLED_APPS` para que `ready()` registre las claves.
-- `CONTRATOS.md` no está publicado: sin él no se fijan las rutas de `/api/v1/connections/*`.
+- `publish_jobs.attempt_id` es un `bigint` nulo sin FK. La `0002` añade la FK cuando INTELLIGENCE publique `repurpose_attempts`. Es una desviación temporal de SCHEMA §8.
+- `stores.py` escribe `SocialHandle` con el ORM porque `apps.profiles.services` (`get_or_create_handle`, `upsert_posts`) aún no existe. Hay que cambiarlo cuando se publique.
+- `PublishJob.external_url` y `HandleSearchCacheEntry.rank` son columnas que añadí a SCHEMA §8 para poder repetir una respuesta y conservar el orden. Falta que ARCHITECT las refleje en `docs/SCHEMA.md`.
+- Borrar `crypto.py` exige que ARCHITECT quite `test_interoperates_with_the_connections_token_cipher` de `apps/core/tests/test_fields.py`.

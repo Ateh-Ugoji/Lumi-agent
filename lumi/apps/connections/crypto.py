@@ -5,7 +5,9 @@ Tokens are encrypted with Fernet. ``TOKEN_ENCRYPTION_KEY`` encrypts. Decryption 
 downtime: set the new key, move the old one to ``_PREVIOUS``, run ``rotate`` over stored
 values, then drop ``_PREVIOUS``.
 
-A Django ``EncryptedTextField`` that wraps this class belongs with the models (T3).
+Legacy. Models use ``apps.core.fields.EncryptedTextField`` (same Fernet format) and nothing
+in production code imports this module. It stays only because ARCHITECT's
+``apps/core/tests/test_fields.py`` pins the interoperability. Delete both together.
 """
 
 from __future__ import annotations

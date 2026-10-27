@@ -118,6 +118,8 @@ async def test_definite_failure_allows_retry_with_the_same_key() -> None:
     with pytest.raises(ProviderAuthError):
         await publish(publisher, provider)
     assert ledger.log[-1] == ("k1", "failed")
+    reason = ledger.errors[(1, "k1")]
+    assert reason.startswith("ProviderAuthError") and "://" not in reason
     retried = await publish(publisher, provider)
     assert retried.result.external_post_id == "urn:li:share:9" and not retried.replayed
     assert len(rec.requests) == 2

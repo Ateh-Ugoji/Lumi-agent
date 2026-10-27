@@ -11,10 +11,10 @@ Rama `lumi-orquestador`. Se actualiza en cada reporte.
 | T2 Fusión de frontends | hecho | `lumi/frontend` es el único frontend. Typecheck, build y 17 pruebas Node pasan. No hay linter en ninguno de los dos (solo `tsc`). |
 | T13 MUSE.md | hecha | Solo documentación, fuentes de dev.meta.ai con fecha 2026-10-27 |
 | Capa de adaptadores | hecha (sin Django) | Cifrado, OAuth, http, Meta, LinkedIn, X, publicación, claves. 139 pruebas sin red. |
-| T3 modelos | en curso | Desbloqueada con `accounts.0001` y `profiles.0001` |
+| T3 modelos | hecho | 7 modelos, `0001_initial`, almacenes Django y 53 pruebas contra Postgres real. Ida y vuelta de migración y `makemigrations --check` limpios |
 | T7 clientes PFM y Xpoz | hecha (sin red) | Mocks y fixtures. Sin llamadas en vivo. La ingesta a Postgres espera `apps.profiles.services` (T5 de ARCHITECT) |
-| T8 búsqueda de handles | parte pura hecha | Falta el almacén Postgres y las rutas `/handles/*` |
-| T4 a T12 y T14 | pendientes | T5 y T11 exigen `CONTRATOS.md`, que aún no está publicado |
+| T8 búsqueda de handles | almacén Postgres hecho | Falta la ruta `/handles/*` (T5) |
+| T4 a T12 y T14 | pendientes | `CONTRATOS.md` v1.0 ya está aceptado. Sigue T5 (vistas) |
 
 ## Contrato
 

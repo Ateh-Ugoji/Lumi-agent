@@ -77,13 +77,22 @@ class PublishLedger(Protocol):
         key: str,
         status: LedgerStatus,
         result: PublishResult | None = None,
-    ) -> None: ...
+        error: str = "",
+    ) -> None:
+        """Close a ``pending`` entry. ``error`` is a short reason, never a body or a header."""
+        ...
 
 
 @dataclass(frozen=True, slots=True)
 class Published:
     result: PublishResult
     replayed: bool
+
+
+def _reason(exc: BaseException) -> str:
+    """Class name plus the typed message. Typed messages never carry URLs, headers or bodies."""
+    text = str(exc).strip()
+    return f"{type(exc).__name__}: {text}"[:500] if text else type(exc).__name__
 
 
 def fingerprint(provider: str, account: AccountInfo, draft: PublishDraft) -> str:
@@ -142,16 +151,16 @@ class Publisher:
                 )
         try:
             result = await provider.publish(tokens, account, draft, dry_run=False)
-        except ProviderUnavailable:
-            await self._ledger.finish(scope, key, "unknown")
+        except ProviderUnavailable as exc:
+            await self._ledger.finish(scope, key, "unknown", error=_reason(exc))
             raise
-        except SocialDataError:
+        except SocialDataError as exc:
             # Typed refusals (auth, rate limit, validation, live switch) mean nothing was posted.
-            await self._ledger.finish(scope, key, "failed")
+            await self._ledger.finish(scope, key, "failed", error=_reason(exc))
             raise
-        except BaseException:
+        except BaseException as exc:
             # A bug or a cancelled task: the request may have gone out.
-            await self._ledger.finish(scope, key, "unknown")
+            await self._ledger.finish(scope, key, "unknown", error=type(exc).__name__)
             raise
         await self._ledger.finish(scope, key, "done", result)
         return Published(result=result, replayed=False)

@@ -77,6 +77,7 @@ class MemoryLedger:
     def __init__(self) -> None:
         self.entries: dict[tuple, object] = {}
         self.log: list[tuple] = []
+        self.errors: dict[tuple, str] = {}
 
     async def begin(self, scope, key, fingerprint):
         from apps.connections.publishing import LedgerEntry
@@ -95,9 +96,10 @@ class MemoryLedger:
             self.entries[(scope, key)], status="pending"
         )
 
-    async def finish(self, scope, key, status, result=None):
+    async def finish(self, scope, key, status, result=None, error=""):
         from dataclasses import replace
 
+        self.errors[(scope, key)] = error
         self.log.append((key, status))
         self.entries[(scope, key)] = replace(
             self.entries[(scope, key)], status=status, result=result
