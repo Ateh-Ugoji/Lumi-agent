@@ -31,6 +31,7 @@ def own_keys(monkeypatch, settings):
     the shell and still proves the application starts when the required ones are present.
     """
     monkeypatch.setenv("GROQ_API_KEY", "dummy-not-called")
+    monkeypatch.setenv("SECRET_KEY", "dummy-not-called-secret-key-0123456789abcdef")
     monkeypatch.setenv("TOKEN_ENCRYPTION_KEY", DUMMY_FERNET)
     settings.KEYS_ENFORCE_REQUIRED = True
 
