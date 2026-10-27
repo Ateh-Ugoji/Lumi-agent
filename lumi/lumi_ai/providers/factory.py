@@ -48,7 +48,6 @@ def build_provider_specs(
         config.groq_api_key,
         GROQ_BASE_URL,
         (config.groq_model_large, config.groq_model_fallback),
-        max_request_tokens=config.max_request_tokens,
     )
     add(
         "openrouter",

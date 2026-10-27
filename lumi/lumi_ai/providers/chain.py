@@ -13,8 +13,9 @@ New in lumi_ai:
   provider's ``Retry-After``, capped), so an empty OpenRouter balance is not paid for with a
   failed call on every turn. When every candidate is resting, they are tried anyway, soonest
   expiry first: a failed call is cheap, a missing answer is not.
-* A provider with a known input-token wall (Groq) is skipped, without a call, when the request
-  is estimated to be over it.
+* When every candidate answered 413 the error is :class:`RequestTooLarge`, so the loop can trim
+  context and retry. (No pre-call wall estimate: Groq walls differ per model and the estimate
+  is approximate; the legacy loop already budgets the request before it gets here.)
 * Every call (success or failure) is reported to a ``UsageSink``.
 * Typed errors: :class:`AllProvidersFailed` carries every attempt.
 """
@@ -55,8 +56,6 @@ class ProviderSpec:
     name: str
     client: ChatClient
     models: tuple[str, ...]
-    #: Input-token wall of this provider, or ``None`` when unknown / large enough to ignore.
-    max_request_tokens: int | None = None
     #: Whether a pinned model id (tier routing) means anything on this provider.
     accepts_pinned_model: bool = True
 
@@ -207,34 +206,16 @@ class LLMChain:
         if not self._providers:
             raise NoProviderConfigured("no LLM provider has an API key")
         pinned = model or (self.tier_model(tier) if tier else None)
-        estimated = estimate_tokens(messages, tools, self._config.est_chars_per_token)
 
         candidates: list[tuple[ProviderSpec, str]] = []
         attempts: list[Attempt] = []
-        skipped_too_large = 0
         for spec in self._providers:
             if pinned and not spec.accepts_pinned_model:
                 continue
-            for name in [pinned] if pinned else spec.models:
-                if (
-                    spec.max_request_tokens is not None
-                    and estimated > spec.max_request_tokens
-                ):
-                    skipped_too_large += 1
-                    attempts.append(
-                        Attempt(
-                            spec.name,
-                            name,
-                            "too_large",
-                            None,
-                            f"estimated {estimated} tokens over wall {spec.max_request_tokens}",
-                        )
-                    )
-                    continue
-                candidates.append((spec, name))
+            candidates.extend(
+                (spec, name) for name in ([pinned] if pinned else spec.models)
+            )
         if not candidates:
-            if skipped_too_large:
-                raise RequestTooLarge(estimated, tuple(attempts))
             raise NoProviderConfigured("no provider can serve the requested model")
 
         ready = [c for c in candidates if not self.is_resting(c[0].name, c[1])]
@@ -258,6 +239,9 @@ class LLMChain:
             assert outcome.failure is not None
             attempts.append(outcome.failure)
             last_exc = outcome.error
+        failures = tuple(a for a in attempts if a.kind != "cooldown")
+        if failures and all(a.kind == "too_large" for a in failures):
+            raise RequestTooLarge(tuple(attempts)) from last_exc
         raise AllProvidersFailed(tuple(attempts)) from last_exc
 
     async def _try_candidate(

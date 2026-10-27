@@ -219,26 +219,19 @@ async def test_400_does_not_start_a_cooldown():
     assert not chain.is_resting("groq", GROQ_MODELS[0])
 
 
-async def test_token_wall_skips_without_a_call():
-    big = [{"role": "user", "content": "x" * 40_000}]
-    chain, c = make_chain(
-        [
-            ("groq", GROQ_MODELS, [], {"max_request_tokens": 6700}),
-            ("openrouter", OR_MODELS, ["ok"]),
-        ]
-    )
-    result = await chain.complete(big, [])
-    assert result.provider == "openrouter"
-    assert c["groq"].models == []
-    assert [a.kind for a in result.attempts] == ["too_large", "too_large"]
-
-
-async def test_request_too_large_when_every_candidate_is_walled():
-    big = [{"role": "user", "content": "x" * 40_000}]
-    chain, _ = make_chain([("groq", GROQ_MODELS, [], {"max_request_tokens": 6700})])
+async def test_all_413_raises_request_too_large_so_the_loop_can_trim():
+    chain, _ = make_chain([("groq", GROQ_MODELS, [api_error(413), api_error(413)])])
     with pytest.raises(RequestTooLarge) as info:
-        await chain.complete(big, [])
-    assert info.value.estimated_tokens > 6700
+        await chain.complete(MSG, [])
+    assert isinstance(info.value, AllProvidersFailed)
+    assert [a.kind for a in info.value.attempts] == ["too_large", "too_large"]
+
+
+async def test_mixed_failures_are_not_request_too_large():
+    chain, _ = make_chain([("groq", GROQ_MODELS, [api_error(413), api_error(500)])])
+    with pytest.raises(AllProvidersFailed) as info:
+        await chain.complete(MSG, [])
+    assert not isinstance(info.value, RequestTooLarge)
 
 
 async def test_empty_chain_raises_no_provider_configured():

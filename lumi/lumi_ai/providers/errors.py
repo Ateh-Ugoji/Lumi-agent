@@ -39,19 +39,6 @@ class NoProviderConfigured(LLMError):
     """No provider has an API key, so there is nothing to call."""
 
 
-class RequestTooLarge(LLMError):
-    """The request is over every candidate's token wall. The caller must trim and retry."""
-
-    def __init__(
-        self, estimated_tokens: int, attempts: tuple[Attempt, ...] = ()
-    ) -> None:
-        super().__init__(
-            f"request of ~{estimated_tokens} tokens exceeds every provider limit"
-        )
-        self.estimated_tokens = estimated_tokens
-        self.attempts = attempts
-
-
 class AllProvidersFailed(LLMError):
     """Every candidate failed. ``attempts`` lists them in order; ``__cause__`` is the last error."""
 
@@ -69,3 +56,11 @@ class AllProvidersFailed(LLMError):
             if a.status_code is not None:
                 return a.status_code
         return None
+
+
+class RequestTooLarge(AllProvidersFailed):
+    """Every candidate answered 413: the request is over every provider's wall.
+
+    The agent loop reacts by trimming context and retrying; a single user message that is
+    itself over every wall fails honestly instead of being truncated silently.
+    """

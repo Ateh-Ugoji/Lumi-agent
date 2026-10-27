@@ -30,7 +30,6 @@ def test_chain_order_and_models_from_config():
     specs = {s.name: s for s in build_provider_specs(cfg)}
     assert list(specs) == ["openlux", "groq", "openrouter"]
     assert specs["groq"].models == ("L", "F")
-    assert specs["groq"].max_request_tokens == cfg.max_request_tokens
     assert specs["openrouter"].models == ("R",)
     assert specs["openlux"].accepts_pinned_model is False
 
