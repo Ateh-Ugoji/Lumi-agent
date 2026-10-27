@@ -2,7 +2,8 @@
 
 ``AIConfig.from_env()`` is read once. A missing key leaves the matching provider out of the chain
 and its probe red in ``check_keys``; it never swaps in a canned answer. Tools whose port has no
-implementation yet (``ConnectionLinks``, ``OwnPostSync``) are simply not registered.
+implementation are simply not registered; ``connect_account`` (``DjangoConnectionLinks``) and
+``backfill_posts`` (``DjangoOwnPostSync``) are wired.
 """
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ from asgiref.sync import sync_to_async
 
 from apps.connections import mcp_gateway
 from apps.connections.connect_links import DjangoConnectionLinks
+from apps.connections.own_post_sync import DjangoOwnPostSync
 from apps.intelligence import repos
 from lumi_ai.agent.loop import AgentDeps, AgentLoop
 from lumi_ai.competitors import tools as competitor_tools
@@ -33,7 +35,7 @@ from lumi_ai.generation.context import ContextBuilder
 from lumi_ai.generation.enforcement import EnforcementReviewer
 from lumi_ai.generation.flow import GenerationService
 from lumi_ai.judge.jev import JevJudge
-from lumi_ai.ports import Platform, PostIn, SocialData, UserInfo
+from lumi_ai.ports import OwnPostSync, Platform, PostIn, SocialData, UserInfo
 from lumi_ai.providers.chain import LLMChain
 from lumi_ai.providers.factory import build_chain, loop_local
 from lumi_ai.rag import tools as rag_tools
@@ -148,6 +150,7 @@ class Wiring:
     indexer: VectorIndexer
     retriever: Retriever
     posts: repos.PostRepo
+    post_sync: OwnPostSync
 
 
 @functools.lru_cache(maxsize=1)
@@ -220,6 +223,7 @@ def get_wiring() -> Wiring:
     )
     # CONNECT's gateway: connector tools for the registry and ``resolve_pending`` before each turn.
     gateway = mcp_gateway.build_mcp_gateway()
+    post_sync = DjangoOwnPostSync()
     registry = build_registry(
         ToolDeps(
             profiles=profiles,
@@ -230,6 +234,7 @@ def get_wiring() -> Wiring:
             listening=repos.ListeningRepo(),
             repurpose=repurpose,
             links=DjangoConnectionLinks(),
+            post_sync=post_sync,
         ),
         gateway,
         extra=[
@@ -267,4 +272,5 @@ def get_wiring() -> Wiring:
         indexer,
         retriever,
         posts,
+        post_sync,
     )

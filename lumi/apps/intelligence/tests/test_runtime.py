@@ -42,7 +42,7 @@ class TestRuntimeWithoutKeys:
         assert {"get_posts", "check_niche_trends"} <= names
         assert "publish_post" not in names  # nobody wired a publishing tool
         assert "connect_account" in names  # CONNECT's DjangoConnectionLinks is wired
-        assert "backfill_posts" not in names  # OwnPostSync is not delivered yet
+        assert "backfill_posts" in names  # CONNECT's DjangoOwnPostSync is wired
 
     def test_a_chat_turn_says_the_model_is_not_configured(self, no_keys, profile):
         with pytest.raises(ApiError) as caught:
@@ -115,6 +115,13 @@ class Style:
         return self.outcome
 
 
+class NoAccountSync:
+    """What ``DjangoOwnPostSync`` raises for a profile with no connected account."""
+
+    async def sync_own_posts(self, profile_id, platform=None):
+        raise ports.ProviderUnavailable("no connected account", provider="connections")
+
+
 class Indexer:
     def __init__(self):
         self.seen = []
@@ -132,7 +139,11 @@ def bootstrap(monkeypatch):
             wiring,
             "get_wiring",
             lambda: SimpleNamespace(
-                posts=PostRepo(), config=AIConfig(), style=style, indexer=indexer
+                posts=PostRepo(),
+                config=AIConfig(),
+                style=style,
+                indexer=indexer,
+                post_sync=NoAccountSync(),
             ),
         )
         return style, indexer
@@ -169,9 +180,19 @@ class TestBootstrapJob:
         )
         style, indexer = bootstrap(VoiceRefresh("created", posts_found=1))
         out = tasks.bootstrap_profile(ctx(profile))
-        assert out == {"posts_indexed": 1, "voice": "created", "posts_found": 1}
+        assert out == {
+            "sync": "unavailable",
+            "posts_synced": 0,
+            "posts_indexed": 1,
+            "voice": "created",
+            "posts_found": 1,
+        }
         assert style.calls == [profile.pk] and len(indexer.seen) == 1
-        assert self.progress == [tasks.PROGRESS_INDEXED, tasks.PROGRESS_VOICE]
+        assert self.progress == [
+            tasks.PROGRESS_SYNCED,
+            tasks.PROGRESS_INDEXED,
+            tasks.PROGRESS_VOICE,
+        ]
         assert SocialProfile.objects.get(pk=profile.pk).bootstrapped_at is not None
 
     def test_a_voice_that_could_not_be_learned_fails_the_job_and_leaves_the_profile_open(
