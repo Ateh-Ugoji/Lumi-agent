@@ -16,10 +16,10 @@ Rama: `lumi-orquestador`. Registro de decisiones: `ARCHITECT-decisiones.tsv`.
 | Tarea | Estado | Nota |
 | --- | --- | --- |
 | T0 | hecha | |
-| T1 | esqueleto publicado, resto en curso | Hecho: `manage.py`, `config/settings/{base,dev,test,prod}`, `apps/core/{env,keys,probes,startup,health}`, `scripts/dev_postgres.py`, `.env.example` por bloques, pytest con marcador `live`, 20 tests. Falta: Docker y compose, comando `check_keys`, `apps.accounts` (T3). `contrib.auth` queda fuera de `INSTALLED_APPS` hasta T3 para no crear tablas bajo un modelo de usuario que se reemplaza. |
-| T2 | `SCHEMA.md` v2 y `CONTRATOS.md` v1.0 publicados | Esperan `CONTRATO ARCHITECT ACEPTADO <sha>` de INTELLIGENCE y CONNECT. |
-| T3 (parcial) | `accounts.0001_initial`, `profiles.0001_initial`, `EncryptedTextField` publicados | Faltan `core.0001_initial` y `chat.0001_initial`, y las rutas de `auth`. |
-| T3 (resto) a T12 | pendientes | |
+| T1 | hecha | `docker-compose.yml` (Postgres 16, Redis opcional con `--profile celery`), `manage.py check_keys`, ajustes que leen todo de `lumi/.env`, fallo claro sin `DATABASE_URL` o `SECRET_KEY`, SQLite rechazado, opcionales avisan en el arranque. Tests en `apps/core/tests/test_startup_e2e.py` (procesos reales) y uno `live`. El compose no se pudo probar: la box no tiene Docker. |
+| T2 | `SCHEMA.md` v2 y `CONTRATOS.md` v1.0 publicados | Aceptados por INTELLIGENCE (0489487) y CONNECT (585bb7a). |
+| T3 | hecha en lo de ARCHITECT | `accounts`, `profiles`, `core` y `chat` con migración inicial. Rutas `/auth/*`, `TokenAuthentication`, `IsProfileOwner`, manejador de errores. |
+| T4 a T12 | pendientes | Siguiente: `services.py` de perfiles y chat y sus rutas. |
 
 ## Cambios que esperan los documentos de keys (los mantiene el orquestador)
 
