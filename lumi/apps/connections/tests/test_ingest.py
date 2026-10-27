@@ -240,3 +240,38 @@ def test_media_is_never_invented() -> None:
         "media": [{"url": "https://img.example/a.jpg"}],
     }
     assert map_pfm_item(item).media == ()
+
+
+def test_pfm_media_keeps_only_entries_with_a_stated_kind() -> None:
+    from lumi_ai.ports import MediaRef
+
+    item = {
+        **fixture("pfm_feed_x_page1.json")["data"][0],
+        "media": [
+            {"url": "https://img.example/a.jpg", "type": "image"},
+            {"media_url": "https://v.example/b.mp4", "mime_type": "video/mp4"},
+            {"url": "https://img.example/c.gif", "kind": "image/gif"},
+            {"url": "https://img.example/d.jpg", "type": "hologram"},
+            {"url": "ftp://img.example/e.jpg", "type": "image"},
+            {"type": "image"},
+            "https://img.example/f.jpg",
+        ],
+    }
+    assert map_pfm_item(item).media == (
+        MediaRef("image", "https://img.example/a.jpg"),
+        MediaRef("video", "https://v.example/b.mp4"),
+        MediaRef("gif", "https://img.example/c.gif"),
+    )
+    assert map_pfm_item({**item, "media": "nope"}).media == ()
+
+
+def test_xpoz_x_media_is_not_mapped_until_kind_may_be_none() -> None:
+    post = map_xpoz_post(
+        {
+            "id": 7,
+            "text": "hi",
+            "createdAt": "2026-10-20T10:00:00Z",
+            "mediaUrls": ["https://pbs.example/a.jpg"],
+        }
+    )
+    assert post.media == ()

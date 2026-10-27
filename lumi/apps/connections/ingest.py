@@ -11,8 +11,9 @@ Rules that every path follows:
 * A reply to the user's own post is a thread continuation: ``kind="original"`` with the
   conversation id, so it stays in ``posts``.
 * A post without an id, text or a parsable date is dropped. A date is never invented.
-* Media is not mapped. Xpoz sends bare URLs with no type and PFM sends untyped arrays, and a
-  guessed media kind would be a made-up fact.
+* Media is mapped only when the source states its kind (PFM items with a type or MIME). A kind
+  is never guessed from a URL. Xpoz sends bare URLs for X posts, so X media waits for
+  ``MediaRef.kind`` to accept ``None``. Thumbnails are not carried.
 * Provider payload fields that are not mapped here (tokens, raw ids of other users) are not
   carried over.
 """
@@ -24,7 +25,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, cast
 
-from lumi_ai.ports import Platform, PostIn, PostKind, PostMetrics
+from lumi_ai.ports import MediaRef, Platform, PostIn, PostKind, PostMetrics
 
 TRUNCATION_MIN_LEN = 270
 TRUNCATION_MAX_LEN = 280
@@ -201,6 +202,44 @@ def pfm_metrics(platform: str, metrics: Any) -> PostMetrics:
     return PostMetrics()
 
 
+_MEDIA_URL_KEYS = ("url", "media_url", "source_url")
+_MEDIA_KIND_KEYS = ("type", "kind", "media_type", "mime_type", "content_type")
+
+
+def _media_kind(value: Any) -> str | None:
+    """``image``, ``video`` or ``gif`` from a type word or a MIME type; ``None`` otherwise."""
+    text = _text(value)
+    if text is None:
+        return None
+    text = text.lower()
+    if text in ("gif", "animated_gif") or text.endswith("/gif"):
+        return "gif"
+    head = text.split("/", 1)[0]
+    if head in ("image", "photo", "picture"):
+        return "image"
+    if head in ("video", "reel"):
+        return "video"
+    return None
+
+
+def pfm_media(raw: Any) -> tuple[MediaRef, ...]:
+    """Media of a PFM item. Entries without an http(s) url or a stated kind are dropped."""
+    if not isinstance(raw, list):
+        return ()
+    out: list[MediaRef] = []
+    for entry in raw:
+        if not isinstance(entry, Mapping):
+            continue
+        url = next((u for k in _MEDIA_URL_KEYS if (u := _text(entry.get(k)))), None)
+        kind = next(
+            (m for k in _MEDIA_KIND_KEYS if (m := _media_kind(entry.get(k)))), None
+        )
+        if url is None or kind is None or not url.startswith(("https://", "http://")):
+            continue
+        out.append(MediaRef(kind=cast(Any, kind), url=url))
+    return tuple(out)
+
+
 def map_pfm_item(
     item: Mapping[str, Any], *, handle: str | None = None
 ) -> PostIn | None:
@@ -226,6 +265,7 @@ def map_pfm_item(
         metrics=pfm_metrics(platform, item.get("metrics")),
         source="pfm",
         text_truncated=detect_truncation(text),
+        media=pfm_media(item.get("media")),
     )
 
 
