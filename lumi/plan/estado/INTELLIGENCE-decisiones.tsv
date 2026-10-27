@@ -61,3 +61,7 @@ fecha	qué	por qué	evidencia	resultado
 2026-10-27	Los ids de probe son typesafe (antes jev) y chroma, para que valga el check_keys de PLAN §9	Dejar jev	check_keys --only ...typesafe,chroma daba 'Ids desconocidos'
 2026-10-27	/interrogate no se corrió; revisión manual de los tres archivos	Correrlo (varios modelos externos de pago)	Regla de no gastar dinero
 timeout-escritura	un timeout no puede dejar commit tardio	CancelToken+commit_gate en @aio dentro de atomic; flag antes de lock	640 tests; test falla sin la guarda	ok
+mcp-park-aio	DjangoMcpStore.park pasa por aio y las tools MCP de escritura reciben CancelToken	Dejarlo fuera (la fila aparcada sobrevive al timeout y un «sí» ejecutaria una llamada que el modelo creyó fallida); envolver tambien _record y save_tokens (no: deben persistir)	test_a_parked_mcp_write_is_rolled_back_when_its_tool_call_timed_out y test_an_mcp_write_tool_gets_a_cancel_token	ok
+connect-account-cableada	links=DjangoConnectionLinks() en wiring.py	Esperar a CONNECT (ya entrego connect_links.py con @aio y tests)	test_the_registry_has_the_tools...	ok
+avatar-solo-de-la-fuente	PostIn/PeerPostIn.author_avatar_url y viral_posts[].avatar_url desde el handle guardado o ''	Llamar get_user por handle (2 creditos Xpoz cada uno); construir URLs de unavatar u otras (inventadas)	Xpoz posts no trae avatar (docs.xpoz.ai field-selection); test_viral_posts_carry_the_photo...	ok (PORTS 1.11)
+last_checked_at-no	no se anade PostOut.last_checked_at	Anadirlo	ningun calculo del analisis lo lee; metrics_age_hours basta	ok
