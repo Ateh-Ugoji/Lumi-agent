@@ -131,3 +131,15 @@ R0 y R1 primero y en paralelo. R2 antes que todo lo demás. R3 puede ir ya despu
 - **Datos de la API sin verificar.** Los permisos de la sección 3 vienen de conocimiento general. R1 los revalida.
 - **Escrituras públicas.** Publicar, borrar o responder son visibles. Por eso D6 y banderas apagadas por defecto.
 - **Cuentas ya conectadas** con menos permisos: pasan a "necesita reconectar" (D7), no a fallar.
+
+
+## 8. Avance
+
+### R3, hecha el 27 de octubre de 2026
+`DjangoOwnPostSync` lee la Página de Facebook enlazada al perfil (posts y métricas de vistas de los 20 más nuevos) y la guarda con `source=meta`. Detalle y límites en `docs/CONEXIONES.md`, sección "Facebook: lectura de posts y métricas (R3)". Verificación: 13 tests nuevos (`apps/connections/tests/db/test_own_post_sync_meta.py`) y los 17 de la sincronización existente, todo con transporte simulado y sin red.
+
+Desviaciones del plan, dichas en voz alta:
+- **R3 se hizo sin R2.** El plan decía que R3 iba después del refactor. No hacía falta: R3 solo añade una rama a `own_post_sync.py` y usa el contrato que ya existe. R2 deberá mover esa decisión (Meta primero, Post for Me de respaldo) a `providers/routes.py`.
+- **Sin R1.** Los campos de Graph se usaron tal como estaban en el adaptador (solo `post_media_view`). Los contadores de me gusta, comentarios y compartidos siguen en `NULL` hasta que R1 verifique los campos contra la documentación oficial.
+- **No hay métricas de la Página** (seguidores, alcance): quedan para después de R1.
+- **No se hizo ninguna llamada real a Meta.** Falta una prueba en vivo contra la Página de Christian, que necesita su permiso explícito.

@@ -158,6 +158,19 @@ Cómo se cambia una clave: editar `lumi/.env` (o la variable en Railway) y reini
 
 Si algún día se quiere volver a guardar credenciales en la base, el diseño descartado está en la historia de git (`bc28126` y `a51e540`) y en la fila de `plan/decisions.tsv` del 27 de octubre. No se retoma sin el visto bueno explícito del equipo.
 
+## Facebook: lectura de posts y métricas (R3)
+
+Una cuenta de Facebook conectada llena `posts` y `metric_snapshots`, sin Post for Me (verificado con Graph simulado; falta una prueba en vivo con permiso). `DjangoOwnPostSync` (`apps/connections/own_post_sync.py`) lo hace así:
+
+- **Cuándo se usa Meta:** el perfil es de **Facebook** y tiene una Página de Meta enlazada y viva (`active` o `limited`). Si además tiene Post for Me enlazado, **gana Meta** (el proveedor nativo va primero, igual que en `connect_links`). Cualquier otro perfil sigue por Post for Me, sin cambios.
+- **Qué lee:** los posts más nuevos de la Página (`GET /{página}/posts`, hasta 100) y, de los **20 más nuevos** por sincronización (`META_METRICS_PER_SYNC`), sus métricas (`GET /{post}/insights`). Graph contesta las métricas de un post por petición; sin tope, una Página con historial gastaría una petición por post en cada sincronización.
+- **Qué guarda:** el texto, el enlace y las vistas (`post_media_view`). **Me gusta, comentarios y compartidos quedan en `NULL`**, nunca en 0: hoy el adaptador solo pide métricas de vistas. Añadir esos contadores es trabajo de R1 y R4 (primero verificar los campos contra la documentación oficial de Meta).
+- **Si algo falla:** un post cuyas métricas fallan conserva su fila y sin snapshot; un token rechazado (401) en las métricas detiene el resto de lecturas de métricas pero conserva los posts; un token rechazado al listar los posts falla la sincronización y no guarda nada.
+- **Pasada de ingesta:** se registra con `source=meta`. Una lectura vacía nunca cuenta como pasada completa, igual que con Post for Me, y los borrados sospechosos siguen la misma regla de dos pasadas completas.
+- **Token ilegible** (la clave de cifrado cambió): responde "connect the Page again" y no toca nada.
+
+**Para usarlo hace falta un perfil de Facebook.** Los posts se guardan bajo el handle del perfil y la red del perfil debe coincidir con la de la cuenta. Una Página enlazada a un perfil de X no se lee. En la app: Settings, Profile, añade un perfil de Facebook, hazlo el perfil activo, y en Connected Accounts pulsa el botón de enlazar en la fila de tu Página.
+
 ## Diferencias con `research.md`
 
 - Meta. La página de Pages API dice que `GET /{user-id}/accounts` con un token de usuario de corta duración devuelve un token de página de corta duración. El token de página sin caducidad solo sale de un token de usuario de larga duración. `research.md` lo daba por sentado. El adaptador canjea primero el token de usuario.

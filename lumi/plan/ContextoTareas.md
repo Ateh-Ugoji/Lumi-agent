@@ -347,7 +347,7 @@ Plan completo en `lumi/plan/PLAN_REDES-SOCIALES.md`. Idea central: se separa por
 - [ ] **R0** ARCHITECT: decisiones con Christian (qué primero, Instagram, Messenger/anuncios/Threads/WhatsApp, YouTube, banderas) y contrato en `CONTRATOS.md`. Verificación: `CONTRATO REDES ACEPTADO <sha>` de CONNECT e INTELLIGENCE.
 - [ ] **R1** CONNECT: revalidar la API de Meta contra la documentación oficial (URL y fecha por dato). Verificación: ninguna fila del mapa de acciones queda sin verificar sin motivo.
 - [ ] **R2** CONNECT: `providers/routes.py` como única tabla de rutas, `providers/meta/` como paquete, `Capabilities` con banderas. Verificación: `pytest apps/connections` verde sin tocar tests existentes y test de matriz de capacidades.
-- [ ] **R3** CONNECT: leer posts y métricas de Facebook (hoy en el adaptador sin llamador) y métricas de la Página. Verificación: una cuenta conectada llena `posts` y `metric_snapshots`, con transporte simulado.
+- [x] **R3** CONNECT (27 oct, sin R1 ni R2; ver `PLAN_REDES-SOCIALES.md` sección 8): leer posts y vistas de los 20 posts más nuevos de la Página de Facebook enlazada a un perfil de Facebook. Quedan sin hacer las métricas de la Página y los contadores de me gusta, comentarios y compartidos. Prueba en vivo pendiente de permiso.
 - [ ] **R4** CONNECT: publicar fotos y videos, programar, editar y borrar, con `dry_run`, `confirm` e idempotencia y banderas apagadas por defecto.
 - [ ] **R5** CONNECT: comentarios (listar, responder, ocultar, borrar), escrituras con confirmación.
 - [ ] **R6** INTELLIGENCE: herramientas del agente por acción que reciben `platform`, respuesta tipada si la red no la soporta, casos en `golden`. Cuidar el presupuesto de tokens de Groq.
