@@ -1,4 +1,4 @@
-"""Token budget ladder (ported from legacy tests/test_context_budget.py, pure-function part)."""
+"""Token budget ladder (ported from lumi/legacy/tests/test_context_budget.py, pure-function part)."""
 
 from lumi_ai.agent import context
 from lumi_ai.config import AIConfig

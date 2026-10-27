@@ -1,6 +1,6 @@
 """Pydantic v2 schemas for the competitor (peer) framework analysis.
 
-Ported from ``app/schemas/peer.py``. Differences: ``PostMetrics`` is called ``PostStats`` (it
+Ported from ``lumi/legacy/app/schemas/peer.py``. Differences: ``PostMetrics`` is called ``PostStats`` (it
 clashed with ``ports.PostMetrics``), and a counter that was not reported is ``None``, never 0.
 
 Provenance rule (body_structure_knowledge.md section 8):

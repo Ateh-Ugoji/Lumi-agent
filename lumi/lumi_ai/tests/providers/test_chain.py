@@ -1,4 +1,4 @@
-"""Chain behaviour. The first block mirrors the legacy ``tests/test_provider_fallback.py``."""
+"""Chain behaviour. The first block mirrors ``lumi/legacy/tests/test_provider_fallback.py``."""
 
 import pytest
 

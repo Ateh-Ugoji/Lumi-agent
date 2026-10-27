@@ -1,7 +1,7 @@
 """AIConfig: every model id, limit and threshold of the AI package, in one place.
 
 Django builds it once with :meth:`AIConfig.from_env` (T4, from ``settings``/``os.environ``);
-``from_mapping`` takes already-typed values. Nothing else in ``lumi_ai`` reads the environment. Defaults are the values the legacy code used (``lumi/app/agent``).
+``from_mapping`` takes already-typed values. Nothing else in ``lumi_ai`` reads the environment. Defaults are the values the legacy code used (``lumi/legacy/app/agent``).
 Model ids are configuration, not code: ``check_keys`` validates them against each provider's
 real model list.
 """
@@ -94,7 +94,7 @@ class AIConfig:
     video_max_per_run: int = 5  # new (uncached) analyses one pipeline run may start
     video_timeout_seconds: float = 120.0
 
-    # --- agent loop (legacy lumi/app/agent/loop.py) ---
+    # --- agent loop (lumi/legacy/app/agent/loop.py) ---
     max_tool_iterations: int = 6
     max_history_messages: int = 10
     tool_context_char_limit: int = 4_000

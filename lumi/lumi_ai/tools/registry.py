@@ -1,6 +1,6 @@
 """Tool registry of the agent: specs for the model, validation, caching and dispatch.
 
-Differences from the legacy ``app/tools/registry.py``:
+Differences from ``lumi/legacy/app/tools/registry.py``:
 
 * No module-level state. A :class:`ToolRegistry` is built per application (or per test) and
   receives its dependencies through :class:`ToolDeps`.

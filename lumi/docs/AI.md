@@ -42,7 +42,7 @@ Orden: **OpenLux** (opcional, no acepta modelo fijado) → **Groq** (`openai/gpt
 - Un `model=` o `tier=` explícito fija **un** candidato por proveedor: una petición "small" nunca sube de nivel en silencio.
 - `effort` va como `reasoning_effort`; un 400 reintenta el mismo candidato una vez sin él.
 - Todas las llamadas (éxitos y fallos) van a un `UsageSink` (tabla de uso en Postgres).
-- Los modelos se cambian con `GROQ_MODEL_LARGE`, `GROQ_MODEL_SMALL`, `GROQ_MODEL_FALLBACK`, `OPENROUTER_MODEL`, `OPENLUX_MODEL`, `WHISPER_MODEL` (probado en `tests/test_config.py`).
+- Los modelos se cambian con `GROQ_MODEL_LARGE`, `GROQ_MODEL_SMALL`, `GROQ_MODEL_FALLBACK`, `OPENROUTER_MODEL`, `OPENLUX_MODEL`, `WHISPER_MODEL` (probado en `lumi_ai/tests/test_config.py`).
 - Transcripción: Groq `whisper-large-v3-turbo` (`providers/audio.py`).
 
 ## 3. RAG (`rag/`)

@@ -1,4 +1,4 @@
-"""Validation tests for the peer-framework analysis schemas (app/schemas/peer.py)."""
+"""Validation tests for the peer-framework analysis schemas (lumi/legacy/app/schemas/peer.py)."""
 
 from datetime import UTC, datetime
 

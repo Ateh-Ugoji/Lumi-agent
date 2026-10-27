@@ -1,6 +1,6 @@
 """Small pieces of one agent turn: argument parsing, failure text, sample posts, judge timing.
 
-Ported from ``app/agent/loop.py``. Nothing here keeps state between turns.
+Ported from ``lumi/legacy/app/agent/loop.py``. Nothing here keeps state between turns.
 """
 
 from __future__ import annotations

@@ -17,7 +17,7 @@ adopted class the argmax when it clears the high threshold. ``chitchat`` and
 
 Also home of the greeting whitelist, so the classifier and the greeting gate cannot drift.
 
-Ported from ``app/agent/turn_class.py``: settings come from :class:`AIConfig` and the Jev
+Ported from ``lumi/legacy/app/agent/turn_class.py``: settings come from :class:`AIConfig` and the Jev
 stage goes through the injected :class:`SemanticJudge` (Jev, then the small LLM).
 """
 

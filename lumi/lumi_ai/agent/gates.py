@@ -1,6 +1,6 @@
 """Gates that keep the agent honest: no claimed work without tools, no plan for accounts never scanned.
 
-Ported unchanged in behaviour from ``app/agent/loop.py`` (action-claim gate, L10 coverage gate).
+Ported unchanged in behaviour from ``lumi/legacy/app/agent/loop.py`` (action-claim gate, L10 coverage gate).
 Everything here is pure: no I/O, no model calls.
 """
 

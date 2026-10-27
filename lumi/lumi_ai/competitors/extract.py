@@ -6,7 +6,7 @@ performed well". Everything degrades honestly: a bad reply, a provider failure o
 error produces ``PostTagging`` rows with ``status="failed"`` and a reason, never an invented
 analysis.
 
-Ported from ``app/analysis/extract.py``. Differences: the provider chain is injected
+Ported from ``lumi/legacy/app/analysis/extract.py``. Differences: the provider chain is injected
 (``Completer``), the reply is parsed with ``extract_json`` instead of stripping backticks, and
 taggings convert to and from ``TaggingRecord`` so ``ReportStore`` can cache them by
 ``(post_ref, prompt_version)``.

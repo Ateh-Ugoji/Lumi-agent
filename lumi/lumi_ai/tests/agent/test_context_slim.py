@@ -1,4 +1,4 @@
-"""Greeting gate and context slimming (ported from legacy tests/test_loop_gates.py)."""
+"""Greeting gate and context slimming (ported from lumi/legacy/tests/test_loop_gates.py)."""
 
 from lumi_ai.agent.context import slim_for_context
 from lumi_ai.agent.turn_class import is_greeting_only

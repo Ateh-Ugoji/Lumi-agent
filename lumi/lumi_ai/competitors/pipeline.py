@@ -1,6 +1,6 @@
 """End-to-end competitor pipeline: fetch, baseline, winners, blind tagging, lift, synthesis, save.
 
-Ported from ``app/services/peer_pipeline.py``. Rules that hold at every stage:
+Ported from ``lumi/legacy/app/services/peer_pipeline.py``. Rules that hold at every stage:
 
 * winners are chosen by code against each account's own 4-week median, never by the model and
   never by a fixed bar (``winners.py``); thresholds are never lowered to fill a quota;

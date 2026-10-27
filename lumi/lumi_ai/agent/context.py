@@ -1,6 +1,6 @@
 """Context management for the agent loop: token budget, tool-result trimming, history note.
 
-Ported from ``app/agent/loop.py``. Limits come from :class:`lumi_ai.config.AIConfig`
+Ported from ``lumi/legacy/app/agent/loop.py``. Limits come from :class:`lumi_ai.config.AIConfig`
 instead of module constants.
 """
 

@@ -1,6 +1,6 @@
 """The agent loop: one user message in, one reply out, tools in between.
 
-Behaviour ported from ``app/agent/loop.py``; the wiring is new. Every collaborator is an
+Behaviour ported from ``lumi/legacy/app/agent/loop.py``; the wiring is new. Every collaborator is an
 injected port, there is no module-level state and no Django import. The Django glue
 (``apps.intelligence.runtime``) builds an :class:`AgentLoop` once and calls :meth:`run_turn`.
 """

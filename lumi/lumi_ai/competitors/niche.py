@@ -1,6 +1,6 @@
 """Niche keys. ``niche_key = "<slug>:<geo_scope>"``, geo scope being an ISO country or ``global``.
 
-Only this survives from the legacy ``app/schemas/niche.py`` (~430 lines of evidence-mining models:
+Only this survives from ``lumi/legacy/app/schemas/niche.py`` (~430 lines of evidence-mining models:
 ScoredKeyword, GeoProfile, NicheLLMOutput, peer vetting...). Nothing in the legacy code ever
 produced those models, and ``SCHEMA.md`` v2 stores a niche as ``niche_key``, ``title``, keywords
 and tracked handles. The niche is deduced from the voice profile and from what the user says.

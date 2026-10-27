@@ -1,6 +1,6 @@
 """The user's own posts against their own baseline: same winner rule and lift math as the peers.
 
-Ported from ``app/analysis/own_lift.py``. Pure: no network, no database, no model. The caller reads
+Ported from ``lumi/legacy/app/analysis/own_lift.py``. Pure: no network, no database, no model. The caller reads
 the posts through ``PostStore`` and persists nothing here (the baseline row is ``PostStore.save_baseline``'s
 job). A post wins when it beats the account's own median views by ``MIN_OUTLIER_FOR_WINNER``; the
 bar is never lowered to fill a quota. Only the computed ``format`` dimension has values until the own

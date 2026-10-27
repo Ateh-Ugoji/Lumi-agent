@@ -1,6 +1,6 @@
 """Peer winner selection: baseline-relative, computed in code, no LLM and no network.
 
-Ported from ``app/analysis/winners.py``. Rules (``PeerConfig``):
+Ported from ``lumi/legacy/app/analysis/winners.py``. Rules (``PeerConfig``):
 - the baseline of each account comes only from *eligible* posts (>= 24 h old, inside the 28-day
   window, views present, not a deletion suspect), through the same math the user's own posts use;
 - a post wins only when it beats its account's own median by ``MIN_OUTLIER_FOR_WINNER`` (1.5x).

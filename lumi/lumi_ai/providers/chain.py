@@ -1,6 +1,6 @@
 """The LLM provider chain: ordered providers, ordered models, cooldown, usage log.
 
-Behaviour kept from the legacy ``app/agent/providers.py``:
+Behaviour kept from ``lumi/legacy/app/agent/providers.py``:
 
 * Providers are tried in order; within a provider, models in order.
 * An explicit ``model=`` (or ``tier=``) pins ONE candidate per provider, so a "small" request

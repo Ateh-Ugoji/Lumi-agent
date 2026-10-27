@@ -2,7 +2,7 @@
 
 Own and peer baselines go through the same ``eligible_baseline_samples`` + ``compute_baseline``, so
 a "winner" means the same thing on both sides. Missing views are never read as 0.
-Ported from ``app/analysis/metrics.py``; the snapshot/DB parts stay in Django (apps/profiles).
+Ported from ``lumi/legacy/app/analysis/metrics.py``; the snapshot/DB parts stay in Django (apps/profiles).
 """
 
 from __future__ import annotations
