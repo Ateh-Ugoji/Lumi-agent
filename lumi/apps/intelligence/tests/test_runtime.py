@@ -40,7 +40,9 @@ class TestRuntimeWithoutKeys:
     def test_the_registry_has_the_tools_that_need_nothing_from_connect(self, no_keys):
         names = set(wiring.get_wiring().registry.names)
         assert {"get_posts", "check_niche_trends"} <= names
-        assert "publish_post" not in names  # CONNECT's gateway is not wired
+        assert "publish_post" not in names  # nobody wired a publishing tool
+        assert "connect_account" in names  # CONNECT's DjangoConnectionLinks is wired
+        assert "backfill_posts" not in names  # OwnPostSync is not delivered yet
 
     def test_a_chat_turn_says_the_model_is_not_configured(self, no_keys, profile):
         with pytest.raises(ApiError) as caught:

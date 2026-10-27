@@ -583,7 +583,14 @@ class _Turn:
         spec = self.deps.registry.get(name)
         # A tool that writes gets a token: once it times out (or the turn is cancelled) no write
         # of it may commit, see lumi_ai.cancel.
-        token = cancel.CancelToken() if spec is not None and spec.writes else None
+        if spec is not None:
+            writes = spec.writes
+        else:  # an MCP tool: a write tool parks its call in the database before the user confirms
+            mcp = mcp_specs.get(name) if mcp_specs else None
+            writes = mcp is not None and (
+                mcp.cost == "write" or mcp.requires_confirmation
+            )
+        token = cancel.CancelToken() if writes else None
         reset = cancel.current.set(token) if token is not None else None
         try:
             return await asyncio.wait_for(

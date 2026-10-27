@@ -364,6 +364,54 @@ async def test_a_write_that_committed_before_the_timeout_is_reported_as_partial(
     assert "already been saved" in err and "1 of its" in err
 
 
+class _SlowMcp(FakeMcp):
+    """A connector whose call parks a write, then hangs past the tool timeout."""
+
+    def __init__(self, specs):
+        super().__init__(specs)
+        self.tokens: list = []
+
+    async def call(self, profile_id, name, args):
+        from lumi_ai import cancel
+
+        self.tokens.append(cancel.current.get())
+        await asyncio.sleep(5)
+
+
+@pytest.mark.parametrize(
+    ("spec_kwargs", "gets_token"),
+    [
+        ({"cost": "write", "requires_confirmation": True}, True),
+        ({"cost": "free", "requires_confirmation": True}, True),
+        ({"cost": "free"}, False),
+    ],
+)
+async def test_an_mcp_write_tool_gets_a_cancel_token_that_a_timeout_cancels(
+    spec_kwargs, gets_token
+):
+    from lumi_ai.ports import McpToolSpec
+
+    spec = McpToolSpec(
+        "mcp__gdocs__create_doc",
+        "Create a document.",
+        {"type": "object", "properties": {}},
+        **spec_kwargs,
+    )
+    mcp = _SlowMcp([spec])
+    rig = make_rig(
+        [use(call("mcp__gdocs__create_doc")), say("It did not finish.")],
+        [tool("ok")],
+        mcp=mcp,
+        config=AIConfig(tool_timeout_seconds=0.05),
+    )
+    await rig.run("create the doc")
+    assert len(mcp.tokens) == 1
+    if gets_token:
+        assert mcp.tokens[0] is not None and mcp.tokens[0].cancelled
+    else:
+        assert mcp.tokens[0] is None
+
+
 # --- coverage gate (ported from test_coverage_gate) -------------------------------
 
 

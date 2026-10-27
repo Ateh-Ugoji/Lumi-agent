@@ -26,6 +26,7 @@ from django.utils import timezone
 
 from apps.core.choices import IngestSource
 from apps.core.fields import TokenDecryptError
+from apps.intelligence.repos.aio import aio
 from apps.profiles.models import HandleOrigin, Post, SocialHandle, SocialProfile
 from apps.profiles.services import InvalidHandle, get_or_create_handle
 
@@ -583,7 +584,9 @@ class DjangoMcpStore:
         await sync_to_async(save_google_tokens, thread_sensitive=True)(user_id, tokens)
 
     async def park(self, write: PendingWrite) -> PendingWrite | None:
-        return await sync_to_async(self._park, thread_sensitive=True)(write)
+        # ``aio``: if the tool call times out while parking, the parked write is rolled back and
+        # the user's next "yes" cannot run a call the model was told had failed.
+        return await aio(self._park)(write)
 
     async def claim(self, profile_id: int) -> PendingWrite | None:
         return await sync_to_async(self._claim, thread_sensitive=True)(profile_id)

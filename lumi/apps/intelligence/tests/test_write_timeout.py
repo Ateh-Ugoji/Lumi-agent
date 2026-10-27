@@ -85,3 +85,52 @@ def test_outside_a_tool_call_the_repo_is_untouched(profile):
     """No token in the context (endpoints, tasks, reads): no wrapper transaction, same behaviour."""
     note, created = async_to_sync(MemoryRepo().add_note)(profile.id, "plain write")
     assert created and MemoryNote.objects.filter(id=note.id).exists()
+
+
+def _pending_write(profile):
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    from apps.connections.mcp.gateway import PendingWrite
+
+    return PendingWrite(
+        user_id=profile.user_id,
+        profile_id=profile.id,
+        tool="mcp__gdrive__create_file",
+        server_tool="create_file",
+        arguments={"title": "Plan"},
+        summary="create Plan",
+        expires_at=timezone.now() + timedelta(minutes=30),
+    )
+
+
+def test_a_parked_mcp_write_is_rolled_back_when_its_tool_call_timed_out(profile):
+    """CONNECT's DjangoMcpStore.park: a timed-out call must not leave a write the user can confirm."""
+    from apps.connections.models import McpPendingWrite
+    from apps.connections.stores import DjangoMcpStore
+    from lumi_ai import cancel
+
+    token = cancel.CancelToken()
+    token.cancel_nowait()  # the loop gave up while the worker thread was still parking
+    reset = cancel.current.set(token)
+    try:
+        with pytest.raises(cancel.WriteCancelled):
+            async_to_sync(DjangoMcpStore().park)(_pending_write(profile))
+    finally:
+        cancel.current.reset(reset)
+    assert McpPendingWrite.objects.count() == 0
+
+
+def test_a_parked_mcp_write_under_a_live_token_still_commits(profile):
+    from apps.connections.models import McpPendingWrite
+    from apps.connections.stores import DjangoMcpStore
+    from lumi_ai import cancel
+
+    token = cancel.CancelToken()
+    reset = cancel.current.set(token)
+    try:
+        assert async_to_sync(DjangoMcpStore().park)(_pending_write(profile)) is None
+    finally:
+        cancel.current.reset(reset)
+    assert McpPendingWrite.objects.count() == 1 and token.commits == 1

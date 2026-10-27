@@ -17,6 +17,7 @@ from datetime import UTC, datetime
 from asgiref.sync import sync_to_async
 
 from apps.connections import mcp_gateway
+from apps.connections.connect_links import DjangoConnectionLinks
 from apps.intelligence import repos
 from lumi_ai.agent.loop import AgentDeps, AgentLoop
 from lumi_ai.competitors import tools as competitor_tools
@@ -228,6 +229,7 @@ def get_wiring() -> Wiring:
             requests=repos.RequestRepo(),
             listening=repos.ListeningRepo(),
             repurpose=repurpose,
+            links=DjangoConnectionLinks(),
         ),
         gateway,
         extra=[
