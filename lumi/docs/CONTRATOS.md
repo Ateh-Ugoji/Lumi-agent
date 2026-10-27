@@ -233,9 +233,9 @@ Renueva los tokens que caducan en menos de 7 días e imprime solo recuentos, nun
 | Tema | Regla |
 | --- | --- |
 | Motor | `pytest-django` contra PostgreSQL real. Sin SQLite. `uv run python scripts/dev_postgres.py` levanta uno local y imprime su `DATABASE_URL`; `docker compose` es la alternativa. |
-| Ajustes | `config.settings.test`, elegidos por el plugin `lumi_pytest_env` (en `pyproject.toml`, `addopts = -p lumi_pytest_env`). Se retira en T12, cuando desaparezcan los tests de FastAPI. |
-| Sin Postgres | Los tests de `apps/` se omiten con un motivo claro cuando `DATABASE_URL` no es una URL de PostgreSQL. Con `LUMI_REQUIRE_DJANGO_TESTS=1` (para CI) dejan de omitirse y la ejecución se aborta con ese motivo. Este era el origen de los dos tests de `apps/core` que fallaban en el árbol de CONNECT: con una `DATABASE_URL` de SQLite o vacía, Django no se configuraba. |
-| Marca `live` | Un test que llama a un servicio real lleva `@pytest.mark.live`. Se excluyen por defecto (`-m 'not live'`). Para correrlos: `LUMI_RUN_LIVE=1 uv run pytest -m live` con las keys en `lumi/.env`. Sin keys el resto pasa. |
+| Ajustes | `DJANGO_SETTINGS_MODULE = "config.settings.test"` en `[tool.pytest.ini_options]` de `pyproject.toml`. El plugin `lumi_pytest_env` y su `addopts` se retiraron en T12. |
+| Sin Postgres | `DATABASE_URL` es obligatoria y debe ser PostgreSQL: sin ella, los ajustes fallan con un mensaje claro (ya no se omiten tests). Los tests de `lumi/tests/` (legado FastAPI) siguen necesitando las variables ficticias de su `Settings` mientras exista `lumi/app/`. |
+| Marca `live` | Un test que llama a un servicio real lleva `@pytest.mark.live`. Se recogen siempre y `conftest.py` (raíz) los omite salvo con `LUMI_RUN_LIVE=1`; además cada test se omite si falta su key. Para correrlos: `LUMI_RUN_LIVE=1 uv run pytest -m live` con las keys en `lumi/.env`. `uv run pytest` a secas pasa sin keys ni red. |
 | Fixtures | `django_db`, `settings` de `pytest-django`. Los tests no dependen del orden: no comparten estado en memoria y el registro de keys se aísla con `monkeypatch.setattr(keys, "_REGISTRY", {})`. |
 | Restricciones | Cada `UNIQUE` y `CHECK` de `SCHEMA.md` tiene un test que espera `IntegrityError` (`apps/profiles/tests/test_models.py` es la plantilla). |
 | Migraciones | `makemigrations --check` y `migrate <app> zero` seguido de `migrate` deben pasar. |

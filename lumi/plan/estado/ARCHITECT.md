@@ -36,7 +36,7 @@ Rama: `lumi-orquestador`. Registro de decisiones: `ARCHITECT-decisiones.tsv`.
 ## Lista de T12 (al borrar `lumi/app/`)
 
 - Actualizar `docs/how-to-setup.md`: Postgres obligatorio (la línea 14 aún habla de SQLite), `manage.py`, `check_keys`. CONNECT cubre la parte del frontend.
-- Quitar el plugin `lumi_pytest_env` y su `addopts`.
+- [x] Quitar el plugin `lumi_pytest_env` y su `addopts` (hecho: `DJANGO_SETTINGS_MODULE` en `pyproject.toml`, `conftest.py` omite `live` salvo `LUMI_RUN_LIVE=1`).
 - Ejecutar `collectstatic` en el build de Railway (estáticos del admin con whitenoise).
 - Docker se valida solo como YAML; no hay Docker en la máquina de trabajo.
 
@@ -62,6 +62,6 @@ Nota sobre la fila 18: `reach_series` y `saves_series` siguen recorriendo todas 
 
 | Tema | Detalle |
 | --- | --- |
-| Pytest y los tests legados | `lumi_pytest_env.py` elige `config.settings.test` solo si `DATABASE_URL` empieza por `postgres`. Los 418 tests legados siguen pasando con una URL SQLite ficticia (verificado). Con una URL Postgres corren los 418 más los de `apps/` (438 en total). Se borra en T12. |
+| Pytest y los tests legados | Sin plugin: `config.settings.test` va fijo en `pyproject.toml` y exige `DATABASE_URL` de PostgreSQL. Los 418 tests legados siguen pasando con Postgres más las cinco variables ficticias de `Settings`; con una URL SQLite ficticia ya no corren. Se borran con `lumi/app/`. |
 | `.env.example` | `DATABASE_URL` pasa al formato Django. El backend FastAPI viejo ya no arranca con esta plantilla; vale hasta T12 solo para los tests. |
 | Arranque | `manage.py` imprime un error limpio si falta `DATABASE_URL` o `SECRET_KEY`. `check_keys`, `help` y `version` corren con el entorno vacío. |

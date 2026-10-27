@@ -48,9 +48,9 @@ extend-exclude = ["alembic/versions", "apps/*/migrations"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 pythonpath = ["."]
-addopts = "-p lumi_pytest_env -m 'not live'"
+DJANGO_SETTINGS_MODULE = "config.settings.test"
 markers = [
-    "live: llama a un servicio real y necesita keys en lumi/.env (excluido por defecto)",
+    "live: llama a un servicio real y necesita keys en lumi/.env (se omite salvo LUMI_RUN_LIVE=1)",
 ]
 python_files = ["test_*.py"]
 testpaths = ["tests", "apps"]
