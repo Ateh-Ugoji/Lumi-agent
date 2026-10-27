@@ -314,17 +314,15 @@ def test_job_endpoint_shows_state_and_hides_other_users_jobs(
     assert api.get(f"{BASE}/jobs/not-a-uuid").status_code == 404
 
 
-def test_profile_refresh_has_no_handler_yet_and_stays_queued(api, profile, settings):
-    """Pending (CONTRATOS 3.2): no app registers ``profile.refresh`` until sync is wired.
+def test_profile_refresh_is_queued_until_the_dispatcher_runs_it(api, profile, settings):
+    """``profile.refresh`` has a handler (INTELLIGENCE) but ``LUMI_JOB_DISPATCH=none`` never runs it.
 
-    ``profile.bootstrap`` already has one (INTELLIGENCE). Under ``LUMI_JOB_DISPATCH=none`` the
-    refresh job waits in ``queued``; the client polls ``GET /jobs/{id}`` and sees that state.
+    The refresh job waits in ``queued``; the client polls ``GET /jobs/{id}`` and sees that state.
     """
     from apps.core import jobs
 
     settings.LUMI_JOB_DISPATCH = "none"
-    assert "profile.bootstrap" in jobs.registered_kinds()
-    assert "profile.refresh" not in jobs.registered_kinds()
+    assert {"profile.bootstrap", "profile.refresh"} <= set(jobs.registered_kinds())
 
     job_id = api.post(url(profile, "/refresh")).json()["job_id"]
     body = api.get(f"{BASE}/jobs/{job_id}").json()
@@ -332,12 +330,13 @@ def test_profile_refresh_has_no_handler_yet_and_stays_queued(api, profile, setti
     assert not body["result"] and not body["error_code"]
 
 
-def test_profile_refresh_fails_cleanly_when_run_without_a_handler(
+def test_profile_refresh_fails_cleanly_when_the_posts_cannot_be_read(
     api, profile, settings
 ):
+    """No connected account: the job ends ``failed`` with a fixed code, not a provider message."""
     from apps.core import jobs
 
     job_id = api.post(url(profile, "/refresh")).json()["job_id"]
     assert jobs.run_job(job_id) == "failed"
     body = api.get(f"{BASE}/jobs/{job_id}").json()
-    assert (body["status"], body["error_code"]) == ("failed", "job.no_handler")
+    assert (body["status"], body["error_code"]) == ("failed", "sync_failed")

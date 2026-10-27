@@ -11,11 +11,11 @@ la misma conducta, no que sea equivalente línea a línea.
 
 | Estado | Tests legados | Parte |
 | --- | ---: | ---: |
-| covered | 360 | 85.3 % |
+| covered | 364 | 86.3 % |
 | replaced | 45 | 10.7 % |
 | deviation | 3 | 0.7 % |
 | retired | 10 | 2.4 % |
-| gap | 4 | 0.9 % |
+| gap | 0 | 0.0 % |
 | **Total** | **422** | 100 % |
 
 ## Por archivo legado
@@ -29,7 +29,7 @@ la misma conducta, no que sea equivalente línea a línea.
 | `test_coverage_gate` | 12 | 12 | 0 | 0 | 0 | 0 |
 | `test_enforcement` | 7 | 7 | 0 | 0 | 0 | 0 |
 | `test_framework_corpus` | 8 | 0 | 8 | 0 | 0 | 0 |
-| `test_handle_db` | 16 | 11 | 1 | 0 | 0 | 4 |
+| `test_handle_db` | 16 | 15 | 1 | 0 | 0 | 0 |
 | `test_handle_search_mvp` | 29 | 29 | 0 | 0 | 0 | 0 |
 | `test_handle_search_platforms` | 14 | 12 | 2 | 0 | 0 | 0 |
 | `test_handles_router` | 7 | 0 | 7 | 0 | 0 | 0 |
@@ -65,13 +65,7 @@ la misma conducta, no que sea equivalente línea a línea.
 
 ## Huecos
 
-### INTELLIGENCE: 4 tests
-
-- `test_handle_db::test_check_niche_trends_persists_every_user_it_searches`: Pruebas de llamada de scan_trends y search_frameworks (lumi_ai/**, no es de CONNECT). CONNECT entrega HandleDirectory (remember_scanned, remember, pictures) con las mismas reglas probadas aparte. af4e1d5 cubre solo una parte: la foto que trae la fuente rellena el handle sin pisar la que ya había (test_repos::test_the_source_photo_fills_the_handle_and_an_existing_one_is_kept, test_tools::test_viral_posts_carry_the_photo) y save_peer_posts crea el handle de cada autor con posts. Falta que el escaneo llame a HandleDirectory: guardar las cuentas seguidas que no traen posts, completar fotos conocidas con pictures(), y sobrevivir a una caída de la tabla, con sus pruebas.
-- `test_handle_db::test_check_niche_trends_stores_the_picture_it_knows`: Pruebas de llamada de scan_trends y search_frameworks (lumi_ai/**, no es de CONNECT). CONNECT entrega HandleDirectory (remember_scanned, remember, pictures) con las mismas reglas probadas aparte. af4e1d5 cubre solo una parte: la foto que trae la fuente rellena el handle sin pisar la que ya había (test_repos::test_the_source_photo_fills_the_handle_and_an_existing_one_is_kept, test_tools::test_viral_posts_carry_the_photo) y save_peer_posts crea el handle de cada autor con posts. Falta que el escaneo llame a HandleDirectory: guardar las cuentas seguidas que no traen posts, completar fotos conocidas con pictures(), y sobrevivir a una caída de la tabla, con sus pruebas.
-- `test_handle_db::test_check_niche_trends_survives_handle_db_failure`: Pruebas de llamada de scan_trends y search_frameworks (lumi_ai/**, no es de CONNECT). CONNECT entrega HandleDirectory (remember_scanned, remember, pictures) con las mismas reglas probadas aparte. af4e1d5 cubre solo una parte: la foto que trae la fuente rellena el handle sin pisar la que ya había (test_repos::test_the_source_photo_fills_the_handle_and_an_existing_one_is_kept, test_tools::test_viral_posts_carry_the_photo) y save_peer_posts crea el handle de cada autor con posts. Falta que el escaneo llame a HandleDirectory: guardar las cuentas seguidas que no traen posts, completar fotos conocidas con pictures(), y sobrevivir a una caída de la tabla, con sus pruebas.
-- `test_handle_db::test_frameworks_search_persists_every_author`: Pruebas de llamada de scan_trends y search_frameworks (lumi_ai/**, no es de CONNECT). CONNECT entrega HandleDirectory (remember_scanned, remember, pictures) con las mismas reglas probadas aparte. af4e1d5 cubre solo una parte: la foto que trae la fuente rellena el handle sin pisar la que ya había (test_repos::test_the_source_photo_fills_the_handle_and_an_existing_one_is_kept, test_tools::test_viral_posts_carry_the_photo) y save_peer_posts crea el handle de cada autor con posts. Falta que el escaneo llame a HandleDirectory: guardar las cuentas seguidas que no traen posts, completar fotos conocidas con pictures(), y sobrevivir a una caída de la tabla, con sus pruebas.
-
+Ninguno.
 
 ## Retirados
 

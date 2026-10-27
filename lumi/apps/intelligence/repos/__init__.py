@@ -6,6 +6,7 @@ from apps.intelligence.repos.generation import (
     RequestRepo,
     TurnLogRepo,
 )
+from apps.intelligence.repos.handles import HandleBookRepo
 from apps.intelligence.repos.memory import MemoryRepo
 from apps.intelligence.repos.profiles import (
     ChatRepo,
@@ -22,6 +23,7 @@ from apps.intelligence.repos.voice import VoiceRepo
 __all__ = [
     "ChatRepo",
     "EvalRepo",
+    "HandleBookRepo",
     "ListeningRepo",
     "MatchRepo",
     "MemoryRepo",

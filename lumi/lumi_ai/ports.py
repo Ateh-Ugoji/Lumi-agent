@@ -38,7 +38,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Literal, Protocol, get_args, runtime_checkable
 
-PORTS_VERSION = "1.11"  # 1.1: SemanticJudge, 1.2: OwnPostSync, 1.3: AttemptIn.is_fallback, EvaluationRecord.attempt_id required, 1.4: MemoryStore.touch_notes, save_voice model/prompt_version, 1.5: tool_call_id, report query/peers, repurpose mode/brief, user request platform, 1.6: MatchStore, 1.7: create_request_with_attempts(source_post_id=), 1.8: create_request_with_attempts(evaluations=) + EvaluationIn, 1.9: MediaRef.kind may be None (type unknown), 1.10: VideoAnalysisStore, 1.11: author_avatar_url on PostIn/PeerPostIn/PeerPostOut
+PORTS_VERSION = "1.12"  # 1.1: SemanticJudge, 1.2: OwnPostSync, 1.3: AttemptIn.is_fallback, EvaluationRecord.attempt_id required, 1.4: MemoryStore.touch_notes, save_voice model/prompt_version, 1.5: tool_call_id, report query/peers, repurpose mode/brief, user request platform, 1.6: MatchStore, 1.7: create_request_with_attempts(source_post_id=), 1.8: create_request_with_attempts(evaluations=) + EvaluationIn, 1.9: MediaRef.kind may be None (type unknown), 1.10: VideoAnalysisStore, 1.11: author_avatar_url on PostIn/PeerPostIn/PeerPostOut, 1.12: HandleBook + KnownHandle
 
 # ---------------------------------------------------------------------------
 # Shared vocabulary
@@ -470,6 +470,42 @@ class PeerPostOut:
     media: tuple[MediaRef, ...]
     niche_key: str | None
     author_avatar_url: str = ""  # the stored handle's photo, "" when nobody has one
+
+
+@dataclass(frozen=True, slots=True)
+class KnownHandle:
+    """An author a scan met. ``avatar_url`` is only what the response carried, else ``""``."""
+
+    handle: str
+    avatar_url: str = ""
+
+
+@runtime_checkable
+class HandleBook(Protocol):
+    """The shared directory of public accounts (CONNECT's ``HandleDirectory``).
+
+    A scan fills it and a render reads pictures from it. It is a help layered on the scan, never a
+    dependency of it: implementations do not raise, and callers still guard every call. Saving is
+    add-if-absent (a stored picture is never replaced) and spends no paid lookup.
+    """
+
+    async def remember_scanned(
+        self, platform: Platform, handles: Sequence[str], *, origin: str
+    ) -> int:
+        """Save the accounts a scan listened to. Returns how many were new."""
+        ...
+
+    async def remember(
+        self, platform: Platform, handles: Sequence[KnownHandle], *, origin: str
+    ) -> int:
+        """Save the authors a scan met. Returns how many were new."""
+        ...
+
+    async def pictures(
+        self, platform: Platform, handles: Sequence[str]
+    ) -> Mapping[str, str]:
+        """``{lowercase handle: avatar_url}`` for the stored accounts that have a picture."""
+        ...
 
 
 @runtime_checkable

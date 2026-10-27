@@ -70,7 +70,14 @@ class Own:
 
 
 def _services(
-    posts=None, errors=None, *, tracked=None, own=None, with_rag=False, llm=None
+    posts=None,
+    errors=None,
+    *,
+    tracked=None,
+    own=None,
+    with_rag=False,
+    llm=None,
+    handles=None,
 ):
     reports = FakeReports()
     peers = FakePeerStore(reports)
@@ -100,6 +107,7 @@ def _services(
         matches=Matches(),
         embedder=embedder,
         retriever=retriever,
+        handles=handles,
     )
     registry = build_registry(ToolDeps(), extra=build(services))
     return registry, services, social, reports, peers, llm

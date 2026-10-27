@@ -14,6 +14,12 @@ from dataclasses import dataclass, replace
 from typing import Any, get_args
 
 from lumi_ai.competitors.extract import post_ref, tag_posts
+from lumi_ai.competitors.handles import (
+    authors_of,
+    known_pictures,
+    remember_authors,
+    remember_scanned,
+)
 from lumi_ai.competitors.niche import make_niche_key, slugify
 from lumi_ai.competitors.own import compute_own_lift
 from lumi_ai.competitors.pipeline import (
@@ -26,6 +32,8 @@ from lumi_ai.ports import (
     BudgetExceeded,
     Embedder,
     FrameworkOut,
+    HandleBook,
+    KnownHandle,
     LiveDisabled,
     MatchStore,
     PeerPostIn,
@@ -62,6 +70,7 @@ class CompetitorServices:
     matches: MatchStore | None = None
     embedder: Embedder | None = None
     retriever: Retriever | None = None
+    handles: HandleBook | None = None
 
 
 def _framework_view(fw: FrameworkOut, relevance: float | None) -> dict[str, Any]:
@@ -144,6 +153,8 @@ def build(services: CompetitorServices) -> list[ToolSpec]:
                 return {"error": budget_message(f"searching {query!r} on {plat}", exc)}
             except SocialDataError as exc:
                 return _refusal(exc)
+            # Everyone the search surfaced is worth remembering, not only the peers it picks.
+            await remember_authors(s.handles, plat, authors_of(found))
             chosen = _rank_authors(found, exclude=own, limit=cfg.peer_max_accounts)
             discovered = True
             if not chosen:
@@ -158,6 +169,7 @@ def build(services: CompetitorServices) -> list[ToolSpec]:
             niche_key=niche_key,
             handles=chosen,
         )
+        await remember_scanned(s.handles, plat, list(result.scanned))
         out: dict[str, Any] = {
             "status": result.saved.status,
             "report_id": result.saved.id,
@@ -333,6 +345,7 @@ def build(services: CompetitorServices) -> list[ToolSpec]:
         new_matches = 0
         failures: list[str] = []
         scanned: dict[str, int] = {}
+        authors: dict[str, KnownHandle] = {}
         stopped: str | None = None
         for handle in wanted[: ctx.config.peer_max_accounts]:
             try:
@@ -348,6 +361,7 @@ def build(services: CompetitorServices) -> list[ToolSpec]:
                 failures.append(f"@{handle}: {exc}")
                 continue
             scanned[handle] = len(posts)
+            authors_of(posts, handle, into=authors)
             viral = [p for p in posts if _is_viral(p, threshold)]
             if not viral:
                 continue
@@ -369,6 +383,16 @@ def build(services: CompetitorServices) -> list[ToolSpec]:
                             "avatar_url": row.author_avatar_url or "",
                         }
                     )
+        # The accounts read, and every author the posts surfaced (viral or not).
+        await remember_scanned(s.handles, plat, list(scanned))
+        await remember_authors(s.handles, plat, authors)
+        missing = [f["author"] for f in found if not f["avatar_url"]]
+        if missing:
+            pictures = await known_pictures(s.handles, plat, missing)
+            for item in found:
+                item["avatar_url"] = item["avatar_url"] or pictures.get(
+                    str(item["author"]).lower(), ""
+                )
         out: dict[str, Any] = {
             "platform": plat,
             "min_likes": threshold,
