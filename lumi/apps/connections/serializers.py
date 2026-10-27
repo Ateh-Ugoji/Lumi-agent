@@ -93,12 +93,41 @@ class DisconnectSerializer(serializers.Serializer):
     remote_revoked = serializers.IntegerField()
 
 
+_NETWORKS = ", ".join(PLATFORMS)
+
+
+class PlatformField(serializers.CharField):
+    """``platform=instagram``: required, one known network, lowercased and stripped like
+    ``platforms``. Every refusal names the valid networks."""
+
+    default_error_messages = {
+        "required": f"Indica la red: {_NETWORKS}.",
+        "null": f"Indica la red: {_NETWORKS}.",
+        "blank": f"Indica la red: {_NETWORKS}.",
+        "unknown": f"Red no válida: {{name}}. Redes: {_NETWORKS}.",
+    }
+
+    def to_internal_value(self, data):
+        name = super().to_internal_value(data).strip().lower()
+        if not name:
+            self.fail("blank")
+        if name not in PLATFORMS:
+            self.fail("unknown", name=name)
+        return name
+
+
 class PlatformsField(serializers.CharField):
     """``platforms=x,instagram``: required, at least one network, every name a known one.
 
     A missing, empty or unknown value is a ``400 validation_error``, never a silent fall back
     to X. The value that reaches the view is the lowercased, comma-joined list.
     """
+
+    default_error_messages = {
+        "required": f"Indica al menos una red: {_NETWORKS}.",
+        "null": f"Indica al menos una red: {_NETWORKS}.",
+        "blank": f"Indica al menos una red: {_NETWORKS}.",
+    }
 
     def __init__(self, **kwargs) -> None:
         kwargs.setdefault("max_length", 100)
@@ -108,13 +137,11 @@ class PlatformsField(serializers.CharField):
         names = [p.strip().lower() for p in super().to_internal_value(data).split(",")]
         names = [n for n in names if n]
         if not names:
-            raise serializers.ValidationError(
-                f"Indica al menos una red: {', '.join(PLATFORMS)}."
-            )
+            raise serializers.ValidationError(f"Indica al menos una red: {_NETWORKS}.")
         unknown = [n for n in names if n not in PLATFORMS]
         if unknown:
             raise serializers.ValidationError(
-                f"Red no válida: {', '.join(unknown)}. Redes: {', '.join(PLATFORMS)}."
+                f"Red no válida: {', '.join(unknown)}. Redes: {_NETWORKS}."
             )
         return ",".join(names)
 
@@ -164,7 +191,7 @@ class HandleSelectSerializer(serializers.Serializer):
     """Only the handle. A photo, name or follower count in the body is ignored, never stored."""
 
     handle = serializers.CharField(min_length=1, max_length=101)
-    platform = serializers.ChoiceField(choices=list(PLATFORMS))
+    platform = PlatformField()
     selected_query = serializers.CharField(
         required=False, allow_blank=True, default="", max_length=100
     )

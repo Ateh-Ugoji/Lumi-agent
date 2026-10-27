@@ -278,7 +278,9 @@ def refused(response, field: str) -> None:
     assert field in error["details"]
 
 
-@pytest.mark.parametrize("platform", [None, "", "myspace", "X ", "reddit"])
+@pytest.mark.parametrize(
+    "platform", [None, "", " ", "myspace", "reddit", "x,instagram"]
+)
 def test_select_without_a_valid_platform_is_a_400_and_writes_nothing(
     api, platform
 ) -> None:
@@ -326,3 +328,45 @@ def test_every_network_is_a_valid_select_platform(api) -> None:
         body = {"handle": "karpathy", "platform": name}
         assert api.post(SELECT, body, format="json").status_code == 200
     assert SocialHandle.objects.count() == 5
+
+
+def test_select_normalizes_the_platform_like_platforms_does(api) -> None:
+    for sent in (" X ", "Instagram", "TIKTOK"):
+        body = {"handle": "karpathy", "platform": sent}
+        assert api.post(SELECT, body, format="json").json()["platform"] == (
+            sent.strip().lower()
+        )
+    stored = SocialHandle.objects.values_list("platform", flat=True)
+    assert sorted(stored) == ["instagram", "tiktok", "x"]
+    assert UserSavedHandle.objects.count() == 3
+
+
+NETWORKS = ("x", "instagram", "tiktok", "linkedin", "facebook")
+
+
+def refusal_message(response) -> str:
+    error = response.json()["error"]
+    return " ".join(error["details"][next(iter(error["details"]))]) + error["message"]
+
+
+@pytest.mark.parametrize("platform", [None, "", "myspace"])
+def test_the_select_400_names_every_valid_network(api, platform) -> None:
+    body = {"handle": "karpathy"}
+    if platform is not None:
+        body["platform"] = platform
+    message = refusal_message(api.post(SELECT, body, format="json"))
+    assert all(name in message for name in NETWORKS)
+
+
+@pytest.mark.parametrize(
+    "request_",
+    [
+        lambda api: api.get(SEARCH, {"q": "naval", "platforms": "myspace"}),
+        lambda api: api.get(SEARCH, {"q": "naval"}),
+        lambda api: api.get(SAVED, {"platforms": "myspace"}),
+        lambda api: api.get(SAVED),
+    ],
+)
+def test_the_search_and_saved_400_name_every_valid_network(api, request_) -> None:
+    message = refusal_message(request_(api))
+    assert all(name in message for name in NETWORKS)

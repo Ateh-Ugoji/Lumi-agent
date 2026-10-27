@@ -310,8 +310,12 @@ class UserSavedHandle(models.Model):
     one row per ``(user, handle)``. ``GET /handles/saved`` reads only the caller's rows.
     """
 
+    # ``uq_user_saved_handle`` starts with user_id, so it already serves every lookup by user.
     user = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="saved_handles"
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="saved_handles",
+        db_index=False,
     )
     handle = models.ForeignKey(
         SocialHandle, on_delete=models.CASCADE, related_name="saved_by"
@@ -324,9 +328,6 @@ class UserSavedHandle(models.Model):
             models.UniqueConstraint(
                 fields=["user", "handle"], name="uq_user_saved_handle"
             )
-        ]
-        indexes = [
-            models.Index(fields=["user", "-created_at"], name="ix_user_saved_recent")
         ]
 
 

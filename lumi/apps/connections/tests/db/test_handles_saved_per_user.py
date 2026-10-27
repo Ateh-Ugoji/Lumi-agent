@@ -7,6 +7,7 @@ kept in ``user_saved_handles``, so one user's picks never show up in another use
 from __future__ import annotations
 
 import pytest
+from django.db import connection
 from rest_framework.test import APIClient
 
 from apps.connections.models import UserSavedHandle
@@ -102,3 +103,16 @@ def test_stats_counts_only_the_callers_saved_handles(user, other_user) -> None:
     pick(client_for(other_user), "naval")
     body = client_for(user).get("/api/v1/handles/stats").json()
     assert body["saved_handles"] == 1
+
+
+def test_the_table_keeps_only_the_indexes_something_uses() -> None:
+    # uq_user_saved_handle starts with user_id, so it serves every lookup by user; nothing
+    # orders by created_at (migration 0009 dropped ix_user_saved_recent and the user_id index).
+    with connection.cursor() as cur:
+        cur.execute(
+            "SELECT indexname FROM pg_indexes WHERE tablename='user_saved_handles'"
+        )
+        found = {row[0] for row in cur.fetchall()}
+    assert "uq_user_saved_handle" in found
+    assert "ix_user_saved_recent" not in found
+    assert [n for n in found if n.startswith("user_saved_handles_user_id")] == []
