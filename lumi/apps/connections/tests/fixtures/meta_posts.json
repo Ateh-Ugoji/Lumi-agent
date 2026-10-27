@@ -1,0 +1,5 @@
+{"data": [
+  {"id": "1001_555", "message": "Primer post", "created_time": "2026-10-01T12:00:00+0000", "permalink_url": "https://www.facebook.com/1001/posts/555"},
+  {"id": "1001_556", "created_time": "2026-10-02T09:30:00+0000"},
+  {"message": "sin id", "created_time": "2026-10-03T09:30:00+0000"}
+]}

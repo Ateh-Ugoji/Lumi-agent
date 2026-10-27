@@ -1,0 +1,104 @@
+"""Test doubles: a recording MockTransport and an in-memory OAuth state store."""
+
+from __future__ import annotations
+
+import json
+from collections.abc import Callable
+from pathlib import Path
+
+import httpx
+
+from apps.connections.oauth import OAuthStateRecord
+
+FIXTURES = Path(__file__).parent / "fixtures"
+
+
+def fixture(name: str) -> dict:
+    return json.loads((FIXTURES / name).read_text(encoding="utf-8"))
+
+
+class Recorder:
+    """An ``httpx.MockTransport`` that remembers every request it receives."""
+
+    def __init__(self, handler: Callable[[httpx.Request], httpx.Response]) -> None:
+        self.requests: list[httpx.Request] = []
+        self._handler = handler
+        self.transport = httpx.MockTransport(self._record)
+
+    def _record(self, request: httpx.Request) -> httpx.Response:
+        self.requests.append(request)
+        return self._handler(request)
+
+    @property
+    def hosts(self) -> list[str]:
+        return [r.url.host for r in self.requests]
+
+
+def routes(
+    table: dict[
+        tuple[str, str], httpx.Response | Callable[[httpx.Request], httpx.Response]
+    ],
+):
+    """Route by (method, path). An unexpected request fails the test loudly."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        entry = table.get((request.method, request.url.path))
+        if entry is None:
+            raise AssertionError(
+                f"unexpected request {request.method} {request.url.host}{request.url.path}"
+            )
+        return entry(request) if callable(entry) else entry
+
+    return handler
+
+
+def json_response(
+    name: str, status: int = 200, headers: dict | None = None
+) -> httpx.Response:
+    return httpx.Response(status, json=fixture(name), headers=headers)
+
+
+class MemoryStateStore:
+    def __init__(self) -> None:
+        self.records: dict[str, OAuthStateRecord] = {}
+
+    async def save(self, record: OAuthStateRecord) -> None:
+        self.records[record.state] = record
+
+    async def consume(self, state: str, provider: str) -> OAuthStateRecord | None:
+        record = self.records.get(state)
+        if record is None or record.provider != provider:
+            return None
+        del self.records[state]
+        return record
+
+
+class MemoryLedger:
+    def __init__(self) -> None:
+        self.entries: dict[tuple, object] = {}
+        self.log: list[tuple] = []
+
+    async def begin(self, user_id, key, fingerprint):
+        from apps.connections.publishing import LedgerEntry
+
+        existing = self.entries.get((user_id, key))
+        if existing is not None:
+            return existing, False
+        entry = LedgerEntry(key=key, fingerprint=fingerprint, status="pending")
+        self.entries[(user_id, key)] = entry
+        return entry, True
+
+    async def restart(self, user_id, key):
+        from dataclasses import replace
+
+        self.entries[(user_id, key)] = replace(
+            self.entries[(user_id, key)], status="pending"
+        )
+
+    async def finish(self, user_id, key, status, result=None):
+        from dataclasses import replace
+
+        self.log.append((key, status))
+        self.entries[(user_id, key)] = replace(
+            self.entries[(user_id, key)], status=status, result=result
+        )
