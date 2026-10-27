@@ -39,7 +39,6 @@ class _OpenAICompatProbe:
         name: str,
         required: bool,
         key_var: str,
-        extra_vars: tuple[str, ...],
         base_url: str,
         api_key: str | None,
         models: tuple[str, ...],
@@ -49,7 +48,9 @@ class _OpenAICompatProbe:
     ) -> None:
         self.name = name
         self.required = required
-        self.env_vars = (key_var, *extra_vars)
+        # Only the key: ``check_keys`` treats every listed variable as mandatory for the service.
+        # The model ids have defaults and are checked against the provider's catalog instead.
+        self.env_vars = (key_var,)
         self._key_var = key_var
         self._base_url = base_url
         self._api_key = api_key
@@ -255,7 +256,6 @@ def build_probes(
             name="groq",
             required=True,
             key_var="GROQ_API_KEY",
-            extra_vars=("GROQ_MODEL_LARGE", "GROQ_MODEL_SMALL", "GROQ_MODEL_FALLBACK"),
             base_url=GROQ_BASE_URL,
             api_key=config.groq_api_key,
             models=(
@@ -272,7 +272,6 @@ def build_probes(
             name="openrouter",
             required=False,
             key_var="OPENROUTER_API_KEY",
-            extra_vars=("OPENROUTER_MODEL",),
             base_url=OPENROUTER_BASE_URL,
             api_key=config.openrouter_api_key,
             models=(config.openrouter_model,),
@@ -284,7 +283,6 @@ def build_probes(
             name="openlux",
             required=False,
             key_var="OPENLUX_API_KEY",
-            extra_vars=("OPENLUX_MODEL",),
             base_url=OPENLUX_BASE_URL,
             api_key=config.openlux_api_key,
             models=(config.openlux_model,),
