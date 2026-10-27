@@ -1,36 +1,41 @@
 """Registry of external services and their keys.
 
-Each app registers its services in ``AppConfig.ready()``:
+Each app registers its services in ``AppConfig.ready()``::
 
     from apps.core import keys
-    keys.register(keys.KeySpec(name="groq", variables=("GROQ_API_KEY",), required=True, probe=probe_groq))
 
-``validate_required()`` lists every missing required variable at once. ``check_keys`` runs the
-probes. Probes make a minimal real call and must never put a key value in their detail.
+    keys.register("groq", probe.run, required=True, env_vars=("GROQ_API_KEY",))
+
+``probe`` is a callable (sync or async) with no arguments that makes one minimal real call and
+returns an object with ``status`` (``"ok"``, ``"skipped"`` or ``"error"``), ``detail`` and,
+optionally, ``warnings``. ``lumi_ai.ports.ProbeResult`` already has that shape. Probes must never
+put a key value in their result; ``run_probe`` scrubs configured values anyway.
 """
 
 from __future__ import annotations
 
+import asyncio
+import inspect
 import logging
 import os
-from collections.abc import Callable
-from dataclasses import dataclass, field
-from typing import Literal
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
+from typing import Any, Literal
 
 from django.core.exceptions import ImproperlyConfigured
 
 logger = logging.getLogger("lumi.keys")
 
-ProbeStatus = Literal["ok", "skipped", "failed"]
+ProbeStatus = Literal["ok", "skipped", "error"]
+ProbeCallable = Callable[[], Any | Awaitable[Any]]
 
 
 @dataclass(frozen=True, slots=True)
 class ProbeResult:
+    name: str
     status: ProbeStatus
     detail: str = ""
-
-
-Probe = Callable[[], ProbeResult]
+    warnings: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,29 +43,36 @@ class KeySpec:
     """One service. ``name`` is the stable id used by ``check_keys --only``.
 
     Plan names: nombre = name, obligatoria = required, sonda = probe.
-    ``variables`` are all needed for the service to count as configured.
+    ``env_vars`` must all be set for the service to count as configured.
     """
 
     name: str
-    variables: tuple[str, ...]
+    env_vars: tuple[str, ...]
     required: bool = False
-    probe: Probe | None = None
-    description: str = ""
-    # Variables that hold secrets; only these are scrubbed from probe output.
-    secret_variables: tuple[str, ...] = field(default=())
+    probe: ProbeCallable | None = None
 
 
 _REGISTRY: dict[str, KeySpec] = {}
 
 
-def register(spec: KeySpec) -> None:
-    """Register a service. Registering the same name twice with the same spec is a no-op."""
-    existing = _REGISTRY.get(spec.name)
-    if existing is not None and existing != spec:
+def register(
+    name: str,
+    probe: ProbeCallable | None = None,
+    *,
+    required: bool = False,
+    env_vars: tuple[str, ...] = (),
+) -> KeySpec:
+    """Register a service. Registering the same name twice with the same definition is a no-op."""
+    spec = KeySpec(name=name, env_vars=tuple(env_vars), required=required, probe=probe)
+    existing = _REGISTRY.get(name)
+    if existing is not None and (
+        existing.env_vars != spec.env_vars or existing.required != spec.required
+    ):
         raise ImproperlyConfigured(
-            f"El servicio de keys '{spec.name}' ya está registrado con otra definición."
+            f"El servicio de keys '{name}' ya está registrado con otra definición."
         )
-    _REGISTRY[spec.name] = spec
+    _REGISTRY[name] = spec
+    return spec
 
 
 def all_specs() -> list[KeySpec]:
@@ -72,27 +84,23 @@ def get_spec(name: str) -> KeySpec | None:
 
 
 def missing_variables(spec: KeySpec) -> list[str]:
-    return [var for var in spec.variables if not os.environ.get(var, "").strip()]
-
-
-def is_configured(spec: KeySpec) -> bool:
-    return not missing_variables(spec)
+    return [var for var in spec.env_vars if not os.environ.get(var, "").strip()]
 
 
 def missing_required() -> list[str]:
-    names: list[str] = []
+    names: set[str] = set()
     for spec in _REGISTRY.values():
         if spec.required:
-            names.extend(missing_variables(spec))
-    return sorted(set(names))
+            names.update(missing_variables(spec))
+    return sorted(names)
 
 
 def missing_optional() -> dict[str, list[str]]:
-    result: dict[str, list[str]] = {}
-    for spec in _REGISTRY.values():
-        if not spec.required and missing_variables(spec):
-            result[spec.name] = missing_variables(spec)
-    return result
+    return {
+        spec.name: missing_variables(spec)
+        for spec in _REGISTRY.values()
+        if not spec.required and missing_variables(spec)
+    }
 
 
 def validate_required() -> None:
@@ -116,11 +124,52 @@ def warn_optional() -> None:
 
 
 def scrub(text: str) -> str:
-    """Remove any configured secret value from ``text`` before it is shown or logged."""
+    """Remove any configured value of a registered variable from ``text``."""
     cleaned = text
     for spec in _REGISTRY.values():
-        for variable in spec.secret_variables or spec.variables:
+        for variable in spec.env_vars:
             value = os.environ.get(variable, "")
-            if len(value) >= 6:
+            if len(value) >= 8:
                 cleaned = cleaned.replace(value, "***")
     return cleaned
+
+
+def _normalise(name: str, raw: Any) -> ProbeResult:
+    status = getattr(raw, "status", "error")
+    if status not in ("ok", "skipped", "error"):
+        status = "error"
+    return ProbeResult(
+        name=name,
+        status=status,
+        detail=scrub(str(getattr(raw, "detail", "") or "")),
+        warnings=tuple(scrub(str(w)) for w in (getattr(raw, "warnings", ()) or ())),
+    )
+
+
+def run_probe(spec: KeySpec) -> ProbeResult:
+    """Run one probe and return a result; never raises and never exposes a value.
+
+    A missing variable gives ``error`` for a required service and ``skipped`` for an optional one,
+    without calling the probe.
+    """
+    missing = missing_variables(spec)
+    if missing:
+        names = ", ".join(missing)
+        if spec.required:
+            return ProbeResult(spec.name, "error", f"falta {names} (obligatoria)")
+        return ProbeResult(spec.name, "skipped", f"OMITIDA (opcional, falta {names})")
+    if spec.probe is None:
+        return ProbeResult(spec.name, "skipped", "sin sonda registrada")
+    try:
+        raw = spec.probe()
+        if inspect.isawaitable(raw):
+            raw = asyncio.run(_await(raw))
+    except Exception as exc:  # noqa: BLE001 - a probe must not break check_keys
+        return ProbeResult(
+            spec.name, "error", scrub(f"la sonda falló: {type(exc).__name__}")
+        )
+    return _normalise(spec.name, raw)
+
+
+async def _await(awaitable: Awaitable[Any]) -> Any:
+    return await awaitable

@@ -15,27 +15,12 @@ class CoreConfig(AppConfig):
         )
 
         keys.register(
-            keys.KeySpec(
-                name="database",
-                variables=("DATABASE_URL",),
-                required=True,
-                probe=probe_database,
-                secret_variables=("DATABASE_URL",),
-            )
+            "database", probe_database, required=True, env_vars=("DATABASE_URL",)
         )
+        keys.register("secret", probe_secret, required=True, env_vars=("SECRET_KEY",))
         keys.register(
-            keys.KeySpec(
-                name="secret",
-                variables=("SECRET_KEY",),
-                required=True,
-                probe=probe_secret,
-            )
-        )
-        keys.register(
-            keys.KeySpec(
-                name="token_encryption",
-                variables=("TOKEN_ENCRYPTION_KEY",),
-                required=True,
-                probe=probe_token_encryption,
-            )
+            "token_encryption",
+            probe_token_encryption,
+            required=True,
+            env_vars=("TOKEN_ENCRYPTION_KEY",),
         )

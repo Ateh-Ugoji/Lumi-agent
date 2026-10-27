@@ -16,29 +16,33 @@ def probe_database() -> ProbeResult:
             cursor.fetchone()
     except Exception as exc:  # noqa: BLE001 - report the class, never the connection string
         return ProbeResult(
-            "failed", f"no se pudo consultar la base: {type(exc).__name__}"
+            "database", "error", f"no se pudo consultar la base: {type(exc).__name__}"
         )
-    return ProbeResult("ok", "SELECT 1 correcto")
+    return ProbeResult("database", "ok", "SELECT 1 correcto")
 
 
 def probe_secret() -> ProbeResult:
-    value = os.environ.get("SECRET_KEY", "")
-    if len(value) < 32:
-        return ProbeResult("failed", "SECRET_KEY debe tener al menos 32 caracteres")
-    return ProbeResult("ok", "longitud suficiente")
+    if len(os.environ.get("SECRET_KEY", "")) < 32:
+        return ProbeResult(
+            "secret", "error", "SECRET_KEY debe tener al menos 32 caracteres"
+        )
+    return ProbeResult("secret", "ok", "longitud suficiente")
 
 
 def probe_token_encryption() -> ProbeResult:
     from cryptography.fernet import Fernet
 
-    value = os.environ.get("TOKEN_ENCRYPTION_KEY", "")
+    name = "token_encryption"
     try:
-        fernet = Fernet(value.encode())
+        fernet = Fernet(os.environ.get("TOKEN_ENCRYPTION_KEY", "").encode())
         if fernet.decrypt(fernet.encrypt(b"lumi-probe")) != b"lumi-probe":
-            return ProbeResult("failed", "el cifrado no devolvió el valor original")
+            return ProbeResult(
+                name, "error", "el cifrado no devolvió el valor original"
+            )
     except Exception as exc:  # noqa: BLE001
         return ProbeResult(
-            "failed",
+            name,
+            "error",
             f"TOKEN_ENCRYPTION_KEY no es una clave Fernet válida ({type(exc).__name__})",
         )
-    return ProbeResult("ok", "cifrado y descifrado correctos")
+    return ProbeResult(name, "ok", "cifrado y descifrado correctos")

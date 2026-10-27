@@ -1,8 +1,10 @@
 # Esquema de base de datos (PostgreSQL)
 
-Estado: **propuesta v1 para revisión** de LUMI-INTELLIGENCE y LUMI-CONNECT. Autor: LUMI-ARCHITECT. Rama `lumi-orquestador`. Este archivo no cambia sin avisar en `plan/estado/ARCHITECT.md`. La API y las firmas de servicio están en `CONTRATOS.md`.
+Estado: **propuesta v1.1 para revisión** de LUMI-INTELLIGENCE y LUMI-CONNECT. Autor: LUMI-ARCHITECT. Rama `lumi-orquestador`. Este archivo no cambia sin avisar en `plan/estado/ARCHITECT.md`. La API y las firmas de servicio están en `CONTRATOS.md`.
 
 El texto de los documentos va en español. Los nombres de tablas, columnas, modelos y funciones van en inglés.
+
+Cambios de v1 a v1.1 (por la revisión de INTELLIGENCE en `estado/INTELLIGENCE.md`): `posts.language` y `poll_configs.keywords` nuevas; `generation_evaluations.attempt_id` obligatorio; `Platform` se mantiene amplio y los puertos de `lumi_ai` filtran; los tipos de post de `apps.profiles.services` son los de `lumi_ai.ports`.
 
 ## 1. Objetivo y alcance
 
@@ -251,6 +253,7 @@ La plataforma y el handle viven en `social_handles`. La identidad externa de la 
 | `profile_id` | OneToOne `social_profiles` NN | `CASCADE`. |
 | `interval_minutes` | smallint NN | Defecto 5. Entre 1 y 1440 (`ck_poll_configs_interval`). |
 | `is_active` | boolean NN | Defecto `false`. |
+| `keywords` | text[] NN | Defecto `{}`. Palabras que sigue la escucha social (las lee y escribe `ListeningStore`). |
 | `last_polled_at` | timestamptz | Nulo. |
 | `created_at`, `updated_at` | timestamptz NN | |
 
@@ -271,6 +274,7 @@ La plataforma y el handle viven en `social_handles`. La identidad externa de la 
 | `is_stub` | boolean NN | Defecto `false`. Verdadero si la fila existe solo como ancla (por ejemplo, un `post_taggings` legado cuyo post nunca se ingirió). Un `upsert_posts` posterior lo llena y lo pone en `false`. |
 | `source` | varchar(12) | Nulo. `IngestSource`. |
 | `conversation_id` | varchar(64) NN | Defecto `''`. |
+| `language` | varchar(12) NN | Defecto `''`. Código de idioma si la fuente lo da. |
 | `thread_position` | smallint | Nulo o mayor o igual a 1 (base 1, como en el legado). |
 | `is_thread_head` | boolean | Nulo significa "no calculado" (dato legado). |
 | `text_truncated` | boolean NN | Defecto `false`. |
