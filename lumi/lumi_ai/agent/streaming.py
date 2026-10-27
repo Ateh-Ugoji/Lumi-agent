@@ -14,8 +14,37 @@ from collections.abc import AsyncIterator
 
 from lumi_ai.agent.loop import AgentLoop
 from lumi_ai.agent.result import SSEEvent
+from lumi_ai.providers.errors import (
+    AllProvidersFailed,
+    NoProviderConfigured,
+    RequestTooLarge,
+)
 
 logger = logging.getLogger(__name__)
+
+
+def error_payload(exc: Exception) -> dict[str, str]:
+    """A stable ``code`` and a generic message. The detail goes to the server log, never out.
+
+    ``error`` keeps the key the client already reads; ``code`` is what it can branch on.
+    """
+    if isinstance(exc, LookupError):
+        code, message = "not_found", "Profile not found."
+    elif isinstance(exc, RequestTooLarge):
+        code, message = (
+            "request_too_large",
+            "The message is too long for the available models.",
+        )
+    elif isinstance(exc, NoProviderConfigured):
+        code, message = "llm_not_configured", "No language model is configured."
+    elif isinstance(exc, AllProvidersFailed):
+        code, message = (
+            "llm_unavailable",
+            "The language models are unavailable right now. Try again shortly.",
+        )
+    else:
+        code, message = "agent_error", "The reply could not be completed."
+    return {"code": code, "error": message}
 
 
 async def stream_turn(
@@ -42,9 +71,7 @@ async def stream_turn(
             )
         except Exception as exc:
             logger.exception("agent stream failed (profile %s)", profile_id)
-            await queue.put(
-                SSEEvent("error", {"error": str(exc) or type(exc).__name__})
-            )
+            await queue.put(SSEEvent("error", error_payload(exc)))
         finally:
             await queue.put(None)
 

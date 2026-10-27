@@ -97,3 +97,12 @@ class VoiceRepo:
     def list_style_answers(self, profile_id: int) -> list[StyleAnswerIn]:
         rows = StyleAnswer.objects.filter(profile_id=profile_id).order_by("id")
         return [StyleAnswerIn(r.question_key, r.answer) for r in rows]
+
+
+def profiles_with_voice(profile_ids: Sequence[int]) -> set[int]:
+    """Ids among ``profile_ids`` that have a current voice profile (for ``profiles.hooks``)."""
+    return set(
+        VoiceProfile.objects.filter(
+            profile_id__in=list(profile_ids), is_current=True
+        ).values_list("profile_id", flat=True)
+    )
