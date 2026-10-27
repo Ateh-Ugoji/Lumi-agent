@@ -21,8 +21,11 @@ DATABASE_URL_HINT = (
     "Lumi solo usa PostgreSQL; no hay SQLite."
 )
 
-# Commands that must work with an empty environment so they can report what is missing.
-LENIENT_COMMANDS = frozenset({"check_keys", "help", "version", "--help", "--version"})
+# Commands that must work with an empty environment: they report what is missing, or (collectstatic,
+# run in the Railway build) never touch the database or the secret key.
+LENIENT_COMMANDS = frozenset(
+    {"check_keys", "collectstatic", "help", "version", "--help", "--version"}
+)
 
 _TRUE = {"1", "true", "yes", "on"}
 _FALSE = {"0", "false", "no", "off", ""}

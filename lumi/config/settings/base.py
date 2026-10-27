@@ -88,7 +88,7 @@ USE_I18N = True
 USE_TZ = True
 
 STATIC_URL = "static/"
-STATIC_ROOT = BASE_DIR / "staticfiles"
+STATIC_ROOT = Path(env.get("STATIC_ROOT") or BASE_DIR / "staticfiles")
 
 # Never "*". The default is the Vite dev server (port 3010 in lumi/frontend/vite.config.ts).
 CORS_ALLOWED_ORIGINS = env.get_list(

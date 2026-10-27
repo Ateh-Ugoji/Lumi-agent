@@ -12,3 +12,11 @@ SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True
 SECURE_HSTS_SECONDS = env.get_int("SECURE_HSTS_SECONDS", 0)
 SECURE_CONTENT_TYPE_NOSNIFF = True
+
+# Admin statics are served by WhiteNoise from STATIC_ROOT; run ``collectstatic`` in the build.
+STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"
+    },
+}
