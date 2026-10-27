@@ -312,3 +312,32 @@ def test_job_endpoint_shows_state_and_hides_other_users_jobs(
     )
     assert stranger_api.get(f"{BASE}/jobs/{job_id}").status_code == 404
     assert api.get(f"{BASE}/jobs/not-a-uuid").status_code == 404
+
+
+def test_profile_refresh_has_no_handler_yet_and_stays_queued(api, profile, settings):
+    """Pending (CONTRATOS 3.2): no app registers ``profile.refresh`` until sync is wired.
+
+    ``profile.bootstrap`` already has one (INTELLIGENCE). Under ``LUMI_JOB_DISPATCH=none`` the
+    refresh job waits in ``queued``; the client polls ``GET /jobs/{id}`` and sees that state.
+    """
+    from apps.core import jobs
+
+    settings.LUMI_JOB_DISPATCH = "none"
+    assert "profile.bootstrap" in jobs.registered_kinds()
+    assert "profile.refresh" not in jobs.registered_kinds()
+
+    job_id = api.post(url(profile, "/refresh")).json()["job_id"]
+    body = api.get(f"{BASE}/jobs/{job_id}").json()
+    assert (body["kind"], body["status"]) == ("profile.refresh", "queued")
+    assert not body["result"] and not body["error_code"]
+
+
+def test_profile_refresh_fails_cleanly_when_run_without_a_handler(
+    api, profile, settings
+):
+    from apps.core import jobs
+
+    job_id = api.post(url(profile, "/refresh")).json()["job_id"]
+    assert jobs.run_job(job_id) == "failed"
+    body = api.get(f"{BASE}/jobs/{job_id}").json()
+    assert (body["status"], body["error_code"]) == ("failed", "job.no_handler")
