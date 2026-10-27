@@ -195,8 +195,9 @@ export async function request<T>(path: string, opts: RequestOptions = {}): Promi
 
 /** Open a response stream (server-sent events). The caller reads `response.body`. */
 export async function openStream(path: string, opts: RequestOptions = {}): Promise<Response> {
-  // DRF answers 406 to a lone `text/event-stream`, so JSON stays acceptable as a second choice.
-  const res = await send(path, opts, "text/event-stream, application/json;q=0.5");
+  // The chat view accepts a lone `text/event-stream` (`EventStreamRenderer`) and still sends its
+  // errors as JSON, so the header asks for nothing else.
+  const res = await send(path, opts, "text/event-stream");
   if (!res.body) throw new ApiError(res.status, "stream_error", "El servidor no envió datos.");
   return res;
 }
