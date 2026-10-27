@@ -94,7 +94,7 @@ Un `profile_id` ya no tiene valor por defecto en ninguna ruta ni cuerpo. El lega
 
 ### 3.4 Eventos SSE de `/chat/stream`
 
-`Content-Type: text/event-stream`. Cada evento es `data: <json>\n\n`. Cabeceras `Cache-Control: no-cache` y `X-Accel-Buffering: no`. Cada 15 segundos sin eventos se envía el comentario `: ping`. Si el cliente se desconecta, el turno se cancela. El streaming exige un servidor ASGI (`uvicorn config.asgi:application`). Con WSGI la respuesta se acumula entera.
+`Content-Type: text/event-stream`. Cada evento es `data: <json>\n\n`. Cabeceras `Cache-Control: no-cache` y `X-Accel-Buffering: no`. Cada 15 segundos sin eventos se envía el comentario `: ping`. Si el cliente se desconecta, el turno se cancela. El streaming exige un servidor ASGI (`uvicorn config.asgi:application`). Con WSGI la respuesta se acumula entera. `/chat/stream` acepta `Accept: text/event-stream` (y `application/json`); un error antes de empezar el flujo (400, 401, 404, 429) llega como el JSON de error habitual. Las demás rutas de chat siguen sin aceptar `text/event-stream` (`406`).
 
 | `type` | Campos |
 | --- | --- |

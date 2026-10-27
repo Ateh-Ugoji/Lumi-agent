@@ -5,6 +5,7 @@ from __future__ import annotations
 from asgiref.sync import async_to_sync
 from django.http import StreamingHttpResponse
 from rest_framework import status
+from rest_framework.renderers import JSONRenderer
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -56,6 +57,8 @@ class ChatView(_ChatView):
 
 
 class ChatStreamView(_ChatView):
+    renderer_classes = [JSONRenderer, sse.EventStreamRenderer]
+
     def post(self, request):
         data = ChatRequestSerializer(data=request.data)
         data.is_valid(raise_exception=True)

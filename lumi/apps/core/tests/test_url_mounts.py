@@ -44,3 +44,22 @@ def test_connect_requires_a_token(client):
     response = client.post("/api/v1/connections/x/connect")
     assert response.status_code == 401
     assert response.json()["error"]["code"]
+
+
+@pytest.mark.parametrize(
+    ("path", "name"),
+    [
+        ("/api/v1/repurpose", "repurpose"),
+        ("/api/v1/voice/transcribe", "voice-transcribe"),
+    ],
+)
+def test_intelligence_routes_are_mounted_under_api_v1(path, name):
+    assert resolve(path).url_name == name
+    assert reverse(name) == path
+
+
+@pytest.mark.parametrize("path", ["/api/v1/repurpose", "/api/v1/voice/transcribe"])
+def test_intelligence_routes_answer_401_not_404_without_a_token(client, path):
+    response = client.post(path)
+    assert response.status_code == 401
+    assert response.json()["error"]["code"]

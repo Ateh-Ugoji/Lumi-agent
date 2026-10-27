@@ -13,6 +13,7 @@ urlpatterns = [
     path("api/v1/", include("apps.chat.urls")),
     path("api/v1/jobs/<uuid:job_id>", JobView.as_view(), name="job"),
     path("api/v1/", include("apps.connections.urls")),
+    path("api/v1/", include("apps.intelligence.urls")),
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="docs"),
 ]

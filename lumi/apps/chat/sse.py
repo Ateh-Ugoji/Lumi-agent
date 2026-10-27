@@ -14,6 +14,8 @@ import contextlib
 import logging
 from collections.abc import AsyncIterator
 
+from rest_framework.renderers import BaseRenderer, JSONRenderer
+
 from lumi_ai.agent.result import SSEEvent
 
 logger = logging.getLogger(__name__)
@@ -21,6 +23,23 @@ logger = logging.getLogger(__name__)
 PING_SECONDS = 15.0
 PING = ": ping\n\n"
 GENERIC_ERROR = "No se pudo completar la respuesta."
+
+
+class EventStreamRenderer(BaseRenderer):
+    """Lets ``Accept: text/event-stream`` pass content negotiation.
+
+    The stream itself is a ``StreamingHttpResponse`` that DRF does not render. This class only
+    matters when the view answers with an ordinary ``Response``, an error before the stream
+    starts: the body is the usual JSON error, so a client with a strict Accept still reads the code.
+    """
+
+    media_type = "text/event-stream"
+    format = "sse"
+    charset = "utf-8"
+
+    def render(self, data, accepted_media_type=None, renderer_context=None):
+        return JSONRenderer().render(data, accepted_media_type, renderer_context)
+
 
 #: Pump tasks that have not finished yet.
 ACTIVE: set[asyncio.Task[None]] = set()

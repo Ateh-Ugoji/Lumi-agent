@@ -145,6 +145,38 @@ def test_stream_sends_sse_events_with_the_right_headers(api, profile, fake):
     assert events[-1]["content"] == "listo"
 
 
+def test_stream_accepts_a_strict_event_stream_accept_header(api, profile, fake):
+    response = api.post(
+        f"{BASE}/stream",
+        {"profile_id": profile.pk, "message": "hi"},
+        format="json",
+        HTTP_ACCEPT="text/event-stream",
+    )
+    assert response.status_code == 200
+    assert response["Content-Type"].startswith("text/event-stream")
+
+
+def test_a_strict_event_stream_accept_still_gets_the_json_error(api, profile, fake):
+    response = api.post(
+        f"{BASE}/stream",
+        {"profile_id": profile.pk, "message": ""},
+        format="json",
+        HTTP_ACCEPT="text/event-stream",
+    )
+    assert response.status_code == 400
+    assert json.loads(response.content)["error"]["code"] == "validation_error"
+
+
+def test_the_other_chat_routes_still_refuse_an_event_stream_accept(api, profile, fake):
+    response = api.post(
+        BASE,
+        {"profile_id": profile.pk, "message": "hi"},
+        format="json",
+        HTTP_ACCEPT="text/event-stream",
+    )
+    assert response.status_code == 406
+
+
 def test_without_a_runtime_the_agent_routes_answer_503(api, profile, settings):
     settings.LUMI_CHAT_RUNTIME = "apps.does_not_exist"
     runtime.set_runtime(None)
