@@ -18,6 +18,8 @@ DEFAULT_LINKEDIN_VERSION = "202609"
 DEFAULT_META_GRAPH_VERSION = "v26.0"
 XPOZ_PLATFORMS = ("x", "instagram", "tiktok", "reddit")
 DEFAULT_XPOZ_RUN_CREDIT_BUDGET = 12  # one Instagram user search costs 12
+DEFAULT_XPOZ_DAILY_CAP_USER = 60  # credits per user in a rolling 24 h
+DEFAULT_XPOZ_DAILY_CAP_GLOBAL = 300  # credits for every user together in a rolling 24 h
 DEFAULT_HANDLE_CACHE_TTL_MINUTES = 60
 DEFAULT_MCP_TOOLS_TTL_SECONDS = 300
 DEFAULT_MCP_CALL_TIMEOUT_SECONDS = 60
@@ -76,6 +78,10 @@ class ConnectionsConfig:
     xpoz_api_key_2: str = field(default="", repr=False)
     xpoz_live_enabled: bool = False
     xpoz_run_credit_budget: int = DEFAULT_XPOZ_RUN_CREDIT_BUDGET
+    # Caps read from ``xpoz_credit_ledger`` over a rolling 24 h, so they hold across runs and
+    # processes. The run budget above only bounds one run. 0 blocks live spending.
+    xpoz_daily_cap_user: int = DEFAULT_XPOZ_DAILY_CAP_USER
+    xpoz_daily_cap_global: int = DEFAULT_XPOZ_DAILY_CAP_GLOBAL
     # Per-platform override of the run budget (XPOZ_RUN_CREDIT_BUDGET_<PLATFORM>). A platform
     # listed here has its own meter; the others share ``xpoz_run_credit_budget``.
     xpoz_platform_budgets: Mapping[str, int] = field(default_factory=dict)
@@ -132,6 +138,16 @@ class ConnectionsConfig:
                 env.get("XPOZ_RUN_CREDIT_BUDGET"),
                 name="XPOZ_RUN_CREDIT_BUDGET",
                 default=DEFAULT_XPOZ_RUN_CREDIT_BUDGET,
+            ),
+            xpoz_daily_cap_user=parse_non_negative_int(
+                env.get("XPOZ_DAILY_CREDIT_CAP_USER"),
+                name="XPOZ_DAILY_CREDIT_CAP_USER",
+                default=DEFAULT_XPOZ_DAILY_CAP_USER,
+            ),
+            xpoz_daily_cap_global=parse_non_negative_int(
+                env.get("XPOZ_DAILY_CREDIT_CAP_GLOBAL"),
+                name="XPOZ_DAILY_CREDIT_CAP_GLOBAL",
+                default=DEFAULT_XPOZ_DAILY_CAP_GLOBAL,
             ),
             xpoz_platform_budgets={
                 platform: parse_non_negative_int(

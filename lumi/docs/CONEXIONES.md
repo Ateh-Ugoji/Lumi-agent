@@ -22,6 +22,8 @@ El orquestador debe copiarlas a `API_KEYS.md` y ARCHITECT a `.env.example`.
 | `FRONTEND_URL` | `http://localhost:3010` | Adónde vuelve el usuario tras conectar (`?connected=` o `?error=`) |
 | `X_LIVE_ENABLED` | `false` | Interruptor de toda llamada real a X |
 | `XPOZ_LIVE_ENABLED` | `false` | Interruptor de las llamadas reales a Xpoz (cada consulta gasta créditos) |
+| `XPOZ_DAILY_CREDIT_CAP_USER` | `60` | Créditos de Xpoz que un usuario puede gastar en 24 h. Se lee de `xpoz_credit_ledger`, así que aguanta reinicios y varios procesos. `0` bloquea el gasto |
+| `XPOZ_DAILY_CREDIT_CAP_GLOBAL` | `300` | Lo mismo para todos los usuarios juntos |
 | `XPOZ_RUN_CREDIT_BUDGET` | `12` | Tope de créditos de Xpoz por ejecución. Al llegar se lanza `BudgetExceeded`. 12 alcanza para una búsqueda de Instagram (12 créditos) |
 | `XPOZ_RUN_CREDIT_BUDGET_<RED>` | sin definir | Tope propio de una red (`X`, `INSTAGRAM`, `TIKTOK`, `REDDIT`). Una red con tope propio no gasta del compartido. `0` la deshabilita |
 | `HANDLE_CACHE_TTL_MINUTES` | `60` | Vigencia de la caché de búsqueda de handles (sustituye a `MVP_CACHE_TTL_MINUTES`) |
@@ -312,3 +314,11 @@ Propuesta concreta para `PostIn.media`:
 5. Alternativa sin costo: que el usuario pegue el enlace del medio en el chat y que INTELLIGENCE lo use como `MediaRef` de esa petición.
 
 CONNECT puede implementar el punto 1 y, para X, el mapeo de `mediaUrls` en el siguiente cambio si ARCHITECT confirma que `MediaRef.kind` admite el valor de cada tipo.
+
+## Tope diario de Xpoz y límites de ritmo (revisión de seguridad, ALTO 3)
+
+`XPOZ_RUN_CREDIT_BUDGET` solo acota una ejecución: cada petición y cada turno de chat crean un cliente nuevo con el contador a cero. El tope real vive en `DjangoCreditLedger.ensure_room`, que suma `xpoz_credit_ledger` de las últimas 24 horas antes de cada llamada de pago. Si pasa el tope del usuario o el global, lanza `BudgetExceeded` y no sale ninguna petición. La búsqueda de handles lo traduce a `reason=budget_exhausted` y sigue respondiendo con lo que hay en caché.
+
+Dos llamadas simultáneas pueden pasar la comprobación a la vez, así que el exceso máximo es una llamada por petición concurrente. Por eso `GET /handles/search` admite 30 por minuto y usuario, y `POST /publish` 10 por minuto y usuario (`apps/connections/throttles.py`).
+
+`GET /handles/stats` devuelve también `daily_cap_user` y `daily_cap_global`. Las dos variables nuevas hay que copiarlas a `.env.example` (no es de CONNECT).

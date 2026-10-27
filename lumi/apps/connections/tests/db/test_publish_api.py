@@ -449,3 +449,9 @@ def test_deleting_an_attempt_keeps_the_job(fb_profile) -> None:
     attempt.delete()
     job.refresh_from_db()
     assert job.attempt_id is None
+
+
+def test_publishing_is_throttled_per_user(api, fb_profile, page) -> None:
+    payload = body(fb_profile, dry_run=True)
+    codes = [api.post(URL, payload, format="json").status_code for _ in range(11)]
+    assert codes[:10] == [200] * 10 and codes[10] == 429

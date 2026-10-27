@@ -12,18 +12,23 @@ published yet. Switch to ``get_or_create_handle`` when it is (docs/CONTRATOS.md 
 
 from __future__ import annotations
 
+import os
 import re
 from collections.abc import Callable, Iterable
 from dataclasses import replace
+from datetime import timedelta
 
 from asgiref.sync import sync_to_async
 from django.db import IntegrityError, connection, transaction
-from django.db.models import F, Q
+from django.db.models import F, Q, Sum
 from django.db.models.functions import Now
+from django.utils import timezone
 
 from apps.profiles.models import HandleOrigin, SocialHandle, SocialProfile
 
 from .clients.credits import CreditEntry
+from .config import ConnectionsConfig
+from .errors import BudgetExceeded
 from .handles.types import CacheEntry, HandleRow
 from .mcp.gateway import PendingWrite
 from .models import (
@@ -230,9 +235,46 @@ def _entry(job: PublishJob) -> LedgerEntry:
 # --- Xpoz credits --------------------------------------------------------------------------
 
 
+CAP_WINDOW = timedelta(hours=24)
+
+
 class DjangoCreditLedger:
+    """Ledger plus the daily caps. Every paid Xpoz call asks ``ensure_room`` first.
+
+    Two caps apply over a rolling 24 h, both read from ``xpoz_credit_ledger``: one for the
+    user and one for everybody. They survive restarts and are shared by every process.
+    Two calls that check at the same moment can both pass, so the overshoot is at most one
+    call per concurrent request, and the DRF throttle on the routes keeps that small.
+    """
+
     def __init__(self, user_id: int | None = None) -> None:
         self._user_id = user_id
+
+    async def ensure_room(self, credits: int) -> None:
+        await sync_to_async(self._ensure_room, thread_sensitive=True)(credits)
+
+    def _ensure_room(self, credits: int) -> None:
+        config = ConnectionsConfig.from_env(os.environ)
+        since = timezone.now() - CAP_WINDOW
+        recent = XpozCreditLedger.objects.filter(created_at__gte=since)
+        checks = [(recent, config.xpoz_daily_cap_global, "global")]
+        if self._user_id is not None:
+            checks.append(
+                (
+                    recent.filter(user_id=self._user_id),
+                    config.xpoz_daily_cap_user,
+                    "user",
+                )
+            )
+        for rows, cap, scope in checks:
+            spent = rows.aggregate(total=Sum("credits"))["total"] or 0
+            if spent + credits > cap:
+                raise BudgetExceeded(
+                    f"Xpoz daily credit cap reached ({scope})",
+                    provider="xpoz",
+                    spent=spent,
+                    budget=cap,
+                )
 
     async def record(self, entry: CreditEntry) -> None:
         await sync_to_async(self._record, thread_sensitive=True)(entry)

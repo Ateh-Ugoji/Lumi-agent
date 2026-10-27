@@ -40,6 +40,7 @@ DJANGO_GLUE = {
     "serializers.py",
     "urls.py",
     "tasks.py",
+    "throttles.py",
 }
 
 

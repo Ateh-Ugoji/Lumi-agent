@@ -39,6 +39,15 @@ class CreditLedger(Protocol):
         ...
 
 
+@runtime_checkable
+class CappedLedger(CreditLedger, Protocol):
+    """A ledger that also enforces a spending cap across runs and processes."""
+
+    async def ensure_room(self, credits: int) -> None:
+        """Raise ``BudgetExceeded`` when ``credits`` more would pass a daily cap."""
+        ...
+
+
 class CreditMeter:
     """Spend counter for one run. Not shared between runs."""
 
