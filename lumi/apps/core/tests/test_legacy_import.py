@@ -499,3 +499,83 @@ def test_frozen_fixtures_still_match_the_legacy_models(tmp_path):
     legacy_regen.regenerate()  # rewrites the files in place; a diff means they were stale
     again = build_legacy_db(tmp_path / "again.db")
     assert dump(frozen) == dump(again)
+
+
+# ---- author_avatar_url (legacy alembic b7f3a91c5d20) ------------------------------------------
+
+
+def add_avatars(path, **by_row):
+    """Set ``author_avatar_url`` (the fixture schema has it, NULL) for some matches."""
+    db = sqlite3.connect(str(path))
+    for pk, url in by_row.items():
+        db.execute(
+            "UPDATE listening_matches SET author_avatar_url = ? WHERE id = ?",
+            (url, int(pk.lstrip("r"))),
+        )
+    db.commit()
+    db.close()
+
+
+def test_a_legacy_file_without_the_avatar_column_still_imports(legacy):
+    """A file from before b7f3a91c5d20 has no such column."""
+    db = sqlite3.connect(str(legacy))
+    db.execute("ALTER TABLE listening_matches DROP COLUMN author_avatar_url")
+    db.commit()
+    assert "author_avatar_url" not in [
+        r[1] for r in db.execute("PRAGMA table_info(listening_matches)")
+    ]
+    db.close()
+    run(legacy)
+    assert SocialHandle.objects.get(handle_normalized="sama").avatar_url == ""
+    assert "Verificación correcta" in run(legacy, "--verify")
+
+
+def test_the_match_author_picture_lands_on_the_handle(legacy):
+    add_avatars(legacy, r1="https://img.example/sama.png")
+    run(legacy)
+    assert (
+        SocialHandle.objects.get(handle_normalized="sama").avatar_url
+        == "https://img.example/sama.png"
+    )
+    assert SocialHandle.objects.get(handle_normalized="levelsio").avatar_url == ""
+    assert "Verificación correcta" in run(legacy, "--verify")
+    # a new post's row keeps no payload: its picture is on the handle
+    assert (
+        LegacyImportMap.objects.get(
+            source_table="listening_matches", source_pk="1"
+        ).payload
+        is None
+    )
+
+
+def test_an_existing_handle_picture_wins_and_the_legacy_one_stays_in_the_payload(legacy):
+    add_avatars(legacy, r1="https://img.example/old.png")
+    from apps.profiles import services
+
+    services.get_or_create_handle(
+        "x", "sama", origin="live", avatar_url="https://img.example/live.png"
+    )
+    run(legacy)
+    assert (
+        SocialHandle.objects.get(handle_normalized="sama").avatar_url
+        == "https://img.example/live.png"
+    )
+    kept = LegacyImportMap.objects.get(source_table="listening_matches", source_pk="1")
+    assert json.loads(kept.payload)["author_avatar_url"] == "https://img.example/old.png"
+    assert "Verificación correcta" in run(legacy, "--verify")
+
+
+def test_a_picture_that_is_not_a_web_url_is_kept_in_the_payload_only(legacy):
+    add_avatars(legacy, r1="javascript:alert(1)")
+    run(legacy)
+    assert SocialHandle.objects.get(handle_normalized="sama").avatar_url == ""
+    kept = LegacyImportMap.objects.get(source_table="listening_matches", source_pk="1")
+    assert json.loads(kept.payload)["author_avatar_url"] == "javascript:alert(1)"
+
+
+def test_verify_fails_when_an_imported_picture_went_missing(legacy):
+    add_avatars(legacy, r1="https://img.example/sama.png")
+    run(legacy)
+    SocialHandle.objects.filter(handle_normalized="sama").update(avatar_url="")
+    with pytest.raises(CommandError, match="listening_matches"):
+        run(legacy, "--verify")

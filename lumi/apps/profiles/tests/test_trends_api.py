@@ -16,9 +16,11 @@ BASE = "/api/v1/trends"
 T0 = datetime(2026, 10, 1, tzinfo=UTC)
 
 
-def peer_post(profile, handle, external_id, likes=10, **kw):
+def peer_post(profile, handle, external_id, likes=10, avatar_url="", **kw):
     """Store a post of another account and link it as a listening match."""
-    hid = services.get_or_create_handle("x", handle, origin="niche")
+    hid = services.get_or_create_handle(
+        "x", handle, origin="niche", avatar_url=avatar_url
+    )
     [post_id] = services.upsert_posts(
         hid,
         [
@@ -91,6 +93,7 @@ def test_matches_shape_and_latest_metrics(api, profile):
         "author_handle",
         "caption",
         "platform_url",
+        "author_avatar_url",
         "metrics",
         "discovered_at",
     }
@@ -208,3 +211,60 @@ def test_a_failed_scan_is_a_502_with_the_reason(api, profile, fake_scan):
     assert response.status_code == 502
     assert response.json()["error"]["code"] == "profiles.scan_failed"
     assert response.json()["error"]["details"]["reason"] == "no accounts to check on x"
+
+
+def avatars(api, profile):
+    matches = api.get(f"{BASE}/matches?profile_id={profile.pk}").json()["matches"]
+    return {m["author_handle"]: m["author_avatar_url"] for m in matches}
+
+
+def test_matches_carry_the_picture_stored_for_the_author(api, profile):
+    peer_post(profile, "Sama", "1", avatar_url="https://img.example/sama.png")
+    assert avatars(api, profile) == {"Sama": "https://img.example/sama.png"}
+
+
+def test_matches_say_null_when_nobody_knows_the_picture(api, profile):
+    peer_post(profile, "Sama", "1")
+    assert avatars(api, profile) == {"Sama": None}
+
+
+def test_a_picture_gets_filled_in_once_a_later_scan_learns_it(api, profile):
+    peer_post(profile, "Sama", "1")
+    assert avatars(api, profile) == {"Sama": None}
+    services.get_or_create_handle(
+        "x", "sama", origin="niche", avatar_url="https://img.example/s.png"
+    )
+    assert avatars(api, profile) == {"Sama": "https://img.example/s.png"}
+
+
+@pytest.mark.parametrize(
+    "stored", ["javascript:alert(1)", "data:text/html;base64,AAAA", "//cdn/x.png"]
+)
+def test_matches_never_hand_out_a_picture_that_is_not_http(api, profile, stored):
+    peer_post(profile, "Sama", "1", avatar_url=stored)
+    assert avatars(api, profile) == {"Sama": None}
+
+
+def test_the_picture_adds_no_queries(api, profile):
+    peer_post(profile, "peer0", "0", avatar_url="https://img.example/0.png")
+    api.get(f"{BASE}/matches?profile_id={profile.pk}")
+    with CaptureQueriesContext(connection) as small:
+        api.get(f"{BASE}/matches?profile_id={profile.pk}")
+    for i in range(1, 15):
+        peer_post(
+            profile, f"peer{i}", str(i), avatar_url=f"https://img.example/{i}.png"
+        )
+    with CaptureQueriesContext(connection) as big:
+        found = avatars(api, profile)
+    assert len(found) == 15 and all(found.values())
+    assert len(big) == len(small)
+
+
+def test_the_openapi_schema_documents_the_picture(client, settings):
+    settings.DEBUG = True
+    schema = client.get("/api/schema/?format=json").json()
+    item = schema["components"]["schemas"]["TrendMatch"]
+    assert item["properties"]["author_avatar_url"]["nullable"] is True
+    assert "author_avatar_url" in item["required"]
+    path = schema["paths"]["/api/v1/trends/matches"]["get"]
+    assert {p["name"] for p in path["parameters"]} >= {"profile_id", "limit"}

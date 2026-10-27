@@ -373,6 +373,8 @@ Semántica: "avisar una vez por episodio". El legado avisa una vez y vuelve a av
 | `discovered_at` | timestamptz NN | Defecto ahora. |
 | `score` | double precision | Nulo. |
 
+La tabla no guarda la foto del autor. `GET /trends/matches` la lee de `social_handles.avatar_url` del autor del post (`author_avatar_url`), con el mismo `JOIN` que ya trae el handle: sin consulta extra. Vacío o que no empiece por `http://` o `https://` sale como `null`.
+
 Único (`profile`, `post`). Índice (`profile`, `-discovered_at`). El caption, el autor, la URL y las métricas ya no se copian: se leen de `posts` y `metric_snapshots`.
 
 ### 6.4 `chat`
@@ -491,7 +493,7 @@ El importador usa este mapa (`MIGRACION_LEGADA.md` lo detalla en T8). En todas l
 | `metric_snapshots.post_id`, `captured_at`, `likes`, `comments`, `shares`, `views`, `source` | `metric_snapshots` | `post_id` por el mapa de `posts`. |
 | `metric_snapshots.age_hours` | (se elimina) | Derivable de `captured_at - published_at`. La verificación no la incluye en la suma. |
 | `user_activity` (`profile_id`, `platform_post_id`, `kind`, `caption`, `published_at`, `likes`, `replies`, `views`, `source`, `created_at`) | `posts` (`kind = 'reply'` o `'retweet'`) y `metric_snapshots` | Una fila de `posts` con `author` = handle del perfil. Si algún `likes`, `replies` o `views` no es nulo, se crea una `metric_snapshot` con `captured_at = created_at` y `comments = replies`. Si el `platform_post_id` ya existe en `posts`, gana la fila de `posts` y se informa. |
-| `listening_matches` (`profile_id`, `platform_post_id`, `author_handle`, `caption`, `platform_url`, `metrics`, `discovered_at`, `alerted_at`, `alert_dismissed`) | `social_handles`, `posts`, `metric_snapshots`, `listening_matches`, `alerts` | Handle de `author_handle` (se crea si falta). Post con `caption` y `url = platform_url`, `published_at` nulo. `metrics` (JSON con `likes`, `replies` o `comments`, `retweets` o `shares`, `views` o `impressions`) pasa a una `metric_snapshot` en `discovered_at`. Alerta como en `posts`, con `kind = 'niche_match'`. |
+| `listening_matches` (`profile_id`, `platform_post_id`, `author_handle`, `author_avatar_url`, `caption`, `platform_url`, `metrics`, `discovered_at`, `alerted_at`, `alert_dismissed`) | `social_handles`, `posts`, `metric_snapshots`, `listening_matches`, `alerts` | Handle de `author_handle` (se crea si falta). Post con `caption` y `url = platform_url`, `published_at` nulo. `metrics` (JSON con `likes`, `replies` o `comments`, `retweets` o `shares`, `views` o `impressions`) pasa a una `metric_snapshot` en `discovered_at`. Alerta como en `posts`, con `kind = 'niche_match'`. `author_avatar_url` (columna de la migración legada `b7f3a91c5d20`; los archivos anteriores no la tienen y se importan igual) rellena `social_handles.avatar_url` del autor cuando está vacío. No hay columna nueva: la foto del autor ya vive en el handle (`CONTRATOS` 11, fila 27). Si el handle ya tiene otra foto, o el valor no es una URL `http(s)`, el valor queda en `payload` de `legacy_import_map` y `--verify` lo cuenta como contenido perdido si no está en ninguno de los dos sitios. |
 | `poll_config` | `poll_configs` | Igual, una fila por fila. |
 | `user_search_requests` (`handle`, `request_note`) | `user_search_requests` | `handle` pasa a `handle_id`. |
 

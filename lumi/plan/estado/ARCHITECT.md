@@ -59,8 +59,15 @@ Cada fila es un comportamiento donde el backend nuevo difiere del legado a prop�
 | 21 | `post_media.kind` | Obligatorio | Admite NULL = tipo desconocido (puertos 1.9), nunca adivinado | Aceptada (orquestador y Christian) | `apps/profiles/tests/test_parity.py::test_row_21_media_of_unknown_type_is_stored_as_null_not_guessed` |
 | 24 | `posts.text_truncated` | Una vez marcada, quedaba marcada | Sigue a la última captura, junto con el `caption` | Confirmada (orquestador) | `apps/profiles/tests/test_parity.py::test_row_24_the_truncation_flag_follows_the_latest_fetch_not_a_sticky_one` |
 | 25 | Capturas de métricas | Fila nueva cada 6 h y en las marcas de 24 h, 72 h, 7 d y 30 d, aunque no cambie nada | Fila nueva solo si cambia una métrica; cada lectura anota `posts.last_checked_at` | Confirmada (orquestador, con la condición de `last_checked_at`) | `apps/profiles/tests/test_parity.py::test_row_25_a_snapshot_is_appended_only_when_a_metric_changed` |
+| 27 | Foto del autor en `/trends/matches` | Columna `listening_matches.author_avatar_url`, copia por coincidencia; si el escaneo no la sabía, queda NULL para siempre | Se lee de `social_handles.avatar_url` del autor (`author_avatar_url`, `null` si no se conoce); sin columna ni migración | Aceptada | `apps/profiles/tests/test_parity.py::test_row_27_the_match_author_picture_is_the_handle_picture_not_a_copy` |
 
 Nota sobre la fila 18: `reach_series` y `saves_series` siguen recorriendo todas las lecturas en orden, como el legado. Solo los totales cambian.
+
+## Propuestas para otros equipos (foto del autor, de `632217e`)
+
+- **INTELLIGENCE** (`apps/intelligence`, `lumi_ai`): el escaneo de tendencias debe pasar la foto que conozca al crear el handle del autor, con `services.get_or_create_handle(platform, handle, origin="niche", avatar_url=...)` (solo rellena si está vacía). Además, cada elemento de `viral_posts` del resultado de `scan_trends` puede traer `avatar_url` (cadena, vacía si no se sabe) y `extract_sample_posts` (`lumi_ai/agent/support.py`) debe copiarlo a `sample_posts[].avatar_url` del evento SSE `tool_done`. El frontend ya lo espera (`SamplePost.avatar_url?: string`).
+- **CONNECT** (`apps/connections/handles`): al buscar o refrescar un handle, guardar `avatar_url` en `social_handles` por `get_or_create_handle`, igual que hoy. Es lo que sustituye al `lookup` de `handle_db` del legado: no hace falta ninguna tabla nueva.
+- **Frontend**: `TrendMatch.author_avatar_url?: string | null` ya está en `api/trends.ts`; `ChronicOnline` usa la foto guardada y unavatar de respaldo.
 
 ## Notas del esqueleto
 

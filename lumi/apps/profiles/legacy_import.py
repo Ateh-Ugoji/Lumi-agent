@@ -12,12 +12,14 @@ from apps.core.choices import IngestSource, Platform, PostKind
 from apps.core.legacy_import import (
     ImportContext,
     Importer,
+    LegacyDb,
     register,
     to_bool,
     to_dt,
     to_json,
 )
 from apps.core.legacy_import.engine import sync_sequence
+from apps.core.models import LegacyImportMap
 from apps.profiles import services
 from apps.profiles.models import (
     Alert,
@@ -30,6 +32,7 @@ from apps.profiles.models import (
     PollConfig,
     Post,
     ProfileBaseline,
+    SocialHandle,
     SocialProfile,
     TimezoneSource,
 )
@@ -616,6 +619,7 @@ def import_listening(ctx: ImportContext) -> None:
     rows = list(ctx.legacy.rows("listening_matches"))
     t.read = len(rows)
     handles: dict[tuple[str, str], int] = {}
+    pictured: set[tuple[str, str]] = set()
     alerts: list[Alert] = []
     for row in rows:
         pk = row["id"]
@@ -645,6 +649,19 @@ def import_listening(ctx: ImportContext) -> None:
                 origin="niche",
                 handle_display=str(row["author_handle"]).strip().lstrip("@"),
             )
+        # ``author_avatar_url`` (alembic b7f3a91c5d20) is absent in older files. The new schema
+        # keeps one picture per author, on the handle, so it fills an empty one.
+        raw_avatar = str(row.get("author_avatar_url") or "").strip()
+        avatar = services.public_avatar_url(raw_avatar)
+        if avatar and (platform, normalized) not in pictured:
+            pictured.add((platform, normalized))
+            services.get_or_create_handle(platform, normalized, avatar_url=avatar)
+        # A picture the handle did not take (not http(s), or the handle has another one) stays
+        # in the payload so ``--verify`` and a later look can still find it.
+        avatar_kept = not raw_avatar or (
+            avatar is not None
+            and SocialHandle.objects.filter(pk=handle_id, avatar_url=avatar).exists()
+        )
         platform_post_id = str(row["platform_post_id"])
         post = Post.objects.filter(
             author_id=handle_id, platform_post_id=platform_post_id
@@ -685,11 +702,42 @@ def import_listening(ctx: ImportContext) -> None:
                 pk,
                 "listening_matches",
                 match.pk,
-                row=None if post_is_new else _original(row),
+                row=None if post_is_new and avatar_kept else _original(row),
             )
             t.imported += 1
         _post_alert(alerts, row, profile_id, post.pk, AlertKind.NICHE_MATCH)
     _save_alerts(ctx, "listening_matches", alerts)
+
+
+def check_listening(legacy: LegacyDb) -> dict[str, int]:
+    """Legacy matches whose author picture is on no handle and in no kept payload."""
+    kept = {
+        pk
+        for pk in LegacyImportMap.objects.filter(
+            source_table="listening_matches", payload__isnull=False
+        ).values_list("source_pk", flat=True)
+    }
+    pictures = {
+        (platform, handle): url
+        for platform, handle, url in SocialHandle.objects.exclude(
+            avatar_url=""
+        ).values_list("platform", "handle_normalized", "avatar_url")
+    }
+    lost = 0
+    for row in legacy.rows("listening_matches"):
+        raw = str(row.get("author_avatar_url") or "").strip()
+        if not raw or str(row["id"]) in kept:
+            continue
+        platform = str(row.get("platform") or "x").lower()
+        try:
+            normalized = services.normalize_handle(
+                platform, row.get("author_handle") or ""
+            )
+        except services.InvalidHandle:
+            continue  # skipped rows keep their payload, and the count check sees them
+        if pictures.get((platform, normalized)) != raw:
+            lost += 1
+    return {"listening_matches": lost}
 
 
 # --------------------------------------------------------------------------- poll config
@@ -753,7 +801,13 @@ for _importer in (
     Importer("posts", ("posts",), 30, import_posts),
     Importer("metrics", ("metric_snapshots",), 40, import_metrics),
     Importer("activity", ("user_activity",), 50, import_activity),
-    Importer("listening", ("listening_matches",), 60, import_listening),
+    Importer(
+        "listening",
+        ("listening_matches",),
+        60,
+        import_listening,
+        check=check_listening,
+    ),
     Importer("last_checked", (), 65, stamp_last_checked),
     Importer("poll_config", ("poll_config",), 70, import_poll_config),
 ):

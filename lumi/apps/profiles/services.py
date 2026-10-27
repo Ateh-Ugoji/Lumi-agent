@@ -744,6 +744,9 @@ class TrendMatch(TypedDict):
     author_handle: str
     caption: str
     platform_url: str
+    author_avatar_url: (
+        str | None
+    )  # the author's stored picture; ``None`` when nobody knows it
     metrics: (
         dict[str, int | None] | None
     )  # latest snapshot; ``None`` before the first one
@@ -751,6 +754,18 @@ class TrendMatch(TypedDict):
 
 
 MATCHES_MAX = 200
+_AVATAR_SCHEMES = ("http://", "https://")
+
+
+def public_avatar_url(value: str | None) -> str | None:
+    """A stored picture URL fit for an ``<img src>``, or ``None``.
+
+    ``social_handles.avatar_url`` is free text that providers and the handles API write, and ``''``
+    means unknown. Only absolute http(s) URLs go out, so a ``javascript:`` or ``data:`` value that
+    reached the table never reaches a client.
+    """
+    url = (value or "").strip()
+    return url if url.lower().startswith(_AVATAR_SCHEMES) else None
 
 
 def list_trend_matches(profile_id: int, limit: int = 50) -> list[TrendMatch]:
@@ -775,6 +790,7 @@ def list_trend_matches(profile_id: int, limit: int = 50) -> list[TrendMatch]:
                 or m.post.author.handle_normalized,
                 caption=m.post.caption,
                 platform_url=m.post.url,
+                author_avatar_url=public_avatar_url(m.post.author.avatar_url),
                 metrics={f: getattr(snap, f) for f in METRIC_FIELDS} if snap else None,
                 discovered_at=m.discovered_at,
             )
@@ -1094,6 +1110,7 @@ _ASYNC = (
     "save_baseline",
     "mark_bootstrapped",
     "record_listening_match",
+    "public_avatar_url",
     "create_alert_once",
     "unread_alerts",
     "unread_alert_details",

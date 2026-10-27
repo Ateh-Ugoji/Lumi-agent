@@ -72,6 +72,11 @@ class Command(BaseCommand):
                 f"{row.table}: origen {row.legacy}, registradas {row.accounted} "
                 f"(importadas {row.imported}, fusionadas {row.merged}, omitidas {row.skipped}), "
                 f"{row.status}"
+                + (
+                    f", contenido perdido en {row.lost_content}"
+                    if row.lost_content
+                    else ""
+                )
             )
         bad = [r for r in rows if not r.ok]
         if bad:

@@ -116,3 +116,21 @@ def _typed(external_id, **kw):
         "published_at": datetime(2026, 10, 1, tzinfo=UTC),
     }
     return PostIn(**{**base, **kw})
+
+
+@pytest.mark.django_db
+def test_row_27_the_match_author_picture_is_the_handle_picture_not_a_copy(api, profile):
+    """Legacy copied the picture into each ``listening_matches`` row, so a match found before
+    the picture was known kept NULL for good. Here the match reads the handle's picture."""
+    hid = services.get_or_create_handle("x", "sama", origin="niche")
+    [post_id] = services.upsert_posts(hid, [post("901", likes=1)]).post_ids
+    services.record_listening_match(profile.pk, post_id)
+    url = f"/api/v1/trends/matches?profile_id={profile.pk}"
+    assert api.get(url).json()["matches"][0]["author_avatar_url"] is None
+    services.get_or_create_handle(
+        "x", "sama", origin="niche", avatar_url="https://img.example/sama.png"
+    )
+    assert (
+        api.get(url).json()["matches"][0]["author_avatar_url"]
+        == "https://img.example/sama.png"
+    )

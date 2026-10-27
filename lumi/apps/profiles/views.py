@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from asgiref.sync import async_to_sync
 from django.db import transaction
+from drf_spectacular.utils import extend_schema
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -18,6 +19,7 @@ from apps.profiles.serializers import (
     ListeningSerializer,
     ScanTrendsSerializer,
     TrendMatchesQuerySerializer,
+    TrendMatchesResponseSerializer,
 )
 from lumi_ai.ports import ListeningConfig
 
@@ -167,6 +169,10 @@ def _require_profile(request) -> int:
 class TrendMatchesView(APIView):
     permission_classes = [IsProfileOwner]
 
+    @extend_schema(
+        parameters=[TrendMatchesQuerySerializer],
+        responses={200: TrendMatchesResponseSerializer},
+    )
     def get(self, request):
         query = TrendMatchesQuerySerializer(data=request.query_params)
         query.is_valid(raise_exception=True)

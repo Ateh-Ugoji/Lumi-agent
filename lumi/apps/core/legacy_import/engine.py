@@ -94,6 +94,9 @@ class Importer:
     tables: tuple[str, ...]
     order: int
     run: Callable[[ImportContext], None]
+    # Reads the legacy file and returns, per table, how many rows lost content ``--verify``
+    # cannot see by counting rows (a column mapped into another table, for example).
+    check: Callable[[LegacyDb], dict[str, int]] | None = None
 
 
 _REGISTRY: dict[str, Importer] = {}
@@ -324,6 +327,9 @@ class VerifyRow:
     merged: int = 0
     skipped: int = 0
     without_payload: int = 0  # merged or skipped rows that lost their payload
+    lost_content: int = (
+        0  # rows whose mapped columns are in neither a table nor the payload
+    )
 
     @property
     def ok(self) -> bool:
@@ -339,9 +345,13 @@ def verify_import(path: str) -> list[VerifyRow]:
     """
     covered = {t for imp in importers() for t in imp.tables}
     legacy = LegacyDb(path)
+    lost: Counter[str] = Counter()
     try:
         counts = {t: legacy.count(t) for t in LEGACY_TABLES}
         ids = {t: legacy.ids(t) for t in LEGACY_TABLES}
+        for imp in importers():
+            if imp.check is not None:
+                lost.update(imp.check(legacy))
     finally:
         legacy.close()
     # One outcome per legacy row: the strongest wins (imported over merged over skipped).
@@ -371,7 +381,7 @@ def verify_import(path: str) -> list[VerifyRow]:
         got = len(mine.keys() & ids[table])
         stray = len(mine.keys() - ids[table])
         kinds = Counter(mine.values())
-        if n == got and not stray and not bare[table]:
+        if n == got and not stray and not bare[table] and not lost[table]:
             status = "ok"
         elif table not in covered:
             status = "sin importador"
@@ -387,6 +397,7 @@ def verify_import(path: str) -> list[VerifyRow]:
                 merged=kinds[LegacyOutcome.MERGED],
                 skipped=kinds[LegacyOutcome.SKIPPED],
                 without_payload=bare[table],
+                lost_content=lost[table],
             )
         )
     return rows
