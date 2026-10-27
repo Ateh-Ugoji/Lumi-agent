@@ -8,6 +8,8 @@ export type HandleRow = {
   display_name?: string;
   avatar_url?: string;
   followers?: number | null;
+  /** The network of this row (x, instagram, ...). Every row of /handles/search and /saved has it. */
+  platform?: string;
   /** db | cache | live: where the data came from on that search */
   source?: string;
 };
@@ -36,7 +38,9 @@ export async function getSavedHandles(): Promise<HandleRow[]> {
 }
 
 /**
- * Tell the server which handle was picked, so the next search knows it. Only the handle goes:
+ * Tell the server which handle was picked, so the next search knows it. Only the handle and its
+ * network go (the row's own `platform`; JSON leaves it out when the row has none, and the server then
+ * assumes X like /search and /saved do). Nothing else goes:
  * the photo, name and followers stay in this browser's search state and are never sent back,
  * because the server shares what it stores with every user and takes those only from the provider.
  * Best effort: it never blocks the composer.
@@ -45,7 +49,7 @@ export async function selectHandle(row: HandleRow): Promise<void> {
   try {
     await request<unknown>("/handles/select", {
       method: "POST",
-      body: { handle: row.handle },
+      body: { handle: row.handle, platform: row.platform }, // undefined is dropped by JSON
     });
   } catch {
     // remembered-next-time is best effort

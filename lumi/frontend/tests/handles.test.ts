@@ -7,7 +7,7 @@ afterEach(() => {
   globalThis.fetch = realFetch;
 });
 
-test("selectHandle sends the handle and nothing the server could store as someone's photo or numbers", async () => {
+test("selectHandle sends the handle and its own network, and nothing the server could store as someone's photo or numbers", async () => {
   const seen: { url: string; body: unknown; method: string }[] = [];
   globalThis.fetch = (async (url: string, init: RequestInit) => {
     seen.push({ url: String(url), body: JSON.parse(String(init.body)), method: String(init.method) });
@@ -21,12 +21,23 @@ test("selectHandle sends the handle and nothing the server could store as someon
     display_name: "Andrej",
     avatar_url: "https://img.example/a.png",
     followers: 1200,
+    platform: "instagram",
     source: "live",
   });
   assert.equal(seen.length, 1);
   assert.equal(seen[0].method, "POST");
   assert.equal(new URL(seen[0].url).pathname.endsWith("/handles/select"), true);
-  assert.deepEqual(seen[0].body, { handle: "karpathy" });
+  assert.deepEqual(seen[0].body, { handle: "karpathy", platform: "instagram" });
+});
+
+test("a row without a platform sends the handle alone, never an invented network", async () => {
+  const bodies: unknown[] = [];
+  globalThis.fetch = (async (_url: string, init: RequestInit) => {
+    bodies.push(JSON.parse(String(init.body)));
+    return new Response("{}", { status: 200, headers: { "content-type": "application/json" } });
+  }) as typeof fetch;
+  await selectHandle({ handle: "karpathy" });
+  assert.deepEqual(bodies, [{ handle: "karpathy" }]);
 });
 
 test("selectHandle never throws when the server is down", async () => {

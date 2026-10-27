@@ -166,3 +166,22 @@ def test_a_handle_that_the_platform_refuses_is_not_remembered(api) -> None:
 def test_the_stored_case_is_the_normalized_name_not_the_callers() -> None:
     DjangoHandleStore().select("x", "KarPathy")
     assert stored().handle_display == "karpathy"
+
+
+def test_a_pick_on_another_network_is_created_on_that_network(api) -> None:
+    response = api.post(
+        SELECT, {"handle": "karpathy", "platform": "instagram"}, format="json"
+    )
+    assert response.json() == {
+        "remembered": True,
+        "handle": "karpathy",
+        "platform": "instagram",
+    }
+    assert stored(platform="instagram").origin == HandleOrigin.CACHE
+    assert not SocialHandle.objects.filter(platform="x").exists()
+
+
+def test_a_client_that_sends_no_platform_means_x_like_search_and_saved(api) -> None:
+    response = api.post(SELECT, {"handle": "karpathy"}, format="json")
+    assert response.json()["platform"] == "x"
+    assert SocialHandle.objects.get().platform == "x"
