@@ -16,7 +16,7 @@ Rama: `lumi-orquestador`. Registro de decisiones: `ARCHITECT-decisiones.tsv`.
 | Tarea | Estado | Nota |
 | --- | --- | --- |
 | T0 | hecha | |
-| T1 | esqueleto mínimo publicado | Solo andamiaje: paquete `config`, ajustes que leen `lumi/.env`, `manage.py`, `DATABASE_URL` obligatoria, sin SQLite. Faltan Docker, `dev_postgres.py`, `check_keys` y pytest (resto de T1). |
+| T1 | esqueleto publicado, resto en curso | Hecho: `manage.py`, `config/settings/{base,dev,test,prod}`, `apps/core/{env,keys,probes,startup,health}`, `scripts/dev_postgres.py`, `.env.example` por bloques, pytest con marcador `live`, 20 tests. Falta: Docker y compose, comando `check_keys`, `apps.accounts` (T3). `contrib.auth` queda fuera de `INSTALLED_APPS` hasta T3 para no crear tablas bajo un modelo de usuario que se reemplaza. |
 | T2 | `SCHEMA.md` publicado; `CONTRATOS.md` en curso | Esperan aprobación de INTELLIGENCE y CONNECT (`CONTRATO ARCHITECT ACEPTADO <sha>`). |
 | T3 a T12 | pendientes | |
 
@@ -35,3 +35,11 @@ Rama: `lumi-orquestador`. Registro de decisiones: `ARCHITECT-decisiones.tsv`.
 ## Matriz de paridad
 
 Pendiente (se llena antes de T12).
+
+## Notas del esqueleto
+
+| Tema | Detalle |
+| --- | --- |
+| Pytest y los tests legados | `lumi_pytest_env.py` elige `config.settings.test` solo si `DATABASE_URL` empieza por `postgres`. Los 418 tests legados siguen pasando con una URL SQLite ficticia (verificado). Con una URL Postgres corren los 418 más los de `apps/` (438 en total). Se borra en T12. |
+| `.env.example` | `DATABASE_URL` pasa al formato Django. El backend FastAPI viejo ya no arranca con esta plantilla; vale hasta T12 solo para los tests. |
+| Arranque | `manage.py` imprime un error limpio si falta `DATABASE_URL` o `SECRET_KEY`. `check_keys`, `help` y `version` corren con el entorno vacío. |

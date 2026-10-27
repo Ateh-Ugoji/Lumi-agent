@@ -21,3 +21,5 @@ memory.md
 *.log
 _purge_p16.py
 temp-agents.md
+.pgdata/
+staticfiles/

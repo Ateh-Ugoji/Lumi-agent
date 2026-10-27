@@ -12,3 +12,6 @@ ts	phase	decision	why	evidence	result
 2026-10-27T06:13:49Z	diseño	Nombres de modelos de INTELLIGENCE y CONNECT se mantienen como en sus planes	Evita renombrar; ARCHITECT solo fija FK, únicos y checks	SCHEMA.md 7 y 8	adoptado
 2026-10-27T06:13:49Z	diseño	voice_profiles.platform usa 'general' en vez de nulo	El único (profile,platform,version) con nulos permite duplicados	SCHEMA.md 7	propuesto a INTELLIGENCE
 2026-10-27T06:13:49Z	alcance	El orquestador pide esqueleto manage.py y variables nuevas en .env.example antes de CONTRATOS	CONNECT bloqueado (HEAD fdaeb53); push por piezas	mensaje del padre	se publica SCHEMA, luego esqueleto, luego CONTRATOS
+2026-10-27T06:19:40Z	T1	contrib.auth fuera de INSTALLED_APPS hasta T3	Evita crear auth_user en bases de los otros bots antes de fijar AUTH_USER_MODEL	config/settings/base.py	adoptado
+2026-10-27T06:19:40Z	T1	Plugin lumi_pytest_env elige settings de Django solo con DATABASE_URL de Postgres	No romper los 418 tests legados que corren con URL SQLite ficticia	438 passed con Postgres; 418 passed con sqlite+aiosqlite ficticia	adoptado hasta T12
+2026-10-27T06:19:40Z	T1	KeySpec con campos en inglés (name, variables, required, probe)	Regla del proyecto: identificadores en inglés; el plan usaba nombre, obligatoria, sonda	apps/core/keys.py	adoptado, avisar en CONTRATOS
