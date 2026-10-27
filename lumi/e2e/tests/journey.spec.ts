@@ -227,8 +227,11 @@ test("link a Facebook Page to a Facebook profile, replace it, and see it refused
 test("disconnect Facebook, then sign out and back in", async () => {
   await openSettings("Connected Accounts");
   const card = page.getByTestId("provider-meta");
-  await card.getByRole("button", { name: "Desconectar" }).first().click();
-  await card.getByRole("button", { name: "Desconectar" }).first().click().catch(() => {});
+  // The Pages from the link test are still connected: disconnect them one by one.
+  for (let i = 0; i < 6 && (await page.getByTestId("status-meta").textContent()) !== "Sin conectar"; i++) {
+    await card.getByRole("button", { name: "Desconectar" }).first().click();
+    await page.waitForTimeout(300);
+  }
   await expect(page.getByTestId("status-meta")).toHaveText("Sin conectar");
 
   await page.getByRole("button", { name: "Log out" }).click();
