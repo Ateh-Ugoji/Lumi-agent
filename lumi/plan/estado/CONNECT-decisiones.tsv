@@ -1,0 +1,8 @@
+ts	phase	decision	why	evidence	result
+2026-10-27T06:02:16Z	start	Arranque: clon en /workspace/lumi-connect, rama lumi-orquestador en b4d039a	plan T0	git log	listo
+2026-10-27T06:02:16Z	T0	Línea base legado con 5 variables ficticias	referencia de comportamiento antes de portar	uv run pytest -q en lumi/	418 passed en 4.8 s
+2026-10-27T06:02:16Z	T0	Edito lumi/docs/API_KEYS.md aunque el PLAN lo asigna al orquestador	Christian lo pidió explícitamente en el encargo; el borrador de /workspace/lumi-plan/docs es idéntico al del repo	encargo de Christian	se reporta al orquestador
+2026-10-27T06:08:16Z	T1	Reunir hechos con curl con UA corto (WebFetch falla en docs de Meta)	WebFetch devuelve error o timeout en developers.facebook.com	curl -A Mozilla/5.0 + Accept, sin barra final: HTTP 200	ok
+2026-10-27T06:08:16Z	T1	Declarar que Access Verification ya no se exige	La página oficial dice no longer required, research.md decía lo contrario	https://developers.facebook.com/docs/development/release/access-verification 2026-10-27	doc actualizado
+2026-10-27T06:08:16Z	T1	Marcar pasos de creación de app LinkedIn como sin verificar	La documentación oficial no detalla la consola; solo hay guías de terceros	búsqueda web, socialift.uz, docs.unified.to, inkling.host	marcado en API_KEYS.md
+2026-10-27T06:08:16Z	T1	Defaults propios: XPOZ_RUN_CREDIT_BUDGET=10, HANDLE_CACHE_TTL_MINUTES=60, LINKEDIN_API_VERSION=202609	El plan no fija valores; 202511 se retira 2026-11-16	CONEXIONES.md	documentado como decisión mía
