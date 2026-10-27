@@ -26,7 +26,7 @@ from django.utils import timezone
 
 from apps.core.choices import IngestSource
 from apps.core.fields import TokenDecryptError
-from apps.profiles.models import HandleOrigin, SocialHandle, SocialProfile
+from apps.profiles.models import HandleOrigin, Post, SocialHandle, SocialProfile
 from apps.profiles.services import InvalidHandle, get_or_create_handle
 
 from .clients.credits import CreditEntry
@@ -37,6 +37,7 @@ from .mcp.gateway import PendingWrite
 from .models import (
     HandleSearchCache,
     HandleSearchCacheEntry,
+    IngestPass,
     McpAuthAccount,
     McpPendingWrite,
     OAuthState,
@@ -45,6 +46,7 @@ from .models import (
     XpozCreditLedger,
 )
 from .oauth import OAuthStateRecord
+from .passes import StoredPost
 from .providers.base import PublishResult, TokenSet
 from .publishing import LedgerEntry, LedgerStatus, PublishInProgress
 
@@ -689,3 +691,65 @@ def save_google_tokens(user_id: int, tokens: TokenSet) -> None:
             "expires_at": tokens.expires_at,
         },
     )
+
+
+class DjangoPassStore:
+    """``PassStore`` over ``posts`` and ``ingest_passes``."""
+
+    async def last_complete_pass(self, handle_id: int, before):
+        return await sync_to_async(self._last_complete, thread_sensitive=True)(
+            handle_id, before
+        )
+
+    @staticmethod
+    def _last_complete(handle_id: int, before):
+        return (
+            IngestPass.objects.filter(
+                handle_id=handle_id, complete=True, started_at__lt=before
+            )
+            .order_by("-started_at")
+            .values_list("started_at", flat=True)
+            .first()
+        )
+
+    async def posts(self, handle_id: int) -> list[StoredPost]:
+        return await sync_to_async(self._posts, thread_sensitive=True)(handle_id)
+
+    @staticmethod
+    def _posts(handle_id: int) -> list[StoredPost]:
+        rows = Post.objects.filter(author_id=handle_id).values_list(
+            "id",
+            "platform_post_id",
+            "published_at",
+            "last_seen_at",
+            "is_deleted_suspect",
+        )
+        return [StoredPost(*row) for row in rows]
+
+    async def save_pass(
+        self, handle_id, *, started_at, source, complete, seen, flag, clear
+    ) -> None:
+        await sync_to_async(self._save, thread_sensitive=True)(
+            handle_id, started_at, source, complete, seen, flag, clear
+        )
+
+    @staticmethod
+    def _save(handle_id, started_at, source, complete, seen, flag, clear) -> None:
+        with transaction.atomic():
+            IngestPass.objects.update_or_create(
+                handle_id=handle_id,
+                started_at=started_at,
+                defaults={"source": source, "complete": complete},
+            )
+            if seen:
+                Post.objects.filter(author_id=handle_id, pk__in=seen).update(
+                    last_seen_at=started_at
+                )
+            if flag:
+                Post.objects.filter(author_id=handle_id, pk__in=flag).update(
+                    is_deleted_suspect=True
+                )
+            if clear:
+                Post.objects.filter(author_id=handle_id, pk__in=clear).update(
+                    is_deleted_suspect=False
+                )

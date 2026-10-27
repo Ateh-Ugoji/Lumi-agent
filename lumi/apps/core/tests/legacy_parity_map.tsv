@@ -80,5 +80,4 @@ test_profile_extract_fixes	milestone_bucket_.*|snapshot_skip_matrix	deviation	AR
 test_profile_extract_fixes	truncation_flag_is_sticky_on_refetch	deviation	ARCHITECT	apps/profiles/tests/test_parity.py::row_24	§11:24. La marca sigue a la última captura.
 test_profile_extract_fixes	rethread_.*	covered	ARCHITECT	apps/profiles/tests/test_services.py::rethread_numbers_by_publish_time_not_arrival	
 test_profile_extract_fixes	infer_timezone_.*|maybe_update_timezone_.*|user_confirmed_timezone_.*	covered	ARCHITECT	apps/profiles/tests/test_policy.py::timezone	Reglas puras en policy.py. Guardar la zona y confirmarla desde la API queda para el equipo que cree esa ruta.
-test_profile_extract_fixes	.*	gap	CONNECT		Lógica de la pasada (second_miss, pass_reached_window, finalize_ingest_pass): depende de profile.refresh, aún pendiente en CONNECT. Se portan las partes puras cuando exista.
 test_metrics	.*	covered	ARCHITECT	apps/profiles/tests/test_policy.py	Velocidad y picos de likes por hora en policy.py.

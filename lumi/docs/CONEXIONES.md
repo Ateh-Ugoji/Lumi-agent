@@ -354,3 +354,13 @@ Límite que sigue en pie: el "sí" lo interpreta el servidor sobre el siguiente 
 - `pictures(handles)`: `{handle en minúsculas: Picture}` solo para quien tiene foto. Nunca lanza.
 - Regla de ARCHITECT: `get_or_create_handle` solo rellena lo que está vacío y no baja el origen. Una foto ya guardada **no se sustituye** (ni por el camino en vivo de `/handles/search`, que antes sí la pisaba). Refrescar una foto vieja necesita un servicio de actualización en `apps.profiles` (pendiente de ARCHITECT).
 - Quien llama (`scan_trends`, `search_frameworks` de INTELLIGENCE) debe usar `remember_scanned`, `remember` y `pictures`; `lumi_ai/**` no es mío.
+
+## Pasadas de ingesta (borrados sospechosos)
+
+`apps/connections/passes.py` (puro) decide si un post desapareció. `DjangoPassStore` (en `stores.py`) lo guarda en la tabla `ingest_passes`.
+
+- `is_second_miss`: un post se marca como borrado sospechoso solo si faltó en dos pasadas COMPLETAS seguidas, estaba dentro de la ventana de 30 días (`DELETION_WINDOW`) y se había visto antes.
+- `pass_reached_window`: una pasada que no llegó hasta el borde de la ventana no cuenta como cobertura.
+- `finalize_pass`: aplica lo anterior, sella `last_seen_at` de lo visto y marca o limpia las banderas en una sola transacción. Una pasada interrumpida se registra pero nunca cuenta como pasada previa.
+- Diferencias con el legado: la pasada previa es la última COMPLETA (antes cualquiera), y un post marcado que reaparece se limpia.
+- Falta quien la llame: `OwnPostSync` y `profile.refresh` aún no existen (INTELLIGENCE.md líneas 29 y 42, `lumi_ai/ports.py`). Cuando existan deben llamar a `finalize_pass` con `DjangoPassStore`.

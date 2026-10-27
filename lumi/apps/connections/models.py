@@ -12,7 +12,7 @@ from django.db import models
 from django.db.models import Q
 from django.db.models.functions import Now
 
-from apps.core.choices import Platform
+from apps.core.choices import IngestSource, Platform
 from apps.core.fields import EncryptedTextField
 from apps.core.models import TimestampedModel
 from apps.profiles.models import SocialHandle, SocialProfile
@@ -328,3 +328,34 @@ class XpozCreditLedger(models.Model):
             )
         ]
         indexes = [models.Index(fields=["-created_at"], name="ix_xpoz_ledger_recent")]
+
+
+class IngestPass(models.Model):
+    """One read of an account's posts. The next pass uses the last complete one to tell a
+    post that missed twice from a post that missed once (``connections/passes.py``)."""
+
+    handle = models.ForeignKey(
+        SocialHandle, on_delete=models.CASCADE, related_name="ingest_passes"
+    )
+    started_at = models.DateTimeField()
+    source = models.CharField(max_length=12)
+    complete = models.BooleanField()
+    created_at = models.DateTimeField(db_default=Now(), editable=False)
+
+    class Meta:
+        db_table = "ingest_passes"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["handle", "started_at"], name="uq_ingest_pass_handle_start"
+            ),
+            models.CheckConstraint(
+                condition=_in("source", IngestSource), name="ck_ingest_pass_source"
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=["handle", "-started_at"],
+                condition=Q(complete=True),
+                name="ix_ingest_pass_complete",
+            )
+        ]

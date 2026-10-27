@@ -11,11 +11,11 @@ la misma conducta, no que sea equivalente línea a línea.
 
 | Estado | Tests legados | Parte |
 | --- | ---: | ---: |
-| covered | 356 | 84.4 % |
+| covered | 360 | 85.3 % |
 | replaced | 45 | 10.7 % |
 | deviation | 3 | 0.7 % |
 | retired | 10 | 2.4 % |
-| gap | 8 | 1.9 % |
+| gap | 4 | 0.9 % |
 | **Total** | **422** | 100 % |
 
 ## Por archivo legado
@@ -47,7 +47,7 @@ la misma conducta, no que sea equivalente línea a línea.
 | `test_peer_synthesize` | 8 | 8 | 0 | 0 | 0 | 0 |
 | `test_peer_winners` | 12 | 12 | 0 | 0 | 0 | 0 |
 | `test_post_filter` | 7 | 5 | 2 | 0 | 0 | 0 |
-| `test_profile_extract_fixes` | 27 | 20 | 0 | 3 | 0 | 4 |
+| `test_profile_extract_fixes` | 27 | 24 | 0 | 3 | 0 | 0 |
 | `test_prompt5_acceptance` | 8 | 8 | 0 | 0 | 0 | 0 |
 | `test_provider_fallback` | 10 | 10 | 0 | 0 | 0 | 0 |
 | `test_registry` | 4 | 4 | 0 | 0 | 0 | 0 |
@@ -64,13 +64,6 @@ la misma conducta, no que sea equivalente línea a línea.
 | `test_xpoz_resilience` | 6 | 6 | 0 | 0 | 0 | 0 |
 
 ## Huecos
-
-### CONNECT: 4 tests
-
-- `test_profile_extract_fixes::test_finalize_ingest_pass_two_miss_flow`: Lógica de la pasada (second_miss, pass_reached_window, finalize_ingest_pass): depende de profile.refresh, aún pendiente en CONNECT. Se portan las partes puras cuando exista.
-- `test_profile_extract_fixes::test_pass_reached_window`: Lógica de la pasada (second_miss, pass_reached_window, finalize_ingest_pass): depende de profile.refresh, aún pendiente en CONNECT. Se portan las partes puras cuando exista.
-- `test_profile_extract_fixes::test_second_miss_bracket_and_window_guards`: Lógica de la pasada (second_miss, pass_reached_window, finalize_ingest_pass): depende de profile.refresh, aún pendiente en CONNECT. Se portan las partes puras cuando exista.
-- `test_profile_extract_fixes::test_second_miss_requires_two_complete_misses`: Lógica de la pasada (second_miss, pass_reached_window, finalize_ingest_pass): depende de profile.refresh, aún pendiente en CONNECT. Se portan las partes puras cuando exista.
 
 ### INTELLIGENCE: 4 tests
 
