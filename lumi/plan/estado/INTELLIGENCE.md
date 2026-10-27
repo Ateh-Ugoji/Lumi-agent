@@ -15,9 +15,10 @@ Rama: `lumi-orquestador`. Última actualización: 2026-10-27 (T3 hecho salvo Dja
 | T2 Proveedores | hecha | `lumi_ai/providers/{chain,factory,audio,errors,urls}.py`, `lumi_ai/observability.py`, `lumi_ai/keys.py` (`build_probes(config)`: groq, openrouter, openlux, jev, neatlogs, video). `uv run pytest lumi_ai -q`: 64 pasan, 0 se omiten. Las sondas no se ejecutaron contra proveedores reales (sin keys). |
 | T3 Loop y tools | hecho (a falta del pegamento Django, T4) | `agent/{context,gates,turn_class,prompts,loop,streaming,support,result}.py`, `judge/` (Jev → LLM pequeño), `tools/` (registry sin estado global + 12 tools con puerto). El bucle recibe todo por `AgentDeps` (LLMChain, ToolRegistry, ChatStore, ProfileGateway, Clock, MemoryStore, TurnLogStore, SemanticJudge, McpGateway, MemoryExtractor); no hay estado de módulo. Las tools de memoria, competidores, voz-extracción, repurpose y tendencias se registran en T5-T8 (traen su servicio). `uv run pytest lumi_ai -q`: 197 pasan, 0 se omiten. |
 | T4 Pegamento Django | bloqueada por T4/T5 de ARCHITECT | |
-| T5-T12 | pendientes | |
+| T5 Perfil de estilo | hecho salvo repos Django (T4) | `style/{schema,extract,service,questions,tools}.py`: JSON robusto con `extract_json` + pydantic + un reintento de reparación; voz por plataforma; arranque en frío con `STYLE_QUESTIONS` (`source=questions`, nunca pisa una voz de posts); tool `extract_voice_profile`. La transacción con `select_for_update` y el mapeo `None` ↔ `general` son del repo Django (T4). `uv run pytest lumi_ai -q`: 217 pasan. |
+| T6-T12 | pendientes | |
 
-## Puertos publicados (`lumi_ai/ports.py`, `PORTS_VERSION = "1.2"`)
+## Puertos publicados (`lumi_ai/ports.py`, `PORTS_VERSION = "1.3"` (1.3: `AttemptIn.is_fallback`, `EvaluationRecord.attempt_id` obligatorio por palabra clave))
 
 - Para implementar por CONNECT: `SocialData`, `McpGateway`, `ConnectionLinks`, `OwnPostSync` (1.2, la tool `backfill_posts` solo la dispara) (más los errores `SocialDataError`, `BudgetExceeded`, `ProviderUnavailable`, `RateLimited`, `ProviderAuthError`, `LiveDisabled`, `UnsupportedPlatform`).
 - Para implementar por INTELLIGENCE sobre el ORM: `ProfileStore`, `PostStore`, `PeerPostStore`, `VoiceStore`, `ReportStore`, `MemoryStore`, `ChatStore`, `TurnLogStore`, `RepurposeStore`, `RequestStore`, `ListeningStore`, `EvalStore`.
@@ -56,3 +57,10 @@ Observaciones (A = las resuelvo yo añadiendo columnas en `apps/intelligence`, B
 ## Bloqueos
 
 Ninguno por ahora.
+
+## Revisión de SCHEMA v2 (27 oct, tras `46d1674`)
+
+- Aceptado sin cambios: `Platform` de 5 valores (coincide con `lumi_ai.ports.Platform`, no hace falta ensanchar nada), `listening_keywords`, `niche_preferences` con hijas, `attempt_id` obligatorio, `is_fallback`.
+- `voice_profiles.platform = 'general'` en BD y `None` en el puerto: el repo traduce en ambos sentidos.
+- `voice_profiles.model` y `prompt_version`: `VoiceStore.save_voice` no los recibe. `lumi_ai` los entrega en `payload["extraction"]`; el repo debe copiarlos a las columnas. Si ARCHITECT prefiere argumentos explícitos pido puertos 1.4.
+- `CONTRATOS.md` no ha llegado (ni en `origin/lumi-orquestador` ni en el árbol). No escribo `CONTRATO ARCHITECT ACEPTADO` todavía. Lo que necesito de él: firmas de servicio de `apps.profiles.services` y `apps.intelligence` que implementan los puertos, error de `save_voice` concurrente, y el mapeo de `PostOut.is_deleted_suspect`/`text_truncated` a columnas.
