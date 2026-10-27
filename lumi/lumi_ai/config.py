@@ -55,6 +55,18 @@ class AIConfig:
     voice_corpus_limit: int = 200  # newest posts considered before sampling
     voice_reply_samples: int = 10
 
+    # --- RAG / memory (legacy memory.py, voice_corpus.py) ---
+    rag_reindex_limit: int = 5000  # posts per profile and collection a reindex reads
+    memory_note_max_chars: int = 500
+    memory_decay_days: int = (
+        90  # notes not recalled or created for this long are dropped
+    )
+    memory_max_distance: float = (
+        0.85  # cosine; farther memories are not offered (uncalibrated)
+    )
+    memory_max_per_turn: int = 8  # facts the extractor may store from one turn
+    memory_summary_max_chars: int = 2000
+
     # --- providers ---
     provider_cooldown_seconds: float = (
         300.0  # after a 401/402/403/429 a candidate rests this long

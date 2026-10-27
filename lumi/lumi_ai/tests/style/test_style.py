@@ -196,6 +196,9 @@ async def test_refresh_saves_a_posts_voice_with_example_ids_and_replies():
     assert result.status == "created"
     saved = store.saved[0]
     assert saved.source == "posts" and saved.platform is None
+    assert store.columns == [
+        ("fake-model", "voice-v2")
+    ]  # the model and prompt_version columns
     assert set(saved.example_post_ids) == {1, 2, 3, 4, 5, 6}
     prompt = llm.seen[0][1]["content"]
     assert (

@@ -150,7 +150,7 @@ def test_ai_config_from_mapping() -> None:
 def test_ports_1_3_is_additive_for_attempts_and_requires_attempt_id():
     from lumi_ai import ports
 
-    assert ports.PORTS_VERSION == "1.3"
+    assert tuple(map(int, ports.PORTS_VERSION.split("."))) >= (1, 3)
     old = ports.AttemptIn("x", "text", 1, True)  # a 1.2 call site still works
     assert old.is_fallback is False
     assert ports.AttemptIn("x", "text", 1, True, is_fallback=True).is_fallback is True

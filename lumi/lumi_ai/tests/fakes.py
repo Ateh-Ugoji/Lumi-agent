@@ -16,6 +16,8 @@ from lumi_ai.ports import (
     McpCallResult,
     McpPendingResolution,
     McpToolSpec,
+    MemoryNoteOut,
+    PeerPostOut,
     PostMetrics,
     PostOut,
     StyleAnswerIn,
@@ -150,6 +152,7 @@ class FakeVoice:
         self.answers: list[StyleAnswerIn] = []
         self.current = None
         self.saved: list[VoiceProfileOut] = []
+        self.columns: list[tuple[str, str]] = []
 
     async def current_voice(self, profile_id, platform=None):
         for voice in reversed(self.saved):
@@ -157,7 +160,18 @@ class FakeVoice:
                 return voice
         return self.current if platform is None else None
 
-    async def save_voice(self, profile_id, platform, payload, source, example_post_ids):
+    async def save_voice(
+        self,
+        profile_id,
+        platform,
+        payload,
+        source,
+        example_post_ids,
+        *,
+        model="",
+        prompt_version="",
+    ):
+        self.columns.append((model, prompt_version))
         version = len(self.saved) + 1
         voice = VoiceProfileOut(
             id=version,
@@ -241,3 +255,88 @@ class FakeMcp:
 
     async def resolve_pending(self, profile_id, user_message):
         return self.pending
+
+
+class FakeMemory:
+    """Notes plus a rolling summary, in memory."""
+
+    def __init__(self) -> None:
+        self.notes: dict[int, MemoryNoteOut] = {}
+        self.summary: dict[int, str] = {}
+        self.touched: list[int] = []
+        self.last_access: dict[int, datetime] = {}
+
+    async def add_note(self, profile_id, text, kind="fact"):
+        for note in self.notes.values():
+            if note.profile_id == profile_id and note.text == text:
+                return note, False
+        note = MemoryNoteOut(len(self.notes) + 1, profile_id, text, kind, NOW)
+        self.notes[note.id] = note
+        self.last_access[note.id] = NOW
+        return note, True
+
+    async def get_notes(self, ids):
+        return [self.notes[i] for i in ids if i in self.notes]
+
+    async def touch_notes(self, ids):
+        self.touched.extend(ids)
+
+    async def list_notes(self, profile_id, *, limit=100):
+        rows = [n for n in self.notes.values() if n.profile_id == profile_id]
+        return rows[-limit:][::-1]
+
+    async def delete_notes_older_than(self, profile_id, cutoff):
+        gone = [
+            i
+            for i, n in self.notes.items()
+            if n.profile_id == profile_id and self.last_access[i] < cutoff
+        ]
+        for i in gone:
+            del self.notes[i]
+        return gone
+
+    async def get_summary(self, profile_id):
+        return self.summary.get(profile_id, "")
+
+    async def set_summary(self, profile_id, text):
+        self.summary[profile_id] = text
+
+
+def make_peer(
+    pid: int,
+    text: str,
+    *,
+    profile_id: int = 1,
+    platform: str = "x",
+    niche_key: str | None = "ai:global",
+) -> PeerPostOut:
+    return PeerPostOut(
+        id=pid,
+        profile_id=profile_id,
+        platform=platform,  # type: ignore[arg-type]
+        external_id=f"peer{pid}",
+        author_handle="rival",
+        text=text,
+        published_at=NOW,
+        url=None,
+        metrics=PostMetrics(),
+        media=(),
+        niche_key=niche_key,
+    )
+
+
+class FakePeers:
+    def __init__(self, rows: list[PeerPostOut] | None = None) -> None:
+        self.rows = rows or []
+
+    async def save_peer_posts(self, profile_id, posts):
+        raise NotImplementedError
+
+    async def get_peer_posts(self, ids):
+        return [r for r in self.rows if r.id in set(ids)]
+
+    async def list_peer_posts(self, profile_id, *, niche_key=None, limit=200):
+        rows = [r for r in self.rows if r.profile_id == profile_id]
+        if niche_key:
+            rows = [r for r in rows if r.niche_key == niche_key]
+        return rows[:limit]

@@ -109,7 +109,12 @@ class StyleService:
             log.warning("voice extraction failed for profile %s: %s", profile_id, exc)
             return VoiceRefresh("failed", reason=str(exc), posts_found=len(posts))
         saved = await self._voice.save_voice(
-            profile_id, platform, payload, "posts", [p.id for p in sample]
+            profile_id,
+            platform,
+            payload,
+            "posts",
+            [p.id for p in sample],
+            **_extraction_columns(payload),
         )
         return VoiceRefresh("created", saved, posts_found=len(posts))
 
@@ -133,7 +138,9 @@ class StyleService:
         except Exception as exc:  # noqa: BLE001
             log.warning("voice from answers failed for profile %s: %s", profile_id, exc)
             return VoiceRefresh("failed", reason=str(exc))
-        saved = await self._voice.save_voice(profile_id, None, payload, "questions", [])
+        saved = await self._voice.save_voice(
+            profile_id, None, payload, "questions", [], **_extraction_columns(payload)
+        )
         return VoiceRefresh("created", saved)
 
     async def ensure_voice(self, profile_id: int) -> VoiceRefresh:
@@ -149,3 +156,12 @@ class StyleService:
                 posts_found=refreshed.posts_found,
             )
         return cold
+
+
+def _extraction_columns(payload: dict) -> dict[str, str]:
+    """The ``model`` and ``prompt_version`` columns, read from the payload's ``extraction`` block."""
+    meta = payload.get("extraction") or {}
+    return {
+        "model": str(meta.get("model") or ""),
+        "prompt_version": str(meta.get("prompt_version") or ""),
+    }

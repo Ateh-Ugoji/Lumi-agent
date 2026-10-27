@@ -38,7 +38,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Literal, Protocol, get_args, runtime_checkable
 
-PORTS_VERSION = "1.3"  # 1.1: SemanticJudge, 1.2: OwnPostSync, 1.3: AttemptIn.is_fallback, EvaluationRecord.attempt_id required
+PORTS_VERSION = "1.4"  # 1.1: SemanticJudge, 1.2: OwnPostSync, 1.3: AttemptIn.is_fallback, EvaluationRecord.attempt_id required
 
 # ---------------------------------------------------------------------------
 # Shared vocabulary
@@ -518,8 +518,14 @@ class VoiceStore(Protocol):
         payload: Mapping[str, Any],
         source: Literal["posts", "questions"],
         example_post_ids: Sequence[int],
+        *,
+        model: str = "",
+        prompt_version: str = "",
     ) -> VoiceProfileOut:
-        """Store a new version and make it the only current one, in one transaction."""
+        """Store a new version and make it the only current one, in one transaction.
+
+        ``model`` and ``prompt_version`` fill the columns of the same name (1.4).
+        """
         ...
 
     async def save_style_answers(
@@ -656,6 +662,10 @@ class MemoryStore(Protocol):
 
     async def get_notes(self, ids: Sequence[int]) -> list[MemoryNoteOut]:
         """Return the notes with these ids (the texts behind ``memory:<id>`` vectors)."""
+        ...
+
+    async def touch_notes(self, ids: Sequence[int]) -> None:
+        """Record a recall: bump ``access_count`` and ``last_accessed_at`` so decay spares used notes (1.4)."""
         ...
 
     async def list_notes(
