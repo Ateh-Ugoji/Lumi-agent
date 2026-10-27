@@ -63,7 +63,7 @@ Del orquestador (cambia lo que decía el borrador anterior):
 13. **Una sola rama compartida: `lumi-orquestador`** (antes: una rama por bot). Christian lo pidió el 2026-10-27 ("creas 1 solo branch y ahí comiteas todo"). Cada bot commitea en su ámbito de archivos en cada cambio importante y como mínimo cada hora, con `git pull --rebase origin lumi-orquestador` antes de cada push. Nunca `push --force`, nunca merge a `main`, nunca deploy. Al final, el orquestador abre un solo Draft PR de `lumi-orquestador` a `main`.
 14. Los ámbitos de archivos no se solapan (secciones 2 de cada PLAN); los contratos entre bots son `docs/SCHEMA.md` y `docs/CONTRATOS.md` (ARCHITECT) y `lumi_ai/ports.py` (INTELLIGENCE). El contrato se aprueba con la línea `CONTRATO ARCHITECT ACEPTADO <sha>` en el estado de cada bot.
 15. El código FastAPI solo se borra cuando exista la matriz de paridad completa (T12 de ARCHITECT).
-16. Política de keys. Obligatorias: `DATABASE_URL`, `SECRET_KEY`, `TOKEN_ENCRYPTION_KEY` (Fernet), `GROQ_API_KEY`, `OPENROUTER_API_KEY`. Opcionales con aviso al arrancar: `TYPESAFE_API_KEY`, `NEATLOGS_API_KEY` (pasa de obligatoria a opcional), `PFM_JWT_TOKEN`, `XPOZ_API_KEY`, `XPOZ_API_KEY_2`, `OPENLUX_*`, `CHROMA_*`, `META_APP_ID/SECRET`, `LINKEDIN_CLIENT_ID/SECRET`, `X_CLIENT_ID/SECRET`, `X_LIVE_ENABLED` (false), `VIDEO_PROVIDER` y `VIDEO_API_KEY`, `GOOGLE_OAUTH_*`, `MCP_*`, `PUBLIC_BASE_URL`, `FRONTEND_URL`. Detalle en `lumi/docs/API_KEYS.md`. Solo se nombran variables; nunca valores.
+16. Política de keys. Obligatorias: `DATABASE_URL`, `SECRET_KEY`, `TOKEN_ENCRYPTION_KEY` (Fernet), `GROQ_API_KEY`. Opcionales con aviso al arrancar: `OPENROUTER_API_KEY` (respaldo), `TYPESAFE_API_KEY`, `NEATLOGS_API_KEY` (pasa de obligatoria a opcional), `PFM_JWT_TOKEN`, `XPOZ_API_KEY`, `XPOZ_API_KEY_2`, `OPENLUX_*`, `CHROMA_*`, `META_APP_ID/SECRET`, `LINKEDIN_CLIENT_ID/SECRET`, `X_CLIENT_ID/SECRET`, `X_LIVE_ENABLED` (false), `VIDEO_PROVIDER` y `VIDEO_API_KEY`, `GOOGLE_OAUTH_*`, `MCP_*`, `PUBLIC_BASE_URL`, `FRONTEND_URL`. Detalle en `lumi/docs/API_KEYS.md`. Solo se nombran variables; nunca valores.
 17. El agente nunca publica solo: publicar es una acción del usuario confirmada en la interfaz y pasa por los adaptadores de CONNECT.
 
 ## 4. Equipo
@@ -123,7 +123,7 @@ Cada tarea: responsable, entregable y cómo se verifica. Los detalles y rutas es
 ### Bloqueos que solo puede resolver Christian
 
 - [ ] **Dar la señal para reactivar los bots.** Los bots no se reactivan solos.
-- [ ] **Conseguir las keys** y pegarlas en `lumi/.env` (nombres y pasos en `lumi/docs/API_KEYS.md`): `GROQ_API_KEY` y `OPENROUTER_API_KEY` (obligatorias para probar la IA; OpenRouter pide saldo: con saldo 0 responde 402), `TYPESAFE_API_KEY`, `NEATLOGS_API_KEY`, `PFM_JWT_TOKEN` (el anterior venció), `XPOZ_API_KEY`. Generar `SECRET_KEY` y `TOKEN_ENCRYPTION_KEY` (la guía trae el comando). Rotar cualquier key que haya estado expuesta.
+- [ ] **Conseguir las keys** y pegarlas en `lumi/.env` (nombres y pasos en `lumi/docs/API_KEYS.md`): `GROQ_API_KEY` (obligatoria para probar la IA) y `OPENROUTER_API_KEY` (opcional, de respaldo; pide saldo: con saldo 0 responde 402), `TYPESAFE_API_KEY`, `NEATLOGS_API_KEY`, `PFM_JWT_TOKEN` (el anterior venció), `XPOZ_API_KEY`. Generar `SECRET_KEY` y `TOKEN_ENCRYPTION_KEY` (la guía trae el comando). Rotar cualquier key que haya estado expuesta.
 - [ ] **Meta**: crear la app de desarrollador (modo Development), poner `META_APP_ID/SECRET`; para publicar a terceros hace falta App Review y Business Verification.
 - [ ] **LinkedIn**: crear la app y activar el producto de autoservicio con `w_member_social`; la Community Management API (páginas de empresa) hay que solicitarla.
 - [ ] **X**: decidir si se prueba en vivo (cuesta créditos prepagados). Por defecto no; `X_LIVE_ENABLED=false`.
@@ -232,3 +232,12 @@ El orquestador eligió (c) mientras Christian decide. Entretanto, ARCHITECT comp
 - Timeout de tools corregido (`761185f`): CancelToken + `@aio` con `atomic()` y una compuerta antes del commit que revierte si se canceló. Hay test con base real. Sin cubrir: escrituras anteriores dentro de la misma tool, llamadas externas y Chroma (se repara con `reindex_vectors`).
 - Pendientes de otros. CONNECT: OwnPostSync, ConnectionLinks y que sus escrituras usen `@aio`. ARCHITECT: `.gitignore`, `.env.example` de video, el arranque ASGI sin key y su test de `legacy_import`.
 - INTELLIGENCE espera las keys y las 4 decisiones de Christian.
+
+## Estado 27 oct, 08:10 UTC
+- **ARCHITECT** (`17e7d0c`): 1486 tests pasan y 3 se saltan (live). `apps.intelligence.urls` montado, SSE declarado, `post_media.kind` nullable, esquema legado congelado en un fixture, ruta `POST /connections/{provider}/link` en el contrato, códigos de error `<dominio>.<motivo>` vigilados por un test, y causa del test intermitente de `claim_due_polls` arreglada. Paridad con los 418 tests legados: 349 cubiertos, 45 reemplazados, 3 desvíos y 21 sin cubrir (11 de INTELLIGENCE, 10 de CONNECT, ya avisados). `lumi/app/` sigue intacto.
+- **Orquestador**: confirmó las filas 24 (`text_truncated` sigue a la última captura) y 25 (solo se guarda una captura cuando cambia alguna métrica, siempre que quede registrada la hora de la última comprobación). `OPENROUTER_API_KEY` pasa a opcional en `API_KEYS.md`, `AGENT_KEYS_SETUP.md` y este archivo; `chat_unavailable` pasa a `chat.unavailable`. `AGENTS.md` no se toca: describe el app legado, donde OpenRouter sí es obligatoria.
+- **CONNECT**, revisión de seguridad sobre `9bc2ac6`: sin críticos. Hay 3 altos que está arreglando:
+  1. El `state` de OAuth no está atado a la sesión del navegador, así que alguien podría quedarse con la cuenta social de otra persona enviándole un enlace de conexión.
+  2. Secretos de Meta en los logs de httpx a nivel INFO.
+  3. El presupuesto de Xpoz se reinicia en cada request.
+  Además hay 4 medios: la sincronización de PFM se fía de PFM y usa un `external_id` adivinable, un token ilegible bloquea el refresh, la confirmación de escrituras MCP va por lista negra y `?say=` dispara prompts. El arreglo del punto 1 cambia CONTRATOS §11 y lo coordina con ARCHITECT.

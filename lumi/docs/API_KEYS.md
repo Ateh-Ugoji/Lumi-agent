@@ -23,7 +23,6 @@ PostgreSQL es el único motor y `DATABASE_URL` es obligatoria. No hay SQLite (sa
 | `SECRET_KEY` | real | Firma de sesiones y tokens de Django. Mínimo 32 caracteres (lo comprueba `check_keys`) | `python -c "import secrets; print(secrets.token_urlsafe(50))"` |
 | `TOKEN_ENCRYPTION_KEY` | real | Clave Fernet que cifra en Postgres los tokens OAuth de redes y de Google | `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"` |
 | `GROQ_API_KEY` | real | Modelo de lenguaje principal (`openai/gpt-oss-120b`, con `openai/gpt-oss-20b` para turnos simples) y voz a texto (Whisper) | https://console.groq.com/keys |
-| `OPENROUTER_API_KEY` | real | Modelo de respaldo cuando Groq falla o se agota (hoy `meta-llama/llama-3.3-70b-instruct`) | https://openrouter.ai/keys |
 
 ## Recomendadas (opcionales, con aviso al arrancar)
 
@@ -33,6 +32,7 @@ Son opcionales: sin ellas Lumi funciona, con menos calidad de evaluación y sin 
 | --- | --- | --- | --- |
 | `TYPESAFE_API_KEY` | real | El juez Jev (clasificación de turnos, dificultad de reescritura, fidelidad). Cae a un modelo pequeño de Groq y, si tampoco hay, a reglas deterministas | TypeSafe AI |
 | `NEATLOGS_API_KEY` | real | Trazas de llamadas al modelo y del loop del agente | neatlogs |
+| `OPENROUTER_API_KEY` | real | El respaldo cuando Groq falla o se agota (hoy `meta-llama/llama-3.3-70b-instruct`). Pide saldo: con saldo 0 responde 402 | https://openrouter.ai/keys |
 
 ## Datos y redes sociales (opcionales)
 
@@ -231,7 +231,7 @@ uv run python manage.py runserver
 ## Variables de configuración que no son keys (actualizado 07:15 UTC)
 | Variable | Por defecto | Para qué sirve |
 |---|---|---|
-| `LUMI_CHAT_RUNTIME` | `apps.intelligence.runtime` | Módulo de IA que atiende `/chat` y `/chat/stream`. Si no existe, el chat responde `503 chat_unavailable`. |
+| `LUMI_CHAT_RUNTIME` | `apps.intelligence.runtime` | Módulo de IA que atiende `/chat` y `/chat/stream`. Si no existe, el chat responde `503 chat.unavailable`. |
 | `LUMI_JOB_DISPATCH` | `none` | `none` deja los trabajos en cola para un worker; `eager` los ejecuta en la misma petición (solo en desarrollo). |
 
 Para entrar a `/admin/` primero crea un superusuario: `uv run python manage.py createsuperuser`.
