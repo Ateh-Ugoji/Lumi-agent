@@ -11,8 +11,13 @@ from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager
 from typing import Any
 
+import httpx
+
+from ..http import HostNotAllowed
 from .connectors import MCPConnector
 from .gateway import McpSession, RemoteResult, RemoteTool
+
+MCP_HOSTS = frozenset({"drivemcp.googleapis.com", "docsmcp.googleapis.com"})
 
 
 class _SdkSession:
@@ -51,8 +56,31 @@ class _SdkSession:
 
 
 class SdkMcpTransport:
-    def __init__(self, *, timeout_seconds: float = 30.0) -> None:
+    """Opens one session per call, and only toward a host that was allowed up front.
+
+    The bearer token goes out on every request, so the destination is checked before the
+    first byte: HTTPS only and an exact host match, like ``ProviderHttp``. Tests that talk
+    to a loopback server inject ``allowed_hosts`` and ``allow_http``.
+    """
+
+    def __init__(
+        self,
+        *,
+        timeout_seconds: float = 30.0,
+        allowed_hosts: frozenset[str] = MCP_HOSTS,
+        allow_http: bool = False,
+    ) -> None:
         self._timeout = timeout_seconds
+        self._hosts = allowed_hosts
+        self._allow_http = allow_http
+
+    def _check(self, url: str) -> None:
+        parsed = httpx.URL(url)
+        secure = parsed.scheme == "https" or (
+            self._allow_http and parsed.scheme == "http"
+        )
+        if not secure or parsed.host not in self._hosts:
+            raise HostNotAllowed("host not allowed for google mcp", provider="google")
 
     @asynccontextmanager
     async def open(
@@ -62,6 +90,7 @@ class SdkMcpTransport:
         from mcp import ClientSession
         from mcp.client.streamable_http import streamable_http_client
 
+        self._check(connector.url)
         async with (
             httpx2.AsyncClient(
                 headers={"Authorization": f"Bearer {access_token}"},

@@ -11,6 +11,7 @@ import pytest
 import uvicorn
 from mcp.server.mcpserver import MCPServer
 
+from apps.connections.http import HostNotAllowed
 from apps.connections.mcp import connectors
 from apps.connections.mcp import gateway as gateway_module
 from apps.connections.mcp.connectors import MCPConnector
@@ -22,12 +23,9 @@ from .fakes import build
 SEEN_AUTH: list[str] = []
 
 
-class SdkMcpTransport(_SdkMcpTransport):
-    """The real transport, but it refuses any host that is not loopback."""
-
-    def open(self, connector: MCPConnector, access_token: str):
-        assert connector.url.startswith("http://127.0.0.1:"), connector.url
-        return super().open(connector, access_token)
+def SdkMcpTransport() -> _SdkMcpTransport:
+    """The real transport, allowed to reach loopback over plain HTTP and nothing else."""
+    return _SdkMcpTransport(allowed_hosts=frozenset({"127.0.0.1"}), allow_http=True)
 
 
 def make_app():
@@ -118,3 +116,30 @@ async def test_the_whole_gateway_over_the_real_transport(server_url, monkeypatch
     assert parked.status == "confirmation_required"
     done = await real.resolve_pending(1, "yes")
     assert done is not None and done.result["content"] == "created:T"
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://evil.example.com/mcp",
+        "https://drivemcp.googleapis.com.evil.example.com/mcp",
+        "https://drivemcp.googleapis.com@evil.example.com/mcp",
+        "https://evildrivemcp.googleapis.com/mcp",
+        "http://drivemcp.googleapis.com/mcp/v1",  # right host, no TLS
+        "https://127.0.0.1:9/mcp",  # loopback is not in the production allow-list
+    ],
+)
+async def test_the_default_transport_refuses_other_hosts_before_any_request(url):
+    with pytest.raises(HostNotAllowed):
+        async with _SdkMcpTransport().open(
+            MCPConnector(name="gdrive", url=url), "AT-FAKE"
+        ):
+            pytest.fail("a session must not open")
+
+
+def test_the_default_allow_list_is_exactly_the_hosts_of_the_known_connectors():
+    from urllib.parse import urlparse
+
+    from apps.connections.mcp.transport import MCP_HOSTS
+
+    assert MCP_HOSTS == {urlparse(c.url).hostname for c in connectors.CONNECTORS}
