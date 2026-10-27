@@ -146,6 +146,18 @@ Un enlace en el texto cuesta trece veces más que un post sin enlace. Antes de p
 
 Con 500 créditos y 2 por consulta de X caben 250 consultas por key. El plan del orquestador cuenta unas 125 con la key 1, porque parte de los créditos ya se usó. Por eso `XPOZ_LIVE_ENABLED=false` y `XPOZ_RUN_CREDIT_BUDGET` frenan el gasto. `getAccountDetails` es gratis y sirve para leer el saldo antes de cada ejecución.
 
+## Dónde viven las credenciales de la app
+
+**Un solo origen: el entorno.** Las credenciales de la aplicación (`META_APP_ID`, `META_APP_SECRET`, `LINKEDIN_CLIENT_ID`, `X_CLIENT_SECRET`, `PFM_JWT_TOKEN`, `XPOZ_API_KEY`, etc.) se leen de variables de entorno: `lumi/.env` en local y el panel de Railway en producción. El código las toma con `ConnectionsConfig.from_env(os.environ)` y `REQUIRED_ENV` (`apps/connections/accounts.py`). La lista por red está en `docs/API_KEYS.md`, sección "Qué variables necesita cada red social".
+
+**Decisión del 27 de octubre de 2026 (del equipo): no hay tabla de credenciales en la base.** Se construyeron `services` y `service_credentials` (migración `connections.0010`) con una API para personal, y se revirtieron el mismo día (`b5c5972` y `f1ada2c` revierten a `a51e540` y `bc28126`). Nota técnica: una copia de las claves en la base amplía lo que se filtra si alguien se lleva la base junto con la `TOKEN_ENCRYPTION_KEY`; con el `.env` y Railway esa copia no existe. Antes de revertir se comprobó que la base de desarrollo tenía 0 credenciales guardadas, y la migración inversa quitó las dos tablas.
+
+Qué sí vive en la base, cifrado con `TOKEN_ENCRYPTION_KEY`: los tokens **de cada usuario** (`connected_accounts`, `mcp_auth_accounts`) y el verificador PKCE de `oauth_states`. Eso no cambia.
+
+Cómo se cambia una clave: editar `lumi/.env` (o la variable en Railway) y reiniciar el backend. Para comprobar: `uv run python manage.py check_keys --only <proveedor>`.
+
+Si algún día se quiere volver a guardar credenciales en la base, el diseño descartado está en la historia de git (`bc28126` y `a51e540`) y en la fila de `plan/decisions.tsv` del 27 de octubre. No se retoma sin el visto bueno explícito del equipo.
+
 ## Diferencias con `research.md`
 
 - Meta. La página de Pages API dice que `GET /{user-id}/accounts` con un token de usuario de corta duración devuelve un token de página de corta duración. El token de página sin caducidad solo sale de un token de usuario de larga duración. `research.md` lo daba por sentado. El adaptador canjea primero el token de usuario.

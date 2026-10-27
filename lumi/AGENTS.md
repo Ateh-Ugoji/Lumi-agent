@@ -24,6 +24,7 @@ Unless the user explicitly says "don't plan" for a given task:
 
 - **Never write real values of environment variables into any markdown/doc/code file.** Not in this file, not in `.agents/`, not in `docs/`, not in tests.
 - Real keys live **only** in `.env` locally (gitignored) and the Railway dashboard for prod.
+- **App-level credentials of the social networks (Meta, LinkedIn, X, Post for Me, Google, Xpoz) live ONLY in the environment** (`.env` locally, the Railway dashboard in prod). There is no database table for them: one was built and reverted on 2026-10-27 by team decision. Do not add one without an explicit OK from the team. Per-user OAuth tokens are a different thing and stay encrypted in `connected_accounts` and `mcp_auth_accounts`. Details: `docs/CONEXIONES.md`, section "Dónde viven las credenciales de la app".
 - Docs may reference env var **names** only (`DATABASE_URL`, `PFM_JWT_TOKEN`, `GROQ_API_KEY`, `OPENROUTER_API_KEY`, `TYPESAFE_API_KEY`, `NEATLOGS_API_KEY`, `SECRET_KEY`, `XPOZ_API_KEY`).
 - Do not paste tokens, JWTs, connection strings, or account credentials into chat output either — reference the var name instead.
 

@@ -15,6 +15,8 @@ PostgreSQL es el único motor y `DATABASE_URL` es obligatoria. No hay SQLite (sa
 
 > **Aviso (27 oct 2026):** el token de Post for Me (`PFM_JWT_TOKEN`) está vencido (401) y hay que renovarlo. Xpoz casi no tiene créditos: no actives `XPOZ_LIVE_ENABLED` sin recargar o usar `XPOZ_API_KEY_2`.
 
+> **Dónde viven estas claves.** Solo en el entorno: `lumi/.env` en local y el panel de Railway en producción. No hay una tabla de credenciales en la base. Se construyó y se revirtió el 27 de octubre de 2026 por decisión del equipo. Detalle en `docs/CONEXIONES.md`, sección "Dónde viven las credenciales de la app".
+
 ## Obligatorias (sin ellas no arranca)
 
 | Variable | Estado | Para qué sirve | Dónde se obtiene |
@@ -52,6 +54,22 @@ Son opcionales: sin ellas Lumi funciona, con menos calidad de evaluación y sin 
 | `TOKEN_ENCRYPTION_KEY_PREVIOUS` | real | Clave Fernet anterior, solo mientras se rota `TOKEN_ENCRYPTION_KEY`. Vacía en el uso normal | no es una key |
 | `LINKEDIN_API_VERSION`, `META_GRAPH_VERSION` | real | Versiones de API que usan los adaptadores. Por defecto `202609` y `v26.0` | no son keys |
 | `FRONTEND_URL` | real | URL del frontend, por defecto `http://localhost:3010`. Todas las redirect URIs de OAuth salen de ella: el proveedor vuelve a una página del frontend, y esa página hace un POST autenticado al backend. El hosting tiene que servir `index.html` en `/connections/*`. (`PUBLIC_BASE_URL` es obsoleta: Django ya no la lee) | no es key |
+
+## Qué variables necesita cada red social
+
+El agente conecta una red según estas reglas (`apps/connections/connect_links.py`). Pon las variables en `lumi/.env` y reinicia el backend.
+
+| Red | Proveedor | Variables obligatorias para conectarla | Notas |
+| --- | --- | --- | --- |
+| Facebook (Páginas) | `meta` directo, o `pfm` | `META_APP_ID`, `META_APP_SECRET` (o `PFM_JWT_TOKEN`) | Con Meta configurado se usa Meta; si no, Post for Me. |
+| LinkedIn | `linkedin` directo, o `pfm` | `LINKEDIN_CLIENT_ID`, `LINKEDIN_CLIENT_SECRET` (o `PFM_JWT_TOKEN`) | La redirect URI exige HTTPS. |
+| X | `x` directo solo con `X_LIVE_ENABLED=true`; si no, `pfm` | `X_CLIENT_ID`, `X_CLIENT_SECRET`, `X_LIVE_ENABLED` (o `PFM_JWT_TOKEN`) | Pago por uso. En local la redirect URI usa `127.0.0.1`. |
+| Instagram | solo `pfm` | `PFM_JWT_TOKEN` | No hay conexión nativa. |
+| TikTok | solo `pfm` | `PFM_JWT_TOKEN` | No hay conexión nativa. |
+| Google (Drive y Docs) | `google` | `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET` | Conectores MCP. |
+| Escucha de otras cuentas | `xpoz` | `XPOZ_API_KEY`, `XPOZ_LIVE_ENABLED` | No conecta tu cuenta: lee cuentas públicas. Gasta créditos. |
+
+Comprueba una red con `uv run python manage.py check_keys --only meta` (o `linkedin`, `x`, `pfm`, `google`, `xpoz`). Una red sin sus variables no rompe nada: su conexión responde `not_configured` con la lista de lo que falta.
 
 ## Ajustes de Django (opcionales, no son keys)
 
