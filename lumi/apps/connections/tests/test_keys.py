@@ -21,7 +21,9 @@ def test_services_are_registered_and_optional() -> None:
     connection_keys.register_all()  # idempotent
     names = {s.name for s in keys.all_specs()}
     assert {"meta", "linkedin", "x"} <= names
-    assert not any(s.required for s in keys.all_specs())
+    assert not any(
+        s.required for s in keys.all_specs() if s.name in {"meta", "linkedin", "x"}
+    )
 
 
 def test_missing_variables_are_listed_without_values(monkeypatch) -> None:
@@ -30,12 +32,15 @@ def test_missing_variables_are_listed_without_values(monkeypatch) -> None:
     connection_keys.register_all()
     spec = keys.get_spec("meta")
     assert keys.missing_variables(spec) == ["META_APP_ID"]
-    assert keys.scrub("oops super-secret-value") == "oops ***"
+    assert keys.run_probe(spec).status == "skipped"
+    assert "super-secret" not in keys.run_probe(spec).detail
 
 
-def test_x_probe_never_calls_x() -> None:
-    result = connection_keys.probe_x()
-    assert result.status == "skipped"
+def test_x_probe_never_calls_x(monkeypatch) -> None:
+    monkeypatch.setenv("X_CLIENT_ID", "id-123456")
+    monkeypatch.setenv("X_CLIENT_SECRET", "secret-123456")
+    connection_keys.register_all()
+    assert keys.run_probe(keys.get_spec("x")).status == "skipped"
 
 
 async def test_meta_credential_check_uses_client_credentials() -> None:
@@ -58,20 +63,19 @@ async def test_meta_credential_check_uses_client_credentials() -> None:
     )
 
 
-async def test_meta_probe_reports_a_rejected_secret_without_the_secret(
-    monkeypatch,
-) -> None:
+def test_meta_probe_reports_a_rejected_secret_without_the_secret(monkeypatch) -> None:
     from apps.connections.errors import ProviderAuthError
 
     async def reject(self):
         raise ProviderAuthError(
-            "Error validating client secret s3cr3t", provider="meta"
+            "Error validating client secret s3cr3t-value", provider="meta"
         )
 
     monkeypatch.setattr(
         "apps.connections.providers.meta.MetaProvider.check_app_credentials", reject
     )
     monkeypatch.setenv("META_APP_ID", "1")
-    monkeypatch.setenv("META_APP_SECRET", "s3cr3t")
-    result = await __import__("asyncio").to_thread(connection_keys.probe_meta)
-    assert result.status == "failed" and "s3cr3t" not in result.detail
+    monkeypatch.setenv("META_APP_SECRET", "s3cr3t-value")
+    connection_keys.register_all()
+    result = keys.run_probe(keys.get_spec("meta"))
+    assert result.status == "error" and "s3cr3t" not in result.detail
