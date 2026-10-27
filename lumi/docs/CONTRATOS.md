@@ -1,6 +1,6 @@
 # Contratos de Lumi (backend Django)
 
-Versión 1.0, 2026-10-27. Dueño: LUMI-ARCHITECT. Complementa `docs/SCHEMA.md` (tablas) y `lumi_ai/ports.py` (puertos de IA, versión 1.5).
+Versión 1.0, 2026-10-27. Dueño: LUMI-ARCHITECT. Complementa `docs/SCHEMA.md` (tablas) y `lumi_ai/ports.py` (puertos de IA, versión 1.7).
 
 Este documento fija lo que los otros dos equipos pueden usar sin preguntar: rutas HTTP, firmas de servicios, nombres de migraciones, el registro de keys, las convenciones de tests y los puntos donde el diseño se aparta del plan. Una ruta o función marcada **publicada** ya existe en `lumi-orquestador`. Las demás son contrato: el código llega en la tarea indicada.
 
@@ -154,6 +154,10 @@ Todos los datos salen como los dataclass de `lumi_ai.ports` o como `TypedDict`, 
 
 `apps/chat/services.py`: `append_message(profile_id, message: ChatMessageIn) -> int`, `history(profile_id, limit) -> list[ChatMessageOut]` (cumple `ChatStore`), `clear_history(profile_id)`.
 
+`MatchStore.record_listening_match(profile_id, post_id, score=None) -> bool` (puertos 1.6) lo implementa INTELLIGENCE sobre `profiles.services.record_listening_match`. El post ya tiene que estar guardado con `PeerPostStore.save_peer_posts`; la fila de `listening_matches` es solo el puente (perfil, post). Devuelve `False` si el vínculo ya existía, así que `scan_trends` cuenta solo las coincidencias nuevas.
+
+`RepurposeStore.create_request_with_attempts(..., source_post_id=None)` (puertos 1.7) guarda `repurpose_requests.source_post_id` (FK a `posts`, `SET_NULL`). `generate_post` lo deja en `None` y `repurpose_caption` lo rellena con el `post_id` del post de partida. Condición del puerto: el post tiene que pertenecer al perfil. `repos.py` tiene que comprobarlo (autor del post igual al handle del perfil) y rechazar el resto antes de insertar; una solicitud sin post de origen sigue siendo válida.
+
 Los puertos `ProfileStore`, `PostStore`, `ListeningStore` y `ChatStore` los implementa INTELLIGENCE en `apps/intelligence/repos.py` encima de estas funciones. ARCHITECT no importa `lumi_ai` en ninguna vista salvo `runtime`.
 
 `ChatMessageIn` de `ports.py` no trae `tool_call_id`, que `SCHEMA.md` 6.4 añade a `chat_messages`. Petición a INTELLIGENCE: añadir `tool_call_id: str | None = None` en `ChatMessageIn` y `ChatMessageOut` (cambio aditivo, puertos 1.5). Hasta entonces la columna queda nula.
@@ -266,6 +270,8 @@ Renueva los tokens que caducan en menos de 7 días e imprime solo recuentos, nun
 | 13 | Documentación OpenAPI | **Decidido.** `/api/schema/` y `/api/docs/` son públicas solo con `DEBUG=True`; en producción exigen staff (`IsStaffOrDebug`). | Orquestador |
 | 14 | Registro duplicado | **Aceptado.** `POST /auth/register` con un email ya usado responde `409 conflict`. Revela que el email existe (enumeración de cuentas); el límite de 10 por minuto acota el sondeo. **A revisar antes del lanzamiento**: alternativa, responder igual y avisar por email. | Orquestador |
 | 15 | Mensajes de error | **Aceptado.** Los `message` van en español; el cliente decide por `code`. | Orquestador |
+| 16 | Evaluaciones y transacción | **Pendiente de aceptación.** `GenerationFlow` llama primero a `create_request_with_attempts` y después a `EvalStore.save_evaluation` una vez por intento, cada llamada en su propia transacción. Es una desviación de la fila 2 de `SCHEMA.md` ("una transacción"): el puerto devuelve los `attempt_id` solo después de crear los intentos. Un fallo en el segundo paso deja intentos sin evaluación (el flujo lo registra en `warnings`, no en un error). No puede quedar una evaluación huérfana y `generation_evaluations.attempt_id` sigue siendo obligatoria. **Opción preferida (cambio de puerto, la decide INTELLIGENCE):** el glue de Django no puede envolver las dos llamadas en un `transaction.atomic()`, porque entre ellas hay un `await` en el flujo y Django no admite transacciones que cruzan `await` (cada `sync_to_async` abre y cierra la suya). Sí se puede dentro de una sola función síncrona: `create_request_with_attempts(..., evaluations=...)` recibe las evaluaciones ya calculadas por `attempt_no`, inserta los intentos con `INSERT ... RETURNING id` y las evaluaciones con esos ids, todo en un `atomic()`. Con eso la fila 2 se cumple tal como está escrita. | INTELLIGENCE |
+| 17 | `niche_reports.origin` | **Aceptado.** `varchar(24)` en lugar de `varchar(20)`: `legacy_peer_frameworks` tiene 22 caracteres. `SCHEMA.md` queda corregido. | INTELLIGENCE |
 
 ## 12. Cómo se pide un cambio
 
