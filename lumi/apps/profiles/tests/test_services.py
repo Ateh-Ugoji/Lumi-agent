@@ -558,12 +558,31 @@ def test_set_listening_is_atomic_when_a_keyword_is_invalid(profile_id):
 # ------------------------------------------------------------------ polls
 
 
+def only_these_polls(*profile_ids):
+    """Switch off every poll config that is not one of ``profile_ids``.
+
+    ``claim_due_polls`` is global by design: it claims any due row in the table. A committed row
+    from another session (a parallel pytest run on the same Postgres, or a crashed one) would
+    take a slot and break an exact assertion. The tests that count claims call this first so
+    they only see their own rows. Rows another session holds locked are skipped, not waited for.
+    """
+    with transaction.atomic():
+        foreign = list(
+            PollConfig.objects.select_for_update(skip_locked=True)
+            .filter(is_active=True)
+            .exclude(profile_id__in=profile_ids)
+            .values_list("pk", flat=True)
+        )
+        PollConfig.objects.filter(pk__in=foreign).update(is_active=False)
+
+
 def test_claim_due_polls_claims_each_profile_once(user, profile_id):
     other = SocialProfile.objects.create(
         user=user, handle_id=services.get_or_create_handle("x", "second")
     ).pk
     services.set_listening(ListeningConfig(profile_id, (), True, 5))
     services.set_listening(ListeningConfig(other, (), False, 5))
+    only_these_polls(profile_id)
     assert services.claim_due_polls() == [profile_id]
     assert services.claim_due_polls() == []  # just claimed
     PollConfig.objects.filter(profile_id=profile_id).update(
@@ -580,18 +599,39 @@ def test_claim_due_polls_respects_the_limit(user):
         ).pk
         services.set_listening(ListeningConfig(pid, (), True, 5))
         ids.append(pid)
+    only_these_polls(*ids)
     assert len(services.claim_due_polls(limit=2)) == 2
     assert len(services.claim_due_polls(limit=2)) == 1
+
+
+def test_a_foreign_due_row_takes_a_slot_unless_the_helper_switches_it_off(user):
+    """Pins the cause of the intermittent failure: ``claim_due_polls`` is global."""
+    pids = []
+    for i in range(3):
+        pid = SocialProfile.objects.create(
+            user=user, handle_id=services.get_or_create_handle("x", f"q{i}")
+        ).pk
+        services.set_listening(ListeningConfig(pid, (), True, 5))
+        pids.append(pid)
+    *mine, foreign = pids  # ``foreign`` stands for a row another session committed
+    assert services.claim_due_polls(limit=3) == sorted(pids)  # it is claimed like any other
+    PollConfig.objects.update(last_polled_at=None)
+    only_these_polls(*mine)
+    assert services.claim_due_polls(limit=3) == sorted(mine)
+    assert not PollConfig.objects.get(profile_id=foreign).is_active
 
 
 @pytest.mark.django_db(transaction=True)
 def test_two_workers_never_claim_the_same_profile():
     user = User.objects.create_user("race@example.com")
+    mine: list[int] = []
     for i in range(20):
         pid = SocialProfile.objects.create(
             user=user, handle_id=services.get_or_create_handle("x", f"r{i}")
         ).pk
         services.set_listening(ListeningConfig(pid, (), True, 5))
+        mine.append(pid)
+    only_these_polls(*mine)
     claimed: list[list[int]] = []
     barrier = threading.Barrier(2)
 
@@ -619,6 +659,7 @@ async def test_async_twins_match_the_sync_functions(user):
         info = await services.aget_profile(pid, user.pk)
         assert created
         assert info.handle == "asyncy"
+        await sync_to_async(only_these_polls)()
         assert (await services.aclaim_due_polls()) == []
     finally:  # the worker thread of sync_to_async owns a connection; free it before teardown
         await sync_to_async(connections.close_all, thread_sensitive=True)()
