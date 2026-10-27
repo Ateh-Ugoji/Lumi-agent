@@ -732,7 +732,8 @@ class DjangoPassStore:
     async def save_pass(
         self, handle_id, *, started_at, source, complete, seen, flag, clear
     ) -> None:
-        await sync_to_async(self._save, thread_sensitive=True)(
+        # ``aio``: a tool call that timed out must not stamp or flag posts afterwards.
+        await aio(self._save)(
             handle_id, started_at, source, complete, seen, flag, clear
         )
 

@@ -177,7 +177,7 @@ El frontend vive en `lumi/frontend` (Vite, React 19, puerto 3010) y habla solo c
 
 ### Cómo está armado
 
-- `src/api/http.ts` es el único cliente. Pone `Authorization: Token <key>`, entiende `{"error":{"code","message","details"}}` y abre el stream del chat. Pide `text/event-stream, application/json;q=0.5` porque DRF contesta 406 si solo se acepta `text/event-stream`.
+- `src/api/http.ts` es el único cliente. Pone `Authorization: Token <key>`, entiende `{"error":{"code","message","details"}}` y abre el stream del chat. Para el stream pide solo `text/event-stream`: la vista del chat lo acepta (`EventStreamRenderer`) y sus errores previos al stream salen en JSON.
 - `src/auth/` guarda el token y muestra el login o el registro antes de la app (`AuthGate` en `main.tsx`). Un 401 limpia el token y vuelve al login.
 - `src/api/connections.ts` pide `POST /connections/{provider}/connect`, abre `authorize_url` y, al volver a `/connections/{provider}/callback` lee `code`, `state` o `error` de la consulta, reemplaza la URL por `/` al instante y llama a `POST /connections/{provider}/callback` con el Token del usuario; luego muestra el aviso. Si el usuario canceló, envía `{state, error}` para quemar el state. Con Post for Me lee `isSuccess` y llama a `POST /connections/pfm/sync`, porque PFM no trae `state` y esa llamada es la que lee y guarda las cuentas. Leer el estado (`GET`) nunca llama a PFM ni escribe.
 - El panel de conexiones solo lee con `GET .../status`. El botón «Actualizar» de PFM llama a `POST /connections/pfm/sync`; el de los demás proveedores vuelve a leer el estado.
@@ -209,7 +209,7 @@ Qué es real y qué es un doble en el agente real, sin gastar nada:
 - Real: `apps.intelligence.runtime`, `get_wiring()`, el bucle del agente, el registro de herramientas, el cliente `openai` sobre un socket HTTP, `ToolExecution.as_dict` con su `result`, la herramienta `connect_account` sobre `DjangoConnectionLinks`, el embebedor ONNX (en caché local) y Chroma en un directorio temporal.
 - Doble: el modelo de lenguaje. `e2e/llm_double.py` es un servidor compatible con OpenAI en el puerto 8099 (`E2E_LLM_PORT`). `lumi_ai.providers.factory.GROQ_BASE_URL` apunta a él y `GROQ_API_KEY` es un valor falso que solo enciende el proveedor. Decide con una regla fija: si el último mensaje pide conectar, llama a `connect_account`; con el resultado de la herramienta responde con el enlace. `GET /_calls` lista lo que recibió.
 - Doble: Meta y Post for Me, como antes (`e2e/sim.py`).
-- Costura propia del e2e: `apps.intelligence.wiring` todavía no pasa `ToolDeps(links=...)`, así que `e2e/server.py` registra `connect_account` con el `DjangoConnectionLinks` real. Cuando INTELLIGENCE lo cablee, ese bloque sobra.
+- `connect_account` ya viene cableada en `apps.intelligence.wiring` (`ToolDeps(links=DjangoConnectionLinks())`); el e2e usa el registro real sin costura propia.
 
 Los nueve pasos: registro, perfil, estado de los proveedores, conectar Facebook, conectar Post for Me, cancelar en el proveedor, un turno de chat (con Facebook ya conectado la herramienta lo dice; tras desconectar entrega la tarjeta de conexión), publicar (previsualizar, confirmar) y desconectar con cierre y reingreso de sesión. El mismo recorrido sin navegador está en `apps/connections/tests/db/test_e2e_api.py` y corre con `pytest`.
 
@@ -251,9 +251,9 @@ Las respuestas de prueba (`tests/fixtures/*.json`) están **escritas a mano** a 
 ### Dependencias abiertas
 
 - `publish_jobs.attempt_id` es un `bigint` nulo sin FK. La `0002` añade la FK cuando INTELLIGENCE publique `repurpose_attempts`. Es una desviación temporal de SCHEMA §8.
-- `stores.py` escribe `SocialHandle` con el ORM porque `apps.profiles.services` (`get_or_create_handle`, `upsert_posts`) aún no existe. Hay que cambiarlo cuando se publique.
+- `stores.py` escribe handles con `apps.profiles.services.get_or_create_handle` (ya publicado).
 - `PublishJob.external_url` y `HandleSearchCacheEntry.rank` son columnas que añadí a SCHEMA §8 para poder repetir una respuesta y conservar el orden. Falta que ARCHITECT las refleje en `docs/SCHEMA.md`.
-- Falta que ARCHITECT monte las rutas: `path("api/v1/", include("apps.connections.urls"))` en `config/urls.py`. Hasta entonces las vistas solo se prueban con un urlconf de pruebas.
+- Las rutas de conexiones están montadas en `config/urls.py` (`api/v1/`).
 - `0002` añade `platform`, `display_name` y `handle` a `connected_accounts` (PFM necesita saber la red de cada cuenta) y `social_profile_id` a `oauth_states` (para enlazar la cuenta al perfil que se indicó en `connect`). Hay que reflejarlo en SCHEMA §8.
 
 ### Rutas de conexión (T5)
@@ -363,4 +363,4 @@ Límite que sigue en pie: el "sí" lo interpreta el servidor sobre el siguiente 
 - `pass_reached_window`: una pasada que no llegó hasta el borde de la ventana no cuenta como cobertura.
 - `finalize_pass`: aplica lo anterior, sella `last_seen_at` de lo visto y marca o limpia las banderas en una sola transacción. Una pasada interrumpida se registra pero nunca cuenta como pasada previa.
 - Diferencias con el legado: la pasada previa es la última COMPLETA (antes cualquiera), y un post marcado que reaparece se limpia.
-- Falta quien la llame: `OwnPostSync` y `profile.refresh` aún no existen (INTELLIGENCE.md líneas 29 y 42, `lumi_ai/ports.py`). Cuando existan deben llamar a `finalize_pass` con `DjangoPassStore`.
+- Quien la llama: `DjangoOwnPostSync` (`own_post_sync.py`, puerto `OwnPostSync`). Lee el feed de la cuenta Post for Me del perfil (hasta 100 posts y 10 páginas), guarda con `upsert_posts`, renumera cada hilo con `rethread_conversation` y cierra la pasada con `finalize_pass`. Todas las escrituras van con `@aio`: si el tool `backfill_posts` expira, lo que aún no se guardó no se guarda. Un feed vacío se guarda pero no cuenta como pasada completa (un corte de servicio se vería igual). `upsert_posts` borra la marca `is_deleted_suspect` de todo post que el feed devuelve, así que la rama `clear` de `finalize_pass` queda sin efecto detrás de ese guardado. Falta que INTELLIGENCE registre `backfill_posts` y la tarea `post_sync`; `profile.refresh` sigue sin existir.
