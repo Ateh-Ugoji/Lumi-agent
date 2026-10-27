@@ -409,12 +409,11 @@ UNREADABLE = "TokenDecryptError"
 _LIVE_STATUSES = (AccountStatus.ACTIVE, AccountStatus.LIMITED)
 
 
-def quarantine_unreadable(
+def _unreadable_ids(
     *, user_id: int | None = None, provider: str | None = None
-) -> int:
-    """Mark live accounts whose tokens no configured key opens as ``error``, so the user can
-    connect them again. Reads the ciphertext straight from the table: nothing is decrypted into
-    the model, and no value is logged. Returns how many rows were marked."""
+) -> list[int]:
+    """Ids of live accounts whose tokens no configured key opens. Reads the ciphertext straight
+    from the table: nothing is decrypted into the model, and no value is logged. Writes nothing."""
     table = ConnectedAccount._meta.db_table
     sql = f"SELECT id, access_token, refresh_token FROM {table} WHERE status = ANY(%s)"
     params: list = [[str(s) for s in _LIVE_STATUSES]]
@@ -435,6 +434,15 @@ def quarantine_unreadable(
                     decrypt_value(value)
         except TokenDecryptError:
             bad.append(pk)
+    return bad
+
+
+def quarantine_unreadable(
+    *, user_id: int | None = None, provider: str | None = None
+) -> int:
+    """Mark live accounts whose tokens no configured key opens as ``error``, so the user can
+    connect them again. Returns how many rows were marked."""
+    bad = _unreadable_ids(user_id=user_id, provider=provider)
     if not bad:
         return 0
     logger.warning("%d connected account(s) hold tokens no key opens", len(bad))
@@ -488,28 +496,54 @@ def _google_status(user, configured: bool) -> ProviderStatus:
 
 
 def provider_status(user, provider: str) -> ProviderStatus:
+    """What is stored for this user. A ``GET`` must not write, so this only reads: it never
+    calls Post for Me (``sync_pfm`` does) and an account whose tokens no key opens is shown as
+    ``error`` without saving that. ``quarantine_unreadable`` stores it on the next write path."""
     require_provider(provider)
     config = get_config()
     configured = not missing_env(provider, config)
     if provider == "google":
         return _google_status(user, configured)
-    stale = False
-    if provider == "pfm" and configured:
-        try:
-            sync_pfm_accounts(user)
-        except SocialDataError:
-            stale = True
-    quarantine_unreadable(user_id=user.pk, provider=provider)
+    return _stored_status(user, provider, configured, stale=False)
+
+
+def _stored_status(
+    user, provider: str, configured: bool, *, stale: bool
+) -> ProviderStatus:
+    unreadable = set(_unreadable_ids(user_id=user.pk, provider=provider))
     accounts = list(
         ConnectedAccount.objects.filter(user=user, provider=provider)
         .defer(*TOKEN_COLUMNS)
         .select_related("social_profile")
         .order_by("id")
     )
+    for row in accounts:
+        if row.pk in unreadable:
+            row.status = AccountStatus.ERROR  # in memory only, never saved
+            row.last_error = UNREADABLE
     connected = any(
         a.status in (AccountStatus.ACTIVE, AccountStatus.LIMITED) for a in accounts
     )
     return ProviderStatus(provider, configured, connected, stale, accounts)
+
+
+def sync_pfm(user) -> ProviderStatus:
+    """``POST /connections/pfm/sync``: read the user's accounts from Post for Me and mirror them.
+
+    This is the only path that calls PFM for a status. Only accounts under the user's own
+    ``pfm_links`` id are attached, each one under ``_lock_account``. A PFM failure keeps what
+    is stored and answers ``stale``.
+    """
+    config = get_config()
+    configured = not missing_env("pfm", config)
+    stale = False
+    if configured:
+        quarantine_unreadable(user_id=user.pk, provider="pfm")
+        try:
+            sync_pfm_accounts(user)
+        except SocialDataError:
+            stale = True
+    return _stored_status(user, "pfm", configured, stale=stale)
 
 
 PFM_PAGE_SIZE = 50

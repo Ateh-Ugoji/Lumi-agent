@@ -27,7 +27,7 @@ from .serializers import (
     PublishResponseSerializer,
     StatusSerializer,
 )
-from .throttles import HandleSearchThrottle, PublishThrottle
+from .throttles import HandleSearchThrottle, PfmSyncThrottle, PublishThrottle
 
 
 class ConnectView(APIView):
@@ -80,22 +80,40 @@ class CallbackView(APIView):
         return response
 
 
+def _status_body(status) -> dict:
+    return StatusSerializer(
+        {
+            "provider": status.provider,
+            "configured": status.configured,
+            "connected": status.connected,
+            "stale": status.stale,
+            "accounts": status.accounts,
+            "details": status.details,
+        }
+    ).data
+
+
+class PfmSyncView(APIView):
+    """Post for Me gives Lumi no ``state``: the user comes back to a page and this call reads
+    their accounts. It is a POST because it calls PFM and writes ``connected_accounts``."""
+
+    throttle_classes = [PfmSyncThrottle]
+
+    @extend_schema(
+        request=None,
+        responses=StatusSerializer,
+        summary="Read the user's Post for Me accounts and store them",
+    )
+    def post(self, request):
+        return Response(_status_body(accounts.sync_pfm(request.user)))
+
+
 class ProviderView(APIView):
-    @extend_schema(responses=StatusSerializer, summary="Connection status")
+    @extend_schema(
+        responses=StatusSerializer, summary="Connection status (read only, no writes)"
+    )
     def get(self, request, provider: str):
-        status = accounts.provider_status(request.user, provider)
-        return Response(
-            StatusSerializer(
-                {
-                    "provider": status.provider,
-                    "configured": status.configured,
-                    "connected": status.connected,
-                    "stale": status.stale,
-                    "accounts": status.accounts,
-                    "details": status.details,
-                }
-            ).data
-        )
+        return Response(_status_body(accounts.provider_status(request.user, provider)))
 
     @extend_schema(
         responses=DisconnectSerializer,

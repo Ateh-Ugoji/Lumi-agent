@@ -18,7 +18,6 @@ El orquestador debe copiarlas a `API_KEYS.md` y ARCHITECT a `.env.example`.
 
 | Variable | Valor por defecto | Para qué sirve |
 | --- | --- | --- |
-| `PUBLIC_BASE_URL` | `http://localhost:8000` | URL pública del backend |
 | `FRONTEND_URL` | `http://localhost:3010` | Del frontend salen las redirect URIs: el proveedor devuelve al usuario a una página de esta app |
 | `X_LIVE_ENABLED` | `false` | Interruptor de toda llamada real a X |
 | `XPOZ_LIVE_ENABLED` | `false` | Interruptor de las llamadas reales a Xpoz (cada consulta gasta créditos) |
@@ -216,7 +215,7 @@ Los nueve pasos: registro, perfil, estado de los proveedores, conectar Facebook,
 1. Poner las claves de cada proveedor en `lumi/.env` (orden de la sección anterior). No hay que tocar el frontend.
 2. `VITE_API_BASE` solo hace falta si el backend no está en `http://localhost:8000/api/v1`.
 3. Para desarrollar: `npm run dev:backend` y `npm run dev:frontend` desde `lumi/`. El backend usa uvicorn (ASGI) porque el stream del chat no funciona bien con `runserver`.
-4. En `FRONTEND_URL` va la URL del frontend (`http://localhost:3010`) y en `PUBLIC_BASE_URL` la del backend. Los redirect URI de cada app registran la del frontend.
+4. En `FRONTEND_URL` va la URL del frontend (`http://localhost:3010`). Los redirect URI de cada app registran la del frontend: `{FRONTEND_URL}/connections/<proveedor>/callback`. `PUBLIC_BASE_URL` ya no se usa y se puede borrar del `.env`.
 
 ### Huecos conocidos
 

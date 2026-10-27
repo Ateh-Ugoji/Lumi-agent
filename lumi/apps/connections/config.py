@@ -12,7 +12,6 @@ from dataclasses import dataclass, field
 
 from .errors import ConfigError
 
-DEFAULT_PUBLIC_BASE_URL = "http://localhost:8000"
 DEFAULT_FRONTEND_URL = "http://localhost:3010"
 DEFAULT_LINKEDIN_VERSION = "202609"
 DEFAULT_META_GRAPH_VERSION = "v26.0"
@@ -56,7 +55,6 @@ def parse_non_negative_int(value: str | None, *, name: str, default: int) -> int
 
 @dataclass(frozen=True, slots=True)
 class ConnectionsConfig:
-    public_base_url: str = DEFAULT_PUBLIC_BASE_URL
     frontend_url: str = DEFAULT_FRONTEND_URL
     x_live_enabled: bool = False
     linkedin_api_version: str = DEFAULT_LINKEDIN_VERSION
@@ -99,7 +97,6 @@ class ConnectionsConfig:
         if not _GRAPH_VERSION.match(graph):
             raise ConfigError("META_GRAPH_VERSION must look like v26.0")
         return cls(
-            public_base_url=get("PUBLIC_BASE_URL", DEFAULT_PUBLIC_BASE_URL).rstrip("/"),
             frontend_url=get("FRONTEND_URL", DEFAULT_FRONTEND_URL).rstrip("/"),
             x_live_enabled=parse_bool(env.get("X_LIVE_ENABLED"), name="X_LIVE_ENABLED"),
             linkedin_api_version=li_version,

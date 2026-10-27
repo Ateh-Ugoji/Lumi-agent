@@ -20,3 +20,10 @@ class PublishThrottle(UserRateThrottle):
 
     scope = "publish"
     rate = "10/min"
+
+
+class PfmSyncThrottle(UserRateThrottle):
+    """Each sync lists the user's accounts at Post for Me."""
+
+    scope = "pfm_sync"
+    rate = "12/min"

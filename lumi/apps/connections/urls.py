@@ -16,6 +16,9 @@ urlpatterns = [
     path("handles/select", views.HandleSelectView.as_view(), name="handles-select"),
     path("handles/stats", views.HandleStatsView.as_view(), name="handles-stats"),
     path(
+        "connections/pfm/sync", views.PfmSyncView.as_view(), name="connections-pfm-sync"
+    ),
+    path(
         "connections/<str:provider>/connect",
         views.ConnectView.as_view(),
         name="connections-connect",

@@ -40,7 +40,7 @@ pytestmark = pytest.mark.django_db
 @pytest.fixture(autouse=True)
 def wiring(settings, monkeypatch):
     settings.ROOT_URLCONF = "apps.connections.tests.db.urls"
-    for name in (*ALL_ENV, "X_LIVE_ENABLED", "PUBLIC_BASE_URL", "FRONTEND_URL"):
+    for name in (*ALL_ENV, "X_LIVE_ENABLED", "FRONTEND_URL"):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("FRONTEND_URL", FRONT)
 
@@ -448,7 +448,7 @@ def test_an_account_of_another_user_is_refused_and_left_untouched(
 
 
 def test_pfm_has_no_callback_step_and_its_page_only_syncs(api, env) -> None:
-    """PFM redirects to a frontend page with no state. That page calls ``GET /pfm/status``."""
+    """PFM redirects to a frontend page with no state. That page calls ``POST /pfm/sync``."""
     env(PFM_ENV)
     done = api.post(
         "/api/v1/connections/pfm/callback",
@@ -495,13 +495,14 @@ def pfm_list_for_the_asked_id(request: httpx.Request) -> httpx.Response:
 PFM_ACCOUNTS = {("GET", "/v1/social-accounts"): pfm_list_for_the_asked_id}
 
 
-def test_pfm_status_syncs_accounts_by_external_id_and_hides_their_tokens(
+def test_pfm_sync_stores_accounts_by_external_id_and_hides_their_tokens(
     api, env, providers, user
 ) -> None:
     env(PFM_ENV)
     PfmLink.objects.create(user=user, external_id="lumi-link-1")
     providers.on("pfm", PFM_ACCOUNTS)
-    response = api.get("/api/v1/connections/pfm/status")
+    response = api.post("/api/v1/connections/pfm/sync")
+    assert response.status_code == 200
     body = response.json()
     assert body["connected"] and body["accounts"][0]["platform"] == "x"
     assert body["accounts"][0]["handle"] == "Ateh"
@@ -512,7 +513,7 @@ def test_pfm_status_syncs_accounts_by_external_id_and_hides_their_tokens(
     assert row.access_token == "" and row.external_account_id == "sa_1"
 
 
-def test_pfm_status_marks_missing_accounts_revoked_and_survives_an_outage(
+def test_pfm_sync_marks_missing_accounts_revoked_and_survives_an_outage(
     api, env, providers, user
 ) -> None:
     env(PFM_ENV)
@@ -520,14 +521,18 @@ def test_pfm_status_marks_missing_accounts_revoked_and_survives_an_outage(
         user=user, provider="pfm", external_account_id="gone", platform="x"
     )
     providers.on("pfm", PFM_ACCOUNTS)
-    api.get("/api/v1/connections/pfm/status")
+    api.post("/api/v1/connections/pfm/sync")
     assert (
         ConnectedAccount.objects.get(external_account_id="gone").status
         == AccountStatus.REVOKED
     )
     providers.on("pfm", {("GET", "/v1/social-accounts"): httpx.Response(503)})
-    body = api.get("/api/v1/connections/pfm/status").json()
+    body = api.post("/api/v1/connections/pfm/sync").json()
     assert body["stale"] is True and len(body["accounts"]) == 2
+    # The read-only status shows the same rows and does not call PFM again.
+    before = len(providers.requests("pfm"))
+    assert len(api.get("/api/v1/connections/pfm/status").json()["accounts"]) == 2
+    assert len(providers.requests("pfm")) == before
 
 
 # --- disconnect --------------------------------------------------------------
@@ -588,7 +593,7 @@ def test_pfm_disconnect_calls_pfm_for_each_account(api, env, providers, user) ->
             ),
         },
     )
-    api.get("/api/v1/connections/pfm/status")
+    api.post("/api/v1/connections/pfm/sync")
     body = api.delete("/api/v1/connections/pfm").json()
     assert body["disconnected"] == 1 and body["remote_revoked"] == 1
     assert ConnectedAccount.objects.count() == 0

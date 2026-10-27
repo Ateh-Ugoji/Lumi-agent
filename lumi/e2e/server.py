@@ -74,7 +74,6 @@ def main() -> None:
         {
             "DATABASE_URL": e2e_url,
             "DJANGO_SETTINGS_MODULE": "e2e.settings",
-            "PUBLIC_BASE_URL": "http://localhost:8000",
             "FRONTEND_URL": "http://localhost:3010",
             "E2E_AGENT": kept_agent,
             "E2E_LLM_PORT": os.environ.get("E2E_LLM_PORT", "8099"),

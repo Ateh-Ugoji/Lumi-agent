@@ -8,7 +8,8 @@ from apps.connections.config import ConfigError, ConnectionsConfig
 def test_defaults_are_safe() -> None:
     config = ConnectionsConfig.from_env({})
     assert config.x_live_enabled is False
-    assert config.public_base_url == "http://localhost:8000"
+    assert config.frontend_url == "http://localhost:3010"
+    assert not hasattr(config, "public_base_url")
     assert config.linkedin_api_version == "202609"
     assert config.meta_graph_version == "v26.0"
 

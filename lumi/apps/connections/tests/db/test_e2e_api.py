@@ -24,7 +24,6 @@ def world(monkeypatch):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("META_APP_ID", "e2e-meta-app")
     monkeypatch.setenv("META_APP_SECRET", "e2e-meta-secret")
-    monkeypatch.setenv("PUBLIC_BASE_URL", "http://localhost:8000")
     monkeypatch.setenv("FRONTEND_URL", "http://localhost:3010")
     undo = sim.install()
     agent_runtime.set_runtime(sim.FakeRuntime())
