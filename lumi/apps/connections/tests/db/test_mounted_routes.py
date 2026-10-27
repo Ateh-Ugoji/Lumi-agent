@@ -54,16 +54,12 @@ def test_the_default_urlconf_serves_status_and_handles(user, monkeypatch) -> Non
     assert connect.json()["error"]["code"] == "not_configured"
 
 
-def test_the_callback_is_public_in_the_default_urlconf(client, monkeypatch) -> None:
-    monkeypatch.setenv("FRONTEND_URL", "http://localhost:5173")
-    response = client.get(
-        "/api/v1/connections/meta/callback", {"code": "x", "state": "nope"}
-    )
-    assert response.status_code == 302
-    assert response["Location"].startswith("http://localhost:5173")
-    # Public and exchanging nothing: the grant moves to the frontend's authenticated /complete.
-    assert response["Location"].endswith("#connect=meta&code=x&state=nope")
-    assert client.post("/api/v1/connections/meta/complete", {}).status_code == 401
+def test_the_callback_needs_a_token_and_the_api_no_longer_redirects(client) -> None:
+    """The provider redirects to a frontend page. The API route only takes the authenticated POST."""
+    assert client.post("/api/v1/connections/meta/callback", {}).status_code == 401
+    assert client.get(
+        "/api/v1/connections/meta/callback", {"code": "x", "state": "y"}
+    ).status_code in (401, 405)
 
 
 def test_publish_is_mounted_and_guarded_in_the_default_urlconf(user, client) -> None:

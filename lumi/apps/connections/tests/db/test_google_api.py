@@ -93,7 +93,7 @@ def test_connect_returns_the_consent_url_with_offline_access_and_pkce(api, env) 
     assert urlsplit(url).netloc == "accounts.google.com"
     assert q["access_type"] == "offline" and q["prompt"] == "consent"
     assert q["code_challenge_method"] == "S256"
-    assert q["redirect_uri"].endswith("/api/v1/connections/google/callback")
+    assert q["redirect_uri"].endswith("/connections/google/callback")
     row = OAuthState.objects.get(state=q["state"])
     assert row.provider == "google" and row.redirect_after == "/settings"
     assert "g-sec" not in url

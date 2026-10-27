@@ -51,23 +51,18 @@ def test_register_connect_chat_publish_and_disconnect() -> None:
     assert profile.status_code == 201
     profile_id = profile.json()["id"]
 
-    # Connect: the API hands out the provider URL, the provider answers on the public callback.
+    # Connect: the API hands out the provider URL. The provider redirects to a FRONTEND page,
+    # which posts the code and state with the user's Token.
     connect = api.post(
         "/api/v1/connections/meta/connect", {"profile_id": profile_id}, format="json"
     )
     assert connect.status_code == 200
-    state = parse_qs(urlsplit(connect.json()["authorize_url"]).query)["state"][0]
-    back = anon.get(
-        "/api/v1/connections/meta/callback", {"code": "c0de", "state": state}
-    )
-    assert back.status_code == 302
-    assert back["Location"].startswith("http://localhost:3010")
-    # The public callback only hands the grant to the frontend; the logged-in user finishes it.
-    fragment = parse_qs(urlsplit(back["Location"]).fragment)
-    assert fragment["connect"] == ["meta"] and fragment["state"] == [state]
+    query = parse_qs(urlsplit(connect.json()["authorize_url"]).query)
+    assert query["redirect_uri"][0].startswith("http://localhost:3010/")
+    state = query["state"][0]
     done = api.post(
-        "/api/v1/connections/meta/complete",
-        {"code": fragment["code"][0], "state": fragment["state"][0]},
+        "/api/v1/connections/meta/callback",
+        {"code": "c0de", "state": state},
         format="json",
     )
     assert done.status_code == 200 and done.json()["connected"] is True

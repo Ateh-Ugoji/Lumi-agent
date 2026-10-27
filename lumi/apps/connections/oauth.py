@@ -59,8 +59,14 @@ class OAuthStateRecord:
 class OAuthStateStore(Protocol):
     async def save(self, record: OAuthStateRecord) -> None: ...
 
-    async def consume(self, state: str, provider: str) -> OAuthStateRecord | None:
-        """Return the record and mark it used, atomically. ``None`` if unknown or used."""
+    async def consume(
+        self, state: str, provider: str, *, user_id: int | str | None = None
+    ) -> OAuthStateRecord | None:
+        """Return the record and mark it used, atomically. ``None`` if unknown or used.
+
+        With ``user_id`` the state is consumed only when that user started it. A live state of
+        someone else raises ``OAuthStateError("state_mismatch")`` and stays unused.
+        """
         ...
 
 
@@ -168,18 +174,22 @@ class OAuthFlow:
         """Finish the callback.
 
         Pass ``expected_user_id`` (the logged-in user) so a state started by someone else cannot
-        attach its account to this session. The state is consumed first, so a failed exchange
-        burns it and the user must start again.
+        attach its account to this session. The store checks the owner inside the same atomic
+        update that consumes the state. After that, a failed exchange burns it and the user
+        must start again.
         """
         if not state or len(state) > MAX_STATE_LENGTH:
             raise OAuthStateError("state_invalid")
-        record = await self._store.consume(state, self._provider.name)
+        record = await self._store.consume(
+            state, self._provider.name, user_id=expected_user_id
+        )
         if record is None:
             raise OAuthStateError("state_invalid")
         if expected_user_id is not None and str(record.user_id) != str(
             expected_user_id
         ):
-            raise OAuthStateError("state_invalid")
+            # A store that ignored ``user_id`` already burned the state. Never trust it alone.
+            raise OAuthStateError("state_mismatch")
         if record.expires_at <= self._clock():
             raise OAuthStateError("state_expired")
         tokens = await self._provider.exchange_code(

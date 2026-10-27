@@ -19,12 +19,15 @@ class ConnectRequestSerializer(serializers.Serializer):
     )
 
 
-class CompleteRequestSerializer(serializers.Serializer):
-    code = serializers.CharField(max_length=2000, trim_whitespace=False)
+class CallbackRequestSerializer(serializers.Serializer):
     state = serializers.CharField(max_length=256)
+    code = serializers.CharField(
+        max_length=2000, trim_whitespace=False, required=False, allow_blank=True
+    )
+    error = serializers.CharField(max_length=200, required=False, allow_blank=True)
 
 
-class CompleteResponseSerializer(serializers.Serializer):
+class CallbackResponseSerializer(serializers.Serializer):
     provider = serializers.CharField()
     connected = serializers.BooleanField()
     accounts = serializers.IntegerField()

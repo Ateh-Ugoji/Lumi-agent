@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-from django.http import HttpResponseRedirect
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import status as http_status
-from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -13,8 +11,8 @@ from apps.core.errors import ApiError
 
 from . import accounts, handles_api, publish_api
 from .serializers import (
-    CompleteRequestSerializer,
-    CompleteResponseSerializer,
+    CallbackRequestSerializer,
+    CallbackResponseSerializer,
     ConnectRequestSerializer,
     ConnectResponseSerializer,
     DisconnectSerializer,
@@ -52,50 +50,32 @@ class ConnectView(APIView):
         return Response({"authorize_url": url})
 
 
-class CompleteView(APIView):
-    """Authenticated: finishes a grant for the logged-in user and nobody else."""
+class CallbackView(APIView):
+    """Authenticated: the frontend page the provider redirects to posts ``code`` and ``state``.
+
+    The provider's ``redirect_uri`` is a frontend page, never this API, because only the
+    frontend holds the user's Token. The state must belong to the caller: a state started by
+    someone else answers 409 and stays unused. Post for Me has no state and no code here.
+    """
 
     @extend_schema(
-        request=CompleteRequestSerializer,
-        responses=CompleteResponseSerializer,
+        request=CallbackRequestSerializer,
+        responses=CallbackResponseSerializer,
         summary="Finish an OAuth grant with the code the provider returned",
     )
     def post(self, request, provider: str):
-        body = CompleteRequestSerializer(data=request.data or {})
+        body = CallbackRequestSerializer(data=request.data or {})
         body.is_valid(raise_exception=True)
         data = body.validated_data
         result = accounts.complete_connect(
-            request.user, provider, code=data["code"], state=data["state"]
+            request.user,
+            provider,
+            state=data["state"],
+            code=data.get("code", ""),
+            error=data.get("error", ""),
         )
-        return Response(CompleteResponseSerializer(result).data)
-
-
-class CallbackView(APIView):
-    """Public: the provider's browser redirect carries no Token header.
-
-    It exchanges nothing. Whoever opens it could be a victim holding an attacker's link, so it
-    hands ``code`` and ``state`` to the frontend (URL fragment), which finishes the grant with
-    ``POST /connections/<provider>/complete`` under the user's own Token. The answer is always
-    a 302 to the frontend, never JSON, and never echoes the provider's error text.
-    """
-
-    authentication_classes: list = []
-    permission_classes = [AllowAny]
-
-    @extend_schema(
-        responses={302: None},
-        parameters=[
-            OpenApiParameter("code", str),
-            OpenApiParameter("state", str),
-            OpenApiParameter("error", str),
-        ],
-        summary="OAuth redirect target. Answers 302 to the frontend",
-    )
-    def get(self, request, provider: str):
-        target = accounts.finish_callback(provider, request.query_params.dict())
-        response = HttpResponseRedirect(target)
+        response = Response(CallbackResponseSerializer(result).data)
         response["Cache-Control"] = "no-store"
-        response["Referrer-Policy"] = "no-referrer"
         return response
 
 

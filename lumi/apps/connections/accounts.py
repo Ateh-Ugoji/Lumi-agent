@@ -12,7 +12,7 @@ from __future__ import annotations
 import logging
 import os
 import secrets
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -46,7 +46,7 @@ from .models import (
     PfmLink,
     Provider,
 )
-from .oauth import MAX_STATE_LENGTH, OAuthFlow, OAuthProvider
+from .oauth import OAuthFlow, OAuthProvider
 from .providers.base import AccountInfo, SocialProvider, TokenSet
 from .providers.registry import build_provider
 from .stores import DjangoOAuthStateStore, save_google_tokens
@@ -247,65 +247,32 @@ def frontend_redirect(
     return urlunsplit(parts._replace(query=urlencode(merged)))
 
 
-def frontend_handoff(
-    config: ConnectionsConfig, provider: str, code: str, state: str
-) -> str:
-    """Where the callback sends the browser so the logged-in frontend can finish the grant.
+def complete_connect(
+    user, provider: str, *, state: str, code: str = "", error: str = ""
+) -> dict[str, Any]:
+    """Finish a grant for the LOGGED-IN user. The state must have been started by that user.
 
-    The code and state travel in the URL fragment, which no server log and no ``Referer`` sees.
-    The frontend answers with an authenticated ``POST /connections/<provider>/complete``.
+    The provider sends the browser to a frontend page, which posts ``code`` and ``state`` here
+    with the user's Token. A state that belongs to someone else answers 409 ``state_mismatch``
+    and stays unused, so its owner can still finish. ``error`` is what the provider put in its
+    redirect when the user said no: the state is burned and the answer is 400.
     """
-    parts = urlsplit(frontend_redirect(config, "/"))
-    fragment = urlencode({"connect": provider, "code": code, "state": state})
-    return urlunsplit(parts._replace(fragment=fragment))
-
-
-def finish_callback(provider: str, params: Mapping[str, str]) -> str:
-    """Handle the provider's redirect back and return where to send the browser.
-
-    This endpoint is public and the browser carries no Token header, so it cannot tell WHO is
-    finishing the grant. It therefore exchanges nothing: a victim who opened an attacker's
-    authorize link would otherwise hand their provider account to the attacker. It passes the
-    code and state to the frontend, which calls ``complete_connect`` with the user's own Token.
-
-    Never raises: every failure becomes ``?error=<code>`` on the frontend.
-    """
-    config = get_config()
-    try:
-        require_provider(provider)
-    except ApiError:
-        return frontend_redirect(config, "/", error="connections.unknown_provider")
-    if provider == "pfm":
-        return _finish_pfm(config, params)
-    try:
-        state = params.get("state", "")
-        if params.get("error"):
-            # The user said no. Burn the state so the link cannot be replayed.
-            _burn_state(provider, state)
-            return frontend_redirect(config, "/", error="connections.access_denied")
-        code = params.get("code", "")
-        if not code or not state or len(state) > MAX_STATE_LENGTH:
-            return frontend_redirect(config, "/", error="connections.state_invalid")
-        return frontend_handoff(config, provider, code, state)
-    except Exception:  # public boundary: a browser redirect must never be a 500
-        logger.exception("connections callback failed for %s", provider)
-        return frontend_redirect(config, "/", error="internal_error")
-
-
-def complete_connect(user, provider: str, *, code: str, state: str) -> dict[str, Any]:
-    """Finish a grant for the LOGGED-IN user. The state must have been started by that user."""
     require_provider(provider)
     if provider == "pfm":
         raise ApiError(
             "connections.unsupported", "Post for Me no usa este paso.", status_code=400
         )
     config = get_config()
+    store = DjangoOAuthStateStore(config.redirect_uri)
     try:
-        flow = OAuthFlow(
-            oauth_provider(provider),
-            DjangoOAuthStateStore(config.redirect_uri),
-            config,
-        )
+        if error or not code:
+            async_to_sync(store.consume)(state, provider, user_id=user.pk)
+            raise ApiError(
+                "connections.access_denied" if error else "connections.state_invalid",
+                "La conexión se canceló. Empieza de nuevo.",
+                status_code=400,
+            )
+        flow = OAuthFlow(oauth_provider(provider), store, config)
         done = async_to_sync(flow.complete)(
             state=state, code=code, expected_user_id=user.pk
         )
@@ -328,10 +295,13 @@ def complete_connect(user, provider: str, *, code: str, state: str) -> dict[str,
             "redirect_after": done.record.redirect_after,
         }
     except OAuthStateError as exc:
+        mismatch = exc.code == "state_mismatch"
         raise ApiError(
             f"connections.{exc.code}",
-            "El enlace de conexión no es válido o caducó. Empieza de nuevo.",
-            status_code=400,
+            "Ese enlace de conexión lo empezó otro usuario."
+            if mismatch
+            else "El enlace de conexión no es válido o caducó. Empieza de nuevo.",
+            status_code=409 if mismatch else 400,
         ) from exc
     except AccountTaken as exc:
         raise ApiError(
@@ -341,23 +311,6 @@ def complete_connect(user, provider: str, *, code: str, state: str) -> dict[str,
         ) from exc
     except (SocialDataError, ApiError) as exc:
         raise api_error_from(exc) from exc
-
-
-def _burn_state(provider: str, state: str) -> None:
-    if not state:
-        return
-    store = DjangoOAuthStateStore(get_config().redirect_uri)
-    async_to_sync(store.consume)(state, provider)
-
-
-def _finish_pfm(config: ConnectionsConfig, params: Mapping[str, str]) -> str:
-    """PFM keeps its own OAuth. Its redirect carries no Lumi state, so it names no user.
-
-    The accounts are synced by ``GET /connections/pfm/status``, which the frontend calls next.
-    """
-    if (params.get("isSuccess") or "").lower() == "true":
-        return frontend_redirect(config, "/", connected="pfm")
-    return frontend_redirect(config, "/", error="connections.pfm_failed")
 
 
 class AccountTaken(Exception):

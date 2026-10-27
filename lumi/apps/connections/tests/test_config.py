@@ -14,12 +14,11 @@ def test_defaults_are_safe() -> None:
 
 
 def test_redirect_uri_format_matches_the_console_instructions() -> None:
-    config = ConnectionsConfig.from_env(
-        {"PUBLIC_BASE_URL": "https://lumi.example.com/"}
-    )
+    """The provider redirects to a FRONTEND page, never to the API."""
+    config = ConnectionsConfig.from_env({"FRONTEND_URL": "https://app.lumi.example/"})
     assert (
         config.redirect_uri("meta")
-        == "https://lumi.example.com/api/v1/connections/meta/callback"
+        == "https://app.lumi.example/connections/meta/callback"
     )
 
 

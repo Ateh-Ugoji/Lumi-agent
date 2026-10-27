@@ -109,38 +109,38 @@ def state_of(url: str) -> str:
     return parse_qs(urlsplit(url).query)["state"][0]
 
 
+class Landing(dict):
+    """What the browser shows after the frontend page posted to ``/callback``."""
+
+    status_code = 302
+
+
 def callback(name: str, **params):
     """The browser's whole return trip, as one call.
 
-    1. The provider redirect hits the PUBLIC callback (no credentials). It exchanges nothing and
-       hands ``code`` and ``state`` to the frontend in the URL fragment.
-    2. The frontend answers with ``POST /complete`` under the Token of the user who started the
+    1. The provider redirects to a FRONTEND page with ``code`` and ``state`` (or ``error``).
+    2. That page posts them to ``POST /callback`` under the Token of the user who started the
        flow, which is how a real session behaves.
 
-    The response is the callback's 302 with its ``Location`` rewritten to what the old one-step
-    callback used to send, so the outcome assertions stay about the outcome. Tests of the split
-    itself use ``handoff`` and ``complete`` below.
+    The result carries the ``Location`` the frontend would show next (``?connected=`` or
+    ``?error=``), so the outcome assertions stay about the outcome. Tests of the binding use
+    ``complete`` below.
     """
-    response = APIClient().get(f"/api/v1/connections/{name}/callback", params)
-    fragment = parse_qs(urlsplit(response["Location"]).fragment)
-    if "code" not in fragment:
-        return response
-    done = complete(
-        name,
-        fragment["state"][0],
-        fragment["code"][0],
-        user=_owner_of(fragment["state"][0]),
-    )
+    state = params.get("state", "")
+    body = {k: v for k, v in params.items() if k in ("code", "state", "error")}
+    if not state:
+        body["state"] = "missing"
+    done = complete_body(name, body, user=_owner_of(state))
     config = accounts.get_config()
+    landing = Landing()
     if done.status_code == 200:
-        response["Location"] = accounts.frontend_redirect(
+        landing["Location"] = accounts.frontend_redirect(
             config, done.json()["redirect_after"], connected=name
         )
     else:
-        response["Location"] = accounts.frontend_redirect(
-            config, "/", error=done.json()["error"]["code"]
-        )
-    return response
+        code = done.json().get("error", {}).get("code", "validation_error")
+        landing["Location"] = accounts.frontend_redirect(config, "/", error=code)
+    return landing
 
 
 def _owner_of(state: str):
@@ -154,12 +154,14 @@ def _owner_of(state: str):
     return users.order_by("pk").first() or users.create_user("nobody@example.com")
 
 
-def complete(name: str, state: str, code: str, *, user):
+def complete_body(name: str, body: dict, *, user):
     return client_for(user).post(
-        f"/api/v1/connections/{name}/complete",
-        {"code": code, "state": state},
-        format="json",
+        f"/api/v1/connections/{name}/callback", body, format="json"
     )
+
+
+def complete(name: str, state: str, code: str, *, user):
+    return complete_body(name, {"code": code, "state": state}, user=user)
 
 
 def location(response) -> tuple[str, dict[str, list[str]]]:
@@ -195,7 +197,8 @@ def test_every_route_needs_the_token_except_the_callback(env) -> None:
         response = getattr(anonymous, method)(path)
         assert response.status_code == 401, path
         assert response.json()["error"]["code"] == "unauthenticated"
-    assert anonymous.get("/api/v1/connections/meta/callback").status_code == 302
+    # The callback is authenticated too: only the frontend, with the user's Token, finishes a grant.
+    assert anonymous.post("/api/v1/connections/meta/callback").status_code == 401
 
 
 def test_unknown_provider_is_404_and_google_asks_for_its_keys(api) -> None:
@@ -313,7 +316,6 @@ def test_meta_callback_stores_the_pages_and_redirects_to_the_frontend(
     assert response.status_code == 302
     where, query = location(response)
     assert where == f"{FRONT}/" and query == {"connected": ["meta"]}
-    assert response["Cache-Control"] == "no-store"
     rows = ConnectedAccount.objects.filter(user=user, provider="meta").order_by(
         "external_account_id"
     )
@@ -445,13 +447,16 @@ def test_an_account_of_another_user_is_refused_and_left_untouched(
     assert ConnectedAccount.objects.count() == 1
 
 
-def test_pfm_callback_names_no_user_and_only_redirects(env) -> None:
+def test_pfm_has_no_callback_step_and_its_page_only_syncs(api, env) -> None:
+    """PFM redirects to a frontend page with no state. That page calls ``GET /pfm/status``."""
     env(PFM_ENV)
-    ok = callback("pfm", provider="x", isSuccess="true", accountIds="sa_1")
-    assert location(ok)[1] == {"connected": ["pfm"]}
-    failed = callback("pfm", isSuccess="false", error="External Id already exists")
-    assert location(failed)[1] == {"error": ["connections.pfm_failed"]}
-    assert "External" not in failed["Location"]
+    done = api.post(
+        "/api/v1/connections/pfm/callback",
+        {"state": "none", "code": "none"},
+        format="json",
+    )
+    assert done.status_code == 400
+    assert done.json()["error"]["code"] == "connections.unsupported"
 
 
 # --- status ------------------------------------------------------------------

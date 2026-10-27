@@ -21,11 +21,6 @@ urlpatterns = [
         name="connections-connect",
     ),
     path(
-        "connections/<str:provider>/complete",
-        views.CompleteView.as_view(),
-        name="connections-complete",
-    ),
-    path(
         "connections/<str:provider>/callback",
         views.CallbackView.as_view(),
         name="connections-callback",

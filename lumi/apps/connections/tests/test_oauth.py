@@ -95,9 +95,7 @@ async def test_start_stores_state_and_pkce_for_x_and_returns_matching_url() -> N
     assert query["state"] == [request.state]
     assert query["code_challenge"] == [code_challenge_s256(record.code_verifier)]
     assert query["code_challenge_method"] == ["S256"]
-    assert query["redirect_uri"] == [
-        "http://localhost:8000/api/v1/connections/x/callback"
-    ]
+    assert query["redirect_uri"] == ["http://localhost:3010/connections/x/callback"]
     assert record.user_id == 7 and record.redirect_after == "/settings"
     assert record.expires_at == NOW + timedelta(minutes=10)
     assert rec.requests == []
@@ -167,7 +165,8 @@ async def test_callback_for_another_user_is_rejected() -> None:
     request = await oauth.start(user_id=1)
     with pytest.raises(OAuthStateError) as info:
         await oauth.complete(state=request.state, code="abc", expected_user_id=2)
-    assert info.value.code == "state_invalid" and rec.requests == []
+    assert info.value.code == "state_mismatch" and rec.requests == []
+    assert request.state in store.records  # refused without being consumed
 
 
 @pytest.mark.parametrize("state", ["", "x" * 257])

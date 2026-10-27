@@ -177,4 +177,4 @@ class ConnectionsConfig:
     def redirect_uri(self, provider: str) -> str:
         if provider == "google" and self.google_redirect_uri:
             return self.google_redirect_uri
-        return f"{self.public_base_url}/api/v1/connections/{provider}/callback"
+        return f"{self.frontend_url}/connections/{provider}/callback"
