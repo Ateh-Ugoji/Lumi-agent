@@ -6,6 +6,8 @@ import os
 
 import pytest
 
+from .netguard import net_attempts  # noqa: F401  autouse: no test leaves loopback
+
 
 def pytest_configure(config: pytest.Config) -> None:
     config.addinivalue_line(
