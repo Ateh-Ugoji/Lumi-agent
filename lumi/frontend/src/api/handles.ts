@@ -23,14 +23,25 @@ export type HandleSearchResponse = {
   context?: string;
 };
 
+/**
+ * The network the composer asks about. The server has no default: `platforms` is required on
+ * /handles/search and /handles/saved and `platform` on /handles/select (400 without it). The
+ * composer only searches X today, so every call names it explicitly.
+ */
+export const HANDLE_PLATFORM = "x";
+
 export function searchHandles(q: string, context = ""): Promise<HandleSearchResponse> {
-  return request<HandleSearchResponse>("/handles/search", { query: { q, context } });
+  return request<HandleSearchResponse>("/handles/search", {
+    query: { q, context, platforms: HANDLE_PLATFORM },
+  });
 }
 
 /** Instant-suggest snapshot. The composer prefix-filters it in the browser: 0 ms, 0 credits. */
 export async function getSavedHandles(): Promise<HandleRow[]> {
   try {
-    const payload = await request<{ results?: HandleRow[] }>("/handles/saved");
+    const payload = await request<{ results?: HandleRow[] }>("/handles/saved", {
+      query: { platforms: HANDLE_PLATFORM },
+    });
     return payload.results ?? [];
   } catch {
     return []; // no snapshot means no instant paint, never an error in the composer
@@ -38,9 +49,9 @@ export async function getSavedHandles(): Promise<HandleRow[]> {
 }
 
 /**
- * Tell the server which handle was picked, so the next search knows it. Only the handle and its
- * network go (the row's own `platform`; JSON leaves it out when the row has none, and the server then
- * assumes X like /search and /saved do). Nothing else goes:
+ * Tell the server which handle was picked, so it joins the user's saved list. Only the handle and
+ * its network go: the row's own `platform`, or the network the composer searched when the row
+ * carries none (the server requires one). Nothing else goes:
  * the photo, name and followers stay in this browser's search state and are never sent back,
  * because the server shares what it stores with every user and takes those only from the provider.
  * Best effort: it never blocks the composer.
@@ -49,7 +60,7 @@ export async function selectHandle(row: HandleRow): Promise<void> {
   try {
     await request<unknown>("/handles/select", {
       method: "POST",
-      body: { handle: row.handle, platform: row.platform }, // undefined is dropped by JSON
+      body: { handle: row.handle, platform: row.platform ?? HANDLE_PLATFORM },
     });
   } catch {
     // remembered-next-time is best effort

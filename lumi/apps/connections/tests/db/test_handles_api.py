@@ -9,7 +9,11 @@ from django.db import IntegrityError, connection
 from apps.connections import handles_api
 from apps.connections.clients.xpoz import XpozClient
 from apps.connections.handles.live import XpozHandleLive
-from apps.connections.models import HandleSearchCache, XpozCreditLedger
+from apps.connections.models import (
+    HandleSearchCache,
+    UserSavedHandle,
+    XpozCreditLedger,
+)
 from apps.connections.stores import DjangoCreditLedger
 from apps.connections.tests.fakes import Recorder, fixture
 from apps.profiles import services
@@ -78,13 +82,13 @@ def test_every_route_needs_a_token(client) -> None:
 
 
 def test_a_short_query_answers_without_touching_anything(api, xpoz) -> None:
-    body = api.get(SEARCH, {"q": "n"}).json()
+    body = api.get(SEARCH, {"q": "n", "platforms": "x"}).json()
     assert body["results"] == [] and body["reason"] == "min_length"
     assert xpoz.requests == []
 
 
 def test_search_is_free_and_explains_why_when_live_is_off(api) -> None:
-    response = api.get(SEARCH, {"q": "naval"})
+    response = api.get(SEARCH, {"q": "naval", "platforms": "x"})
     assert response.status_code == 200
     body = response.json()
     assert body["live"] is False and body["reason"] == "live_disabled"
@@ -93,7 +97,7 @@ def test_search_is_free_and_explains_why_when_live_is_off(api) -> None:
 
 
 def test_a_live_search_returns_rows_and_records_the_spend(api, user, xpoz) -> None:
-    body = api.get(SEARCH, {"q": "@Naval"}).json()
+    body = api.get(SEARCH, {"q": "@Naval", "platforms": "x"}).json()
     assert body["live"] is True and body["reason"] is None
     names = [r["handle"] for r in body["results"]]
     assert names[0] == "naval"
@@ -114,8 +118,8 @@ def test_a_live_search_returns_rows_and_records_the_spend(api, user, xpoz) -> No
 
 
 def test_the_second_search_comes_from_the_cache_and_costs_nothing(api, xpoz) -> None:
-    api.get(SEARCH, {"q": "naval"})
-    again = api.get(SEARCH, {"q": "naval"}).json()
+    api.get(SEARCH, {"q": "naval", "platforms": "x"})
+    again = api.get(SEARCH, {"q": "naval", "platforms": "x"}).json()
     assert again["live"] is False
     assert {r["source"] for r in again["results"]} <= {"cache", "db"}
     assert len(xpoz.requests) == 1
@@ -123,8 +127,8 @@ def test_the_second_search_comes_from_the_cache_and_costs_nothing(api, xpoz) -> 
 
 
 def test_a_narrower_query_reuses_the_cached_answer(api, xpoz) -> None:
-    api.get(SEARCH, {"q": "nav"})
-    api.get(SEARCH, {"q": "naval"})
+    api.get(SEARCH, {"q": "nav", "platforms": "x"})
+    api.get(SEARCH, {"q": "naval", "platforms": "x"})
     assert len(xpoz.requests) == 1
     assert HandleSearchCache.objects.filter(platform="x").count() >= 1
 
@@ -138,10 +142,7 @@ def test_instagram_is_refused_when_its_own_budget_is_closed_and_nothing_is_sent(
     assert xpoz.requests == [] and XpozCreditLedger.objects.count() == 0
 
 
-def test_unknown_platforms_fall_back_to_x_and_linkedin_never_spends(api, xpoz) -> None:
-    body = api.get(SEARCH, {"q": "naval", "platforms": "myspace"}).json()
-    assert body["platforms"] == ["x"]
-    xpoz.requests.clear()
+def test_linkedin_never_spends(api, xpoz) -> None:
     body = api.get(SEARCH, {"q": "naval", "platforms": "linkedin"}).json()
     assert body["platform_reasons"] == {"linkedin": "unsupported"}
     assert xpoz.requests == []
@@ -158,14 +159,14 @@ def test_an_xpoz_outage_is_reported_as_a_reason_and_not_cached(
             XpozClient(handles_api.get_config(), transport=broken.transport)
         ),
     )
-    response = api.get(SEARCH, {"q": "naval"})
+    response = api.get(SEARCH, {"q": "naval", "platforms": "x"})
     assert response.status_code == 200
     assert response.json()["reason"] == "provider_unavailable"
     assert HandleSearchCache.objects.count() == 0
 
 
 def test_query_limits_are_validated(api) -> None:
-    response = api.get(SEARCH, {"q": "x" * 101})
+    response = api.get(SEARCH, {"q": "x" * 101, "platforms": "x"})
     assert response.status_code == 400
     assert response.json()["error"]["code"] == "validation_error"
 
@@ -177,17 +178,20 @@ def test_profile_handles_lead_only_for_their_owner(
     SocialProfile.objects.create(user=other_user, handle=theirs)
     mine = SocialHandle.objects.create(platform="x", handle_normalized="navalmine")
     SocialProfile.objects.create(user=user, handle=mine)
-    rows = api.get(SEARCH, {"q": "naval"}).json()["results"]
+    rows = api.get(SEARCH, {"q": "naval", "platforms": "x"}).json()["results"]
     by_handle = {r["handle"]: r["source"] for r in rows}
     assert by_handle["navalmine"] == "db"
     assert by_handle.get("navalrival") != "db"
-    saved = {r["handle"]: r["source"] for r in api.get(SAVED).json()["results"]}
+    saved = {
+        r["handle"]: r["source"]
+        for r in api.get(SAVED, {"platforms": "x"}).json()["results"]
+    }
     assert saved["navalmine"] == "db" and saved.get("navalrival") != "db"
 
 
 def test_selecting_twice_keeps_one_row(api) -> None:
     for _ in range(2):
-        api.post(SELECT, {"handle": "karpathy"}, format="json")
+        api.post(SELECT, {"handle": "karpathy", "platform": "x"}, format="json")
     assert SocialHandle.objects.filter(handle_normalized="karpathy").count() == 1
 
 
@@ -229,7 +233,7 @@ def test_stats_counts_only_the_callers_credits(api, user, other_user, xpoz) -> N
     XpozCreditLedger.objects.create(
         user=other_user, route="users", credits=12, key_slot=1
     )
-    api.get(SEARCH, {"q": "naval"})
+    api.get(SEARCH, {"q": "naval", "platforms": "x"})
     body = api.get(STATS).json()
     assert body["credits_spent_24h"] == 2
     assert body["live_enabled"] is True and body["live_budget"] == 12
@@ -263,3 +267,62 @@ def test_the_database_refuses_an_uppercase_handle(db) -> None:
             " display_name, avatar_url, external_id, origin, last_seen_at, created_at,"
             " updated_at) VALUES ('x','UPPER','','','','','live',now(),now(),now())"
         )
+
+
+# The network is explicit on every handle route (CONTRATOS §11, row 30). A missing, empty or
+# unknown value is a 400 validation_error, never a silent fall back to X.
+def refused(response, field: str) -> None:
+    assert response.status_code == 400
+    error = response.json()["error"]
+    assert error["code"] == "validation_error"
+    assert field in error["details"]
+
+
+@pytest.mark.parametrize("platform", [None, "", "myspace", "X ", "reddit"])
+def test_select_without_a_valid_platform_is_a_400_and_writes_nothing(
+    api, platform
+) -> None:
+    body = {"handle": "karpathy"}
+    if platform is not None:
+        body["platform"] = platform
+    refused(api.post(SELECT, body, format="json"), "platform")
+    assert not SocialHandle.objects.exists() and not UserSavedHandle.objects.exists()
+
+
+@pytest.mark.parametrize("platforms", [None, "", " ", ",", "myspace", "x,myspace"])
+def test_search_without_valid_platforms_is_a_400_and_costs_nothing(
+    api,
+    xpoz,
+    platforms,
+) -> None:
+    query = {"q": "naval"}
+    if platforms is not None:
+        query["platforms"] = platforms
+    refused(api.get(SEARCH, query), "platforms")
+    assert xpoz.requests == []
+
+
+@pytest.mark.parametrize("platforms", [None, "", ",", "myspace", "x,myspace"])
+def test_saved_without_valid_platforms_is_a_400(api, platforms) -> None:
+    query = {} if platforms is None else {"platforms": platforms}
+    refused(api.get(SAVED, query), "platforms")
+
+
+def test_a_short_query_still_needs_the_platforms(api, xpoz) -> None:
+    refused(api.get(SEARCH, {"q": "n"}), "platforms")
+
+
+def test_a_list_of_networks_is_accepted_in_any_case_with_spaces(
+    api,
+    xpoz,
+) -> None:
+    body = api.get(SEARCH, {"q": "n", "platforms": " X , Instagram "}).json()
+    assert body["platforms"] == ["x", "instagram"]
+    assert api.get(SAVED, {"platforms": "TikTok"}).status_code == 200
+
+
+def test_every_network_is_a_valid_select_platform(api) -> None:
+    for name in ("x", "instagram", "tiktok", "linkedin", "facebook"):
+        body = {"handle": "karpathy", "platform": name}
+        assert api.post(SELECT, body, format="json").status_code == 200
+    assert SocialHandle.objects.count() == 5

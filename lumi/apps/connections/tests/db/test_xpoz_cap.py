@@ -93,7 +93,7 @@ def test_the_search_route_stops_spending_at_the_cap_and_still_answers(
     api, xpoz, monkeypatch
 ) -> None:
     monkeypatch.setenv("XPOZ_DAILY_CREDIT_CAP_USER", "2")
-    first = api.get(SEARCH, {"q": "naval"}).json()
+    first = api.get(SEARCH, {"q": "naval", "platforms": "x"}).json()
     assert first["live"] is True
     second = api.get(SEARCH, {"q": "elon", "platforms": "x"})
     assert second.status_code == 200
@@ -105,6 +105,9 @@ def test_the_search_route_is_throttled_per_user(api, other_user) -> None:
     from apps.connections.tests.db.test_api import client_for
 
     for _ in range(30):
-        assert api.get(SEARCH, {"q": "n"}).status_code == 200
-    assert api.get(SEARCH, {"q": "n"}).status_code == 429
-    assert client_for(other_user).get(SEARCH, {"q": "n"}).status_code == 200
+        assert api.get(SEARCH, {"q": "n", "platforms": "x"}).status_code == 200
+    assert api.get(SEARCH, {"q": "n", "platforms": "x"}).status_code == 429
+    assert (
+        client_for(other_user).get(SEARCH, {"q": "n", "platforms": "x"}).status_code
+        == 200
+    )

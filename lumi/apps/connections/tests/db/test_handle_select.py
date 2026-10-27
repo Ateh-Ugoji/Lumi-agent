@@ -53,7 +53,9 @@ def snapshot(handle: SocialHandle) -> tuple:
 
 def test_an_empty_handle_keeps_none_of_what_the_client_sent(api) -> None:
     services.get_or_create_handle("x", "karpathy", origin=HandleOrigin.NICHE)
-    response = api.post(SELECT, {"handle": "karpathy", **EVIL}, format="json")
+    response = api.post(
+        SELECT, {"handle": "karpathy", **EVIL, "platform": "x"}, format="json"
+    )
     assert response.status_code == 200
     handle = stored()
     assert handle.avatar_url == "" and handle.display_name == ""
@@ -62,7 +64,9 @@ def test_an_empty_handle_keeps_none_of_what_the_client_sent(api) -> None:
 
 
 def test_a_new_handle_is_created_without_any_client_data(api) -> None:
-    response = api.post(SELECT, {"handle": "@KarPathy", **EVIL}, format="json")
+    response = api.post(
+        SELECT, {"handle": "@KarPathy", **EVIL, "platform": "x"}, format="json"
+    )
     assert response.json() == {
         "remembered": True,
         "handle": "karpathy",
@@ -95,7 +99,9 @@ def test_a_handle_with_data_does_not_change_not_even_when_asked_to_overwrite(
     before = snapshot(stored())
     for extra in ({}, {"overwrite": True}):
         response = api.post(
-            SELECT, {"handle": "karpathy", **EVIL, **extra}, format="json"
+            SELECT,
+            {"handle": "karpathy", **EVIL, **extra, "platform": "x"},
+            format="json",
         )
         assert response.status_code == 200
     assert snapshot(stored()) == before
@@ -107,7 +113,9 @@ def test_a_handle_with_data_does_not_change_not_even_when_asked_to_overwrite(
 )
 def test_a_url_that_is_not_http_is_ignored_and_never_stored(api, url) -> None:
     response = api.post(
-        SELECT, {"handle": "karpathy", "avatar_url": url}, format="json"
+        SELECT,
+        {"handle": "karpathy", "avatar_url": url, "platform": "x"},
+        format="json",
     )
     assert response.status_code == 200
     assert stored().avatar_url == ""
@@ -115,20 +123,20 @@ def test_a_url_that_is_not_http_is_ignored_and_never_stored(api, url) -> None:
 
 
 def test_a_picked_handle_is_stored_as_cache_never_live(api) -> None:
-    api.post(SELECT, {"handle": "karpathy", **EVIL}, format="json")
+    api.post(SELECT, {"handle": "karpathy", **EVIL, "platform": "x"}, format="json")
     assert stored().origin == HandleOrigin.CACHE
-    (saved,) = api.get(SAVED).json()["results"]
+    (saved,) = api.get(SAVED, {"platforms": "x"}).json()["results"]
     assert saved["source"] == "cache"
 
 
 def test_selecting_never_raises_a_handle_above_what_a_provider_gave_it(api) -> None:
     services.get_or_create_handle("x", "sama", origin=HandleOrigin.LIVE)
-    api.post(SELECT, {"handle": "sama"}, format="json")
+    api.post(SELECT, {"handle": "sama", "platform": "x"}, format="json")
     assert stored("sama").origin == HandleOrigin.LIVE
 
 
 def test_a_later_live_pull_fills_the_photo_of_a_picked_handle(api) -> None:
-    api.post(SELECT, {"handle": "karpathy", **EVIL}, format="json")
+    api.post(SELECT, {"handle": "karpathy", **EVIL, "platform": "x"}, format="json")
     live = HandleRow(
         "karpathy",
         "x",
@@ -158,7 +166,7 @@ def test_the_platform_is_part_of_the_key(api) -> None:
 
 
 def test_a_handle_that_the_platform_refuses_is_not_remembered(api) -> None:
-    response = api.post(SELECT, {"handle": "a" * 16}, format="json")
+    response = api.post(SELECT, {"handle": "a" * 16, "platform": "x"}, format="json")
     assert response.status_code == 400
     assert SocialHandle.objects.count() == 0
 
@@ -179,9 +187,3 @@ def test_a_pick_on_another_network_is_created_on_that_network(api) -> None:
     }
     assert stored(platform="instagram").origin == HandleOrigin.CACHE
     assert not SocialHandle.objects.filter(platform="x").exists()
-
-
-def test_a_client_that_sends_no_platform_means_x_like_search_and_saved(api) -> None:
-    response = api.post(SELECT, {"handle": "karpathy"}, format="json")
-    assert response.json()["platform"] == "x"
-    assert SocialHandle.objects.get().platform == "x"

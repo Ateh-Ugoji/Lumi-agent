@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from rest_framework import serializers
 
+from .handles.ranking import PLATFORMS
 from .models import ConnectedAccount
 
 
@@ -92,6 +93,32 @@ class DisconnectSerializer(serializers.Serializer):
     remote_revoked = serializers.IntegerField()
 
 
+class PlatformsField(serializers.CharField):
+    """``platforms=x,instagram``: required, at least one network, every name a known one.
+
+    A missing, empty or unknown value is a ``400 validation_error``, never a silent fall back
+    to X. The value that reaches the view is the lowercased, comma-joined list.
+    """
+
+    def __init__(self, **kwargs) -> None:
+        kwargs.setdefault("max_length", 100)
+        super().__init__(**kwargs)
+
+    def to_internal_value(self, data):
+        names = [p.strip().lower() for p in super().to_internal_value(data).split(",")]
+        names = [n for n in names if n]
+        if not names:
+            raise serializers.ValidationError(
+                f"Indica al menos una red: {', '.join(PLATFORMS)}."
+            )
+        unknown = [n for n in names if n not in PLATFORMS]
+        if unknown:
+            raise serializers.ValidationError(
+                f"Red no válida: {', '.join(unknown)}. Redes: {', '.join(PLATFORMS)}."
+            )
+        return ",".join(names)
+
+
 class HandleSearchQuerySerializer(serializers.Serializer):
     q = serializers.CharField(
         required=False, allow_blank=True, default="", max_length=100
@@ -99,15 +126,11 @@ class HandleSearchQuerySerializer(serializers.Serializer):
     context = serializers.CharField(
         required=False, allow_blank=True, default="", max_length=300
     )
-    platforms = serializers.CharField(
-        required=False, allow_blank=True, default="x", max_length=100
-    )
+    platforms = PlatformsField()
 
 
 class HandleSavedQuerySerializer(serializers.Serializer):
-    platforms = serializers.CharField(
-        required=False, allow_blank=True, default="x", max_length=100
-    )
+    platforms = PlatformsField()
 
 
 class HandleRowSerializer(serializers.Serializer):
@@ -141,9 +164,7 @@ class HandleSelectSerializer(serializers.Serializer):
     """Only the handle. A photo, name or follower count in the body is ignored, never stored."""
 
     handle = serializers.CharField(min_length=1, max_length=101)
-    platform = serializers.ChoiceField(
-        choices=["x", "instagram", "tiktok", "linkedin", "facebook"], default="x"
-    )
+    platform = serializers.ChoiceField(choices=list(PLATFORMS))
     selected_query = serializers.CharField(
         required=False, allow_blank=True, default="", max_length=100
     )
