@@ -16,7 +16,11 @@ from typing import Any, get_args
 from lumi_ai.competitors.extract import post_ref, tag_posts
 from lumi_ai.competitors.niche import make_niche_key, slugify
 from lumi_ai.competitors.own import compute_own_lift
-from lumi_ai.competitors.pipeline import PipelineDeps, run_peer_pipeline
+from lumi_ai.competitors.pipeline import (
+    PipelineDeps,
+    budget_message,
+    run_peer_pipeline,
+)
 from lumi_ai.competitors.ranking import framework_key, rank_frameworks
 from lumi_ai.ports import (
     BudgetExceeded,
@@ -136,6 +140,8 @@ def build(services: CompetitorServices) -> list[ToolSpec]:
                 found = await s.pipeline.social.search_posts(
                     plat, query, cfg.peer_discovery_posts
                 )
+            except BudgetExceeded as exc:
+                return {"error": budget_message(f"searching {query!r} on {plat}", exc)}
             except SocialDataError as exc:
                 return _refusal(exc)
             chosen = _rank_authors(found, exclude=own, limit=cfg.peer_max_accounts)
@@ -330,7 +336,7 @@ def build(services: CompetitorServices) -> list[ToolSpec]:
                     plat, handle, None, TREND_POSTS_PER_HANDLE
                 )
             except BudgetExceeded as exc:
-                stopped = f"credit budget reached before @{handle}: {exc}"
+                stopped = budget_message(f"@{handle}", exc)
                 break
             except _FATAL as exc:
                 return {**_refusal(exc), "scanned_handles": scanned}

@@ -14,7 +14,7 @@ Rama: `lumi-orquestador`. Última actualización: 2026-10-27 (T3 hecho salvo Dja
 | T1 Esqueleto y puertos | hecha | `lumi_ai/ports.py` v1.0, `lumi_ai/config.py`, `lumi_ai/json_utils.py`, `lumi_ai/agent/result.py`. `uv run pytest lumi_ai -q`: 25 pasan. |
 | T2 Proveedores | hecha | `lumi_ai/providers/{chain,factory,audio,errors,urls}.py`, `lumi_ai/observability.py`, `lumi_ai/keys.py` (`build_probes(config)`: groq, openrouter, openlux, jev, neatlogs, video). `uv run pytest lumi_ai -q`: 64 pasan, 0 se omiten. Las sondas no se ejecutaron contra proveedores reales (sin keys). |
 | T3 Loop y tools | hecho (a falta del pegamento Django, T4) | `agent/{context,gates,turn_class,prompts,loop,streaming,support,result}.py`, `judge/` (Jev → LLM pequeño), `tools/` (registry sin estado global + 12 tools con puerto). El bucle recibe todo por `AgentDeps` (LLMChain, ToolRegistry, ChatStore, ProfileGateway, Clock, MemoryStore, TurnLogStore, SemanticJudge, McpGateway, MemoryExtractor); no hay estado de módulo. Las tools de memoria, competidores, voz-extracción, repurpose y tendencias se registran en T5-T8 (traen su servicio). `uv run pytest lumi_ai -q`: 197 pasan, 0 se omiten. |
-| T4 Pegamento Django | bloqueada por T4/T5 de ARCHITECT | |
+| T4 Pegamento Django | en curso: `apps.py` y `models.py` + migración 0001 hechos; faltan `runtime.py` y `repos.py` | |
 | T5 Perfil de estilo | hecho salvo repos Django (T4) | `style/{schema,extract,service,questions,tools}.py`: JSON robusto con `extract_json` + pydantic + un reintento de reparación; voz por plataforma; arranque en frío con `STYLE_QUESTIONS` (`source=questions`, nunca pisa una voz de posts); tool `extract_voice_profile`. La transacción con `select_for_update` y el mapeo `None` ↔ `general` son del repo Django (T4). `uv run pytest lumi_ai -q`: 217 pasan. |
 | T6 RAG y memoria | hecho salvo repos Django y comando `reindex_vectors` (T4) | `rag/{vector_store,embedder,indexer,retrieval,reindex,memory,extractor,tools,collections,errors}.py`. Chroma solo guarda vectores con id `{tipo}:{id de Postgres}` y metadatos de filtro; el texto se lee de Postgres al recuperar y los vectores huérfanos se borran. Memoria: Postgres primero, vector después; si indexar falla la nota se guarda con `indexed=false` y `reindex_vectors` la repara. Extractor de fin de turno (`LLMMemoryExtractor`) y tools `remember`/`recall_memory`. `uv run pytest lumi_ai -q`: 249 pasan, 1 deseleccionado (`live`: ONNX real + Chroma en disco, pasa con `LUMI_RUN_LIVE=1 -m live`). |
 | T6-T12 | pendientes | |
@@ -57,7 +57,8 @@ Observaciones (A = las resuelvo yo añadiendo columnas en `apps/intelligence`, B
 
 ## Bloqueos
 
-Ninguno por ahora.
+- **T10 (vídeo) bloqueada en origen de datos.** Ni PFM ni Xpoz rellenan `PostIn.media`, así que en el ingest `post_media` queda vacío y no hay URL de vídeo que analizar. El análisis de vídeo necesita otra fuente de URLs de medios (p. ej. que CONNECT las obtenga con otra llamada del proveedor, o que el usuario pegue el enlace del vídeo). Hasta decidirlo, T10 solo puede trabajar con una URL dada explícitamente.
+- **Presupuesto de Xpoz e Instagram.** Una ejecución de Instagram cuesta 12 créditos y `XPOZ_RUN_CREDIT_BUDGET` vale 10 por defecto. El pipeline de competidores ya no falla en silencio: devuelve `insufficient_data` con "credit budget insufficient before @handle (N of M credits spent) … raise XPOZ_RUN_CREDIT_BUDGET". El tope lo aplica el adaptador de Xpoz (CONNECT): para que Instagram funcione, subir el valor a 12 o más, o hacerlo por plataforma.
 
 ## Revisión de SCHEMA v2 (27 oct, tras `46d1674`)
 

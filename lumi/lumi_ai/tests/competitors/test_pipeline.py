@@ -122,6 +122,19 @@ async def test_budget_exceeded_on_the_first_account_is_insufficient_not_failed()
     assert llm.calls == 0 and len(social.calls) == 1
 
 
+async def test_a_run_costing_more_than_the_budget_says_so_with_the_numbers() -> None:
+    """Xpoz Instagram costs 12 credits against the default budget of 10: never a silent empty run."""
+    over = BudgetExceeded("run costs 12", spent=0, budget=10)
+    deps, _, reports, _, llm = _rig(errors={"*": over})
+    await _run(deps)
+    saved = reports.reports[0]
+    assert saved.status == "insufficient_data"
+    detail = saved.detail or ""
+    assert "budget insufficient" in detail and "0 of 10 credits" in detail
+    assert "XPOZ_RUN_CREDIT_BUDGET" in detail
+    assert llm.calls == 0
+
+
 async def test_one_bad_account_does_not_sink_the_run() -> None:
     deps, _, reports, _, _ = _rig(errors={"bob": ProviderUnavailable("down")})
     result = await _run(deps)

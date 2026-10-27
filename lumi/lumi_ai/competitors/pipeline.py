@@ -135,6 +135,23 @@ def _normalize_handles(handles: Sequence[str], limit: int) -> list[str]:
     return list(seen)[:limit]
 
 
+def budget_message(where: str, exc: BudgetExceeded) -> str:
+    """Say plainly that the run budget is too small, with the numbers the adapter gave.
+
+    A platform whose single run costs more than the budget (Xpoz Instagram: 12 credits
+    against the default 10) must surface as "budget insufficient", never as a silent empty run.
+    """
+    figures = ""
+    if exc.budget is not None:
+        spent = exc.spent if exc.spent is not None else 0
+        figures = f" ({spent} of {exc.budget} credits spent)"
+    extra = f": {exc}" if str(exc) else ""
+    return (
+        f"credit budget insufficient before {where}{figures}{extra}; "
+        "raise XPOZ_RUN_CREDIT_BUDGET or analyse fewer accounts"
+    )
+
+
 async def _fetch(
     deps: PipelineDeps,
     platform: Platform,
@@ -155,7 +172,7 @@ async def _fetch(
                 platform, handle, since, PeerConfig.SCAN_POSTS_PER_ACCOUNT
             )
         except BudgetExceeded as exc:
-            warnings.append(f"credit budget reached before @{handle}: {exc}")
+            warnings.append(budget_message(f"@{handle}", exc))
             break
         except _FATAL as exc:
             return (
