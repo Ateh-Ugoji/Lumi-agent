@@ -168,7 +168,51 @@ Los pasos completos y los enlaces están en `docs/API_KEYS.md`. Este es el orden
 
 ## Frontend
 
-Pendiente. Se llena en T11 con las notas de la integración React y Django.
+El frontend vive en `lumi/frontend` (Vite, React 19, puerto 3010) y habla solo con `/api/v1`. No queda ninguna llamada al backend viejo: la voz (`POST /voice/transcribe`) y el conector de Google (`/connections/google/*`) pasan por el mismo cliente.
+
+### Cómo está armado
+
+- `src/api/http.ts` es el único cliente. Pone `Authorization: Token <key>`, entiende `{"error":{"code","message","details"}}` y abre el stream del chat. Pide `text/event-stream, application/json;q=0.5` porque DRF contesta 406 si solo se acepta `text/event-stream`.
+- `src/auth/` guarda el token y muestra el login o el registro antes de la app (`AuthGate` en `main.tsx`). Un 401 limpia el token y vuelve al login.
+- `src/api/connections.ts` pide `POST /connections/{provider}/connect`, abre `authorize_url` y, al volver, lee `?connected=` o `?error=`, limpia la URL y muestra el aviso. Con Post for Me llama a `GET /connections/pfm/status` al volver, porque el callback de PFM no trae el estado de Lumi y esa llamada es la que sincroniza las cuentas.
+- Los códigos de error del callback llegan con prefijo (`connections.access_denied`). El mapa de mensajes acepta también la forma sin prefijo que lista CONTRATOS.
+- Publicación: el borrador se revisa con `dry_run`, y la publicación real exige pulsar dos veces (iniciar y confirmar). Cada intento lleva su `Idempotency-Key`.
+- Ningún token de proveedor llega al navegador. Las pruebas lo comprueban en el DOM.
+
+### Cómo se prueba
+
+Unitarias del cliente (Node 22):
+
+```
+cd lumi/frontend && npx -y node@22 --test tests/*.test.ts
+```
+
+Recorrido real en el navegador, con Django, Vite y proveedores simulados. No necesita ninguna clave y no sale a internet:
+
+```
+cd lumi
+export DATABASE_URL=$(uv run python scripts/dev_postgres.py --test)   # Postgres local
+cd e2e && npm install && npx playwright test
+```
+
+Playwright abre el Chrome del equipo (`channel: "chrome"`), levanta `e2e/server.py` en el puerto 8000 y Vite en el 3010. El servidor e2e borra y recrea la base `lumi_e2e` en cada arranque y reconstruye el entorno desde cero, así que una clave de tu shell nunca llega a un proveedor. `e2e/sim.py` simula Meta y Post for Me con las respuestas grabadas de `tests/fixtures`, y las pantallas de consentimiento se contestan con redirecciones al callback real de Lumi. El agente del chat es un doble (`FakeRuntime`) que sí llama al flujo real de conexión.
+
+Los nueve pasos: registro, perfil, estado de los proveedores, conectar Facebook, conectar Post for Me, cancelar en el proveedor, un turno de chat con su tarjeta de conexión, publicar (previsualizar, confirmar) y desconectar con cierre y reingreso de sesión. El mismo recorrido sin navegador está en `apps/connections/tests/db/test_e2e_api.py` y corre con `pytest`.
+
+### Qué hace Christian
+
+1. Poner las claves de cada proveedor en `lumi/.env` (orden de la sección anterior). No hay que tocar el frontend.
+2. `VITE_API_BASE` solo hace falta si el backend no está en `http://localhost:8000/api/v1`.
+3. Para desarrollar: `npm run dev:backend` y `npm run dev:frontend` desde `lumi/`. El backend usa uvicorn (ASGI) porque el stream del chat no funciona bien con `runserver`.
+4. En `FRONTEND_URL` va la URL del frontend (`http://localhost:3010`) y en `PUBLIC_BASE_URL` la del backend. Los redirect URI de cada app registran la del backend.
+
+### Huecos conocidos
+
+- Un login de Meta con varias Páginas guarda todas, pero no enlaza ninguna al perfil. Sin enlace, `POST /publish` contesta `publish.not_connected`. Hace falta una ruta para elegir la Página del perfil (cambio de contrato pendiente de ARCHITECT).
+- `ToolExecution.as_dict` no envía el `result` de `connect_account`, así que la tarjeta de conexión del chat solo se marca con el agente de prueba. Con el agente real el enlace se ve como un enlace de texto.
+- `/repurpose` y `/voice/transcribe` están en `apps/intelligence/urls.py` pero no están montadas en `config/urls.py`. Hasta entonces la voz responde 404.
+- `ChatStreamView` no declara un renderer `text/event-stream`.
+- Las pruebas de navegador no cubren X, LinkedIn ni Google conectados, porque esos proveedores no tienen simulación todavía.
 
 ## Lo construido
 
