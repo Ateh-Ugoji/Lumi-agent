@@ -181,3 +181,11 @@ Cada tarea: responsable, entregable y cómo se verifica. Los detalles y rutas es
 - Christian activó a los 3 bots a las 06:00 UTC y vuelve hacia las 12:00 UTC. El orquestador revisa cada hora: fusiona `main` en la rama, actualiza este archivo y hace push.
 - Los datos reales son un archivo SQLite `lumi.db` del backend FastAPI. No están en git. Para conectarlos se sigue `lumi/docs/DATA_IMPORT.md`: el archivo se deja en `/workspace/lumi-data/lumi.db` y después se corren `import_legacy`, `verify_legacy_import` y `reindex_vectors`. El importador T8 de ARCHITECT acepta SQLite y Postgres.
 - Pendiente de Christian: dejar `lumi.db` en esa ruta, o pasarlo para que el orquestador lo deje ahí.
+
+## Actualización 27 oct 2026, ~06:40 UTC
+
+- **ARCHITECT:** fase 1 cerrada (SCHEMA v2, CONTRATOS v1.0, `manage.py`, migraciones de `accounts` y `profiles`, `EncryptedTextField`; 619 tests pasan). Decisiones aceptadas por el orquestador: tabla propia `auth_tokens` y único parcial en `alerts`; `contrib.admin` se agrega solo para staff.
+- **INTELLIGENCE:** T0–T3 hechas (`lumi_ai`, ports 1.2, 197 tests). T4 espera a ARCHITECT; ahora va con T5 y T6.
+- **CONNECT:** fase 1 cerrada (frontend fusionado, `MUSE.md`); capa de adaptadores lista (139 tests). T3 espera las migraciones y CONTRATOS.
+- **Pendientes de Christian:** las 5 preguntas de `MUSE.md`, renovar el token de Post for Me (`PFM_JWT_TOKEN`, vencido) y los créditos de Xpoz (casi agotados).
+- **Orquestador:** `API_KEYS.md`, `AGENT_KEYS_SETUP.md` y `DATA_IMPORT.md` alineados a CONTRATOS §8 y §10 y a `.env.example`. Faltan en `.env.example` (INTELLIGENCE debe añadirlas): `GROQ_MODEL_LARGE`, `GROQ_MODEL_SMALL`, `GROQ_MODEL_FALLBACK`, `OPENROUTER_MODEL`, `WHISPER_MODEL`, `PROVIDER_COOLDOWN_SECONDS`, `PROVIDER_COOLDOWN_MAX_SECONDS`, `LLM_TIMEOUT_SECONDS`. Revisión de secretos en el historial: sin secretos reales.

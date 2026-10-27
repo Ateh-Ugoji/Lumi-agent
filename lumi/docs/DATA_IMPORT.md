@@ -14,20 +14,28 @@ sqlite3 -readonly /workspace/lumi-data/lumi.db "select name,(select count(*) fro
 Anota en `lumi/plan/estado/ARCHITECT.md` las tablas y el número de filas de cada una. Si la versión de Alembic (`alembic_version`) no es la cabeza actual, primero corre las migraciones sobre una copia del archivo.
 
 ## 3. Importarlo al esquema Django en Postgres
-`LEGACY_DATABASE_URL` admite dos formas:
-- `sqlite:////workspace/lumi-data/lumi.db`, que es el caso normal.
-- `postgresql://...`, si llega una base de Postgres.
+Comando de CONTRATOS §10 (T8):
+
+`python manage.py import_legacy --sqlite PATH [--user EMAIL] [--dry-run] [--memory-md PATH]`
+
+El origen es solo un `lumi.db` de SQLite, que se abre en solo lectura (`mode=ro`). Ensaya siempre sobre una copia.
 
 ```bash
-export LEGACY_DATABASE_URL=sqlite:////workspace/lumi-data/lumi.db
-uv run python manage.py import_legacy --source "$LEGACY_DATABASE_URL" --dry-run
-uv run python manage.py import_legacy --source "$LEGACY_DATABASE_URL"
-uv run python manage.py verify_legacy_import --source "$LEGACY_DATABASE_URL"   # tiene que salir con código 0
-uv run python manage.py reindex_vectors   # vuelve a generar los vectores de Chroma desde Postgres
+cp /workspace/lumi-data/lumi.db /tmp/lumi-copia.db
+uv run python manage.py import_legacy --sqlite /tmp/lumi-copia.db --user TU_CORREO --dry-run
+uv run python manage.py import_legacy --sqlite /tmp/lumi-copia.db --user TU_CORREO
+uv run python manage.py import_legacy --sqlite /tmp/lumi-copia.db --verify   # compara conteos; tiene que salir con código 0
+uv run python manage.py reindex_vectors   # regenera los vectores de Chroma desde Postgres
 ```
-El importador abre el origen en solo lectura y se puede repetir sin duplicar datos. Si un origen no tiene usuarios, crea un usuario llamado "importado".
+
+- Todos los datos legados son de un solo usuario. `--user` lo crea con contraseña inutilizable si no existe.
+- Es repetible: escribe `legacy_import_map` y una segunda ejecución no duplica ni cambia nada.
+- Orden: handles, perfiles, posts, métricas, chat, inteligencia, conexiones; cada tabla en una transacción.
+- Enums en minúsculas; `alerted_at` y `alert_dismissed` pasan a `alerts`; fechas y métricas desconocidas quedan `NULL` (no 0).
+- `--verify` cubre las 21 tablas legadas.
+- Los tokens de `mcp_auth_accounts` y `profiles.pfm_account_id` se cifran con `EncryptedTextField` al escribirse y nunca van a logs.
+- Un dump de Postgres no está soportado por el contrato; si llega uno, pídelo a ARCHITECT. `LEGACY_DATABASE_URL` de `.env.example` no lo usa este comando.
 
 ## 4. Después de importar
 - Prueba la app con `seed_demo` desactivado, para que el seed no sobrescriba los datos importados.
 - Anota en `lumi/plan/ContextoTareas.md` cuándo se importó, el origen, los conteos por tabla y el resultado de la verificación.
-- Si los datos traen tokens de redes sociales en texto plano, cífralos con Fernet al importarlos y no los muestres en ningún log.

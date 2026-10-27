@@ -9,21 +9,25 @@ Reglas:
 - `lumi/.env` nunca se sube al repo. Nunca pegues keys en chats, commits, logs ni PRs. Este archivo solo nombra variables.
 - Las keys que se expusieron antes del repo actual (ver `lumi/before-deployment.md`) deben rotarse antes de usarlas.
 
-Columna **Estado**: `real` = la variable ya existe en el código actual (`lumi/app/config.py`, `lumi/.env.example` o `os.environ`). `nueva` = la define el plan; el nombre queda fijo cuando el bot responsable lo escribe en `.env.example`.
+Columna **Estado**: `real` = la variable está en `lumi/.env.example` o la lee el código Django/`lumi_ai`. `nueva` = la define el plan y aún no está en el código. Política y registro de sondas: `docs/CONTRATOS.md` §8.
+
+PostgreSQL es el único motor y `DATABASE_URL` es obligatoria. No hay SQLite (salvo la lectura de un `lumi.db` legado en `import_legacy`).
+
+> **Aviso (27 oct 2026):** el token de Post for Me (`PFM_JWT_TOKEN`) está vencido (401) y hay que renovarlo. Xpoz casi no tiene créditos: no actives `XPOZ_LIVE_ENABLED` sin recargar o usar `XPOZ_API_KEY_2`.
 
 ## Obligatorias (sin ellas no arranca)
 
 | Variable | Estado | Para qué sirve | Dónde se obtiene |
 | --- | --- | --- | --- |
 | `DATABASE_URL` | real | PostgreSQL, único motor en dev, tests y producción. Formato Django: `postgresql://usuario:clave@host:5432/lumi` (sin `+asyncpg`). En local la levanta `docker compose up -d db`; el valor de `.env.example` ya apunta ahí | Docker Compose local; Railway u otro Postgres en producción |
-| `SECRET_KEY` | real | Firma de sesiones y tokens de Django. Hoy está declarada y no se usa; en Django sí se usa | `python -c "import secrets; print(secrets.token_urlsafe(50))"` |
-| `TOKEN_ENCRYPTION_KEY` | nueva | Clave Fernet que cifra en Postgres los tokens OAuth de redes y de Google | `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"` |
+| `SECRET_KEY` | real | Firma de sesiones y tokens de Django. Mínimo 32 caracteres (lo comprueba `check_keys`) | `python -c "import secrets; print(secrets.token_urlsafe(50))"` |
+| `TOKEN_ENCRYPTION_KEY` | real | Clave Fernet que cifra en Postgres los tokens OAuth de redes y de Google | `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"` |
 | `GROQ_API_KEY` | real | Modelo de lenguaje principal (`openai/gpt-oss-120b`, con `openai/gpt-oss-20b` para turnos simples) y voz a texto (Whisper) | https://console.groq.com/keys |
 | `OPENROUTER_API_KEY` | real | Modelo de respaldo cuando Groq falla o se agota (hoy `meta-llama/llama-3.3-70b-instruct`) | https://openrouter.ai/keys |
 
 ## Recomendadas (opcionales, con aviso al arrancar)
 
-Hoy el código exige `TYPESAFE_API_KEY` y `NEATLOGS_API_KEY` al arrancar. El plan los baja a opcionales: sin ellas Lumi funciona, con menos calidad de evaluación y sin trazas.
+Son opcionales: sin ellas Lumi funciona, con menos calidad de evaluación y sin trazas.
 
 | Variable | Estado | Qué se apaga si falta | Dónde se obtiene |
 | --- | --- | --- | --- |
@@ -37,16 +41,26 @@ Hoy el código exige `TYPESAFE_API_KEY` y `NEATLOGS_API_KEY` al arrancar. El pla
 | `PFM_JWT_TOKEN` | real | Post for Me: conectar cuentas por su OAuth, traer posts y métricas, publicar. El token que existía está vencido (401) | https://app.postforme.dev (ver "Post for Me" abajo) |
 | `XPOZ_API_KEY` | real | Escucha social y posts de competidores en X. El plan gratis da 500 créditos únicos (2 por consulta de X) | https://www.xpoz.ai/get-token |
 | `XPOZ_API_KEY_2` | real (se lee con `os.environ`, fuera de `config.py`) | Segunda key de Xpoz para rotar cuando la primera se agota | https://www.xpoz.ai/get-token con otra cuenta |
-| `META_APP_ID`, `META_APP_SECRET` | nueva | OAuth de Facebook (páginas). En modo Development solo funciona con cuentas con rol en la app | https://developers.facebook.com/apps |
-| `LINKEDIN_CLIENT_ID`, `LINKEDIN_CLIENT_SECRET` | nueva | OAuth de LinkedIn. Con autoservicio solo se publica en el perfil personal (`w_member_social`) | https://www.linkedin.com/developers/apps |
-| `X_CLIENT_ID`, `X_CLIENT_SECRET` | nueva | OAuth de X | https://console.x.com |
-| `X_LIVE_ENABLED` | nueva | Interruptor de llamadas reales a X. Por defecto `false`. Cada post en X gasta créditos prepagados; no se activa sin que Christian lo pida | no es una key |
-| `XPOZ_LIVE_ENABLED` | nueva | Interruptor de llamadas reales a Xpoz. Por defecto `false`. Cada consulta gasta créditos | no es una key |
-| `XPOZ_RUN_CREDIT_BUDGET` | nueva | Tope de créditos de Xpoz por ejecución. Por defecto `10` | no es una key |
-| `HANDLE_CACHE_TTL_MINUTES` | nueva | Minutos de vigencia de la caché de búsqueda de handles. Por defecto `60`. Sustituye a `MVP_CACHE_TTL_MINUTES` | no es una key |
-| `TOKEN_ENCRYPTION_KEY_PREVIOUS` | nueva | Clave Fernet anterior, solo mientras se rota `TOKEN_ENCRYPTION_KEY`. Vacía en el uso normal | no es una key |
-| `LINKEDIN_API_VERSION`, `META_GRAPH_VERSION` | nueva | Versiones de API que usan los adaptadores. Por defecto `202609` y `v26.0` | no son keys |
-| `PUBLIC_BASE_URL`, `FRONTEND_URL` | nueva | URL pública del backend (para redirect URIs de OAuth, por defecto `http://localhost:8000`) y del frontend (adónde vuelve el usuario tras conectar, por defecto `http://localhost:3010`) | no son keys |
+| `META_APP_ID`, `META_APP_SECRET` | real | OAuth de Facebook (páginas). En modo Development solo funciona con cuentas con rol en la app | https://developers.facebook.com/apps |
+| `LINKEDIN_CLIENT_ID`, `LINKEDIN_CLIENT_SECRET` | real | OAuth de LinkedIn. Con autoservicio solo se publica en el perfil personal (`w_member_social`) | https://www.linkedin.com/developers/apps |
+| `X_CLIENT_ID`, `X_CLIENT_SECRET` | real | OAuth de X | https://console.x.com |
+| `X_LIVE_ENABLED` | real | Interruptor de llamadas reales a X. Por defecto `false`. Cada post en X gasta créditos prepagados; no se activa sin que Christian lo pida | no es una key |
+| `XPOZ_LIVE_ENABLED` | real | Interruptor de llamadas reales a Xpoz. Por defecto `false`. Cada consulta gasta créditos | no es una key |
+| `XPOZ_RUN_CREDIT_BUDGET` | real | Tope de créditos de Xpoz por ejecución. Por defecto `10` | no es una key |
+| `HANDLE_CACHE_TTL_MINUTES` | real | Minutos de vigencia de la caché de búsqueda de handles. Por defecto `60`. Sustituye a `MVP_CACHE_TTL_MINUTES` | no es una key |
+| `TOKEN_ENCRYPTION_KEY_PREVIOUS` | real | Clave Fernet anterior, solo mientras se rota `TOKEN_ENCRYPTION_KEY`. Vacía en el uso normal | no es una key |
+| `LINKEDIN_API_VERSION`, `META_GRAPH_VERSION` | real | Versiones de API que usan los adaptadores. Por defecto `202609` y `v26.0` | no son keys |
+| `PUBLIC_BASE_URL`, `FRONTEND_URL` | real | URL pública del backend (para redirect URIs de OAuth, por defecto `http://localhost:8000`) y del frontend (adónde vuelve el usuario tras conectar, por defecto `http://localhost:3010`) | no son keys |
+
+## Ajustes de Django (opcionales, no son keys)
+
+| Variable | Estado | Para qué sirve |
+| --- | --- | --- |
+| `AUTH_TOKEN_TTL_DAYS` | real | Días de validez de los tokens de API (tabla `auth_tokens`). Por defecto `30` |
+| `CORS_ALLOWED_ORIGINS` | real | Orígenes del frontend permitidos. Local: `http://localhost:3010,http://127.0.0.1:3010` |
+| `DJANGO_SETTINGS_MODULE`, `DEBUG`, `ALLOWED_HOSTS`, `CSRF_TRUSTED_ORIGINS`, `LOG_LEVEL`, `REDIS_URL`, `LUMI_ENV_FILE` | real | Ajustes estándar. `LUMI_ENV_FILE` cambia la ruta del `.env` (por defecto `lumi/.env`) |
+
+Las diez variables que CONTRATOS §8 añadió a esta guía: `PUBLIC_BASE_URL`, `FRONTEND_URL`, `XPOZ_LIVE_ENABLED`, `XPOZ_RUN_CREDIT_BUDGET`, `HANDLE_CACHE_TTL_MINUTES`, `TOKEN_ENCRYPTION_KEY_PREVIOUS`, `LINKEDIN_API_VERSION`, `META_GRAPH_VERSION`, `AUTH_TOKEN_TTL_DAYS`, `CORS_ALLOWED_ORIGINS`.
 
 Trámites que ninguna key resuelve (solo Christian):
 
@@ -73,7 +87,7 @@ Fuentes https://developers.google.com/identity/protocols/oauth2/web-server y htt
 5. Elige el tipo "Web application".
 6. En "Authorized redirect URIs" pega `http://localhost:8000/api/v1/connections/google/callback`. Para producción añade la misma ruta con tu dominio HTTPS.
 7. Pulsa Create. Copia el ID de cliente a `GOOGLE_OAUTH_CLIENT_ID` y el secreto a `GOOGLE_OAUTH_CLIENT_SECRET`. Pon la misma URI del paso 6 en `GOOGLE_OAUTH_REDIRECT_URI`.
-8. El valor por defecto antiguo de `GOOGLE_OAUTH_REDIRECT_URI` es `/mcp/google/callback`. Cuando CONNECT entregue T9, la ruta correcta es la del paso 6. Hasta entonces el código anterior sigue usando la ruta vieja y debes registrar las dos en la consola.
+8. `GOOGLE_OAUTH_REDIRECT_URI` es siempre `{PUBLIC_BASE_URL}/api/v1/connections/google/callback` (CONTRATOS §8). La ruta vieja `/mcp/google/callback` es del backend FastAPI; regístrala también solo mientras ese backend siga en uso.
 
 ### Xpoz (escucha de competidores en X)
 
@@ -172,7 +186,25 @@ No hagas el paso 5 hasta decidir gastar. Los pasos 1 a 4 no cuestan.
 | `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, `GOOGLE_OAUTH_REDIRECT_URI` | real | Conectores MCP de Google Drive y Docs | https://console.cloud.google.com/apis/credentials |
 | `MCP_ENABLED`, `MCP_GDRIVE_ENABLED`, `MCP_GDOCS_ENABLED` | real | Interruptores (por defecto `true`) de los conectores MCP | no son keys |
 | `MCP_TOOLS_TTL_SECONDS`, `MCP_REFRESH_TIMEOUT_SECONDS`, `MCP_CALL_TIMEOUT_SECONDS` | real | Ajustes de caché y tiempos de MCP (300 / 15 / 60) | no son keys |
-| `TURN_CLASS_JEV_ENABLED`, `TURN_CLASS_JEV_TIMEOUT_MS`, `TURN_CLASS_JEV_HIGH`, `TURN_CLASS_JEV_LOW` | real | Etapa 2 del clasificador de turnos con Jev (apagada por defecto) | no son keys |
+| `TURN_CLASS_JEV_ENABLED`, `TURN_CLASS_JEV_TIMEOUT_MS`, `TURN_CLASS_JEV_HIGH`, `TURN_CLASS_JEV_LOW` | real | Etapa 2 del clasificador de turnos con Jev (apagada por defecto; `1500` ms, `0.7`, `0.4`) | no son keys |
+
+## Modelos y proveedores de IA (opcionales, no son keys)
+
+Salen de `lumi/lumi_ai/config.py` (`AIConfig`). El nombre de la variable es el campo en mayúsculas; Django los pasa a `AIConfig.from_mapping`. `check_keys` valida los ids de modelo contra el catálogo real de cada proveedor. Los valores por defecto son los del código anterior y no están verificados contra los catálogos de hoy.
+
+| Variable | Por defecto | Para qué sirve |
+| --- | --- | --- |
+| `GROQ_MODEL_LARGE` | `openai/gpt-oss-120b` | Modelo principal de Groq |
+| `GROQ_MODEL_SMALL` | `openai/gpt-oss-20b` | Turnos simples y juez de respaldo |
+| `GROQ_MODEL_FALLBACK` | `qwen/qwen3.8-27b` | Segundo modelo de Groq si el grande falla |
+| `OPENROUTER_MODEL` | `meta-llama/llama-3.3-70b-instruct` | Modelo de respaldo en OpenRouter |
+| `OPENLUX_MODEL` | `qwen3.8-27b` | Modelo del relay OpenLux |
+| `WHISPER_MODEL` | `whisper-large-v3-turbo` | Voz a texto en Groq |
+| `PROVIDER_COOLDOWN_SECONDS` | `300` | Descanso de un proveedor tras un 401/402/403/429 |
+| `PROVIDER_COOLDOWN_MAX_SECONDS` | `900` | Tope del descanso cuando el proveedor manda `Retry-After` |
+| `LLM_TIMEOUT_SECONDS` | `60` | Tiempo máximo de una llamada al modelo |
+
+Embedder: `onnx-minilm-l6-v2` (384 dimensiones), fijo en `lumi_ai/rag/embedder.py`; **no tiene variable**. Se descarga una vez (unos 79 MB) a `~/.cache/chroma`. Cada colección de Chroma guarda el nombre del embedder; si cambia, hay que correr `manage.py reindex_vectors`.
 
 Variables que el código actual lee fuera de `config.py` y que el port debe pasar a la configuración central o eliminar: `MVP_CHROMA_API_KEY`, `MVP_CHROMA_TENANT`, `MVP_CHROMA_DATABASE`, `HANDLE_SEARCH_DB` (apunta a SQLite; desaparece), `MVP_XPOZ_LIVE`, `MVP_XPOZ_BUDGET`, `MVP_CACHE_TTL_MINUTES`, `HANDLE_DB_ENRICH_LIMIT`. `XPOZ_RUN_CREDIT_BUDGET` es nueva y se documenta arriba.
 
@@ -189,6 +221,8 @@ uv run python manage.py check_keys
 uv run python manage.py runserver
 ```
 
-`check_keys` hace una llamada mínima real a cada servicio configurado y muestra `OK`, `OMITIDA (opcional, falta la variable)` o el error exacto (key mal copiada, permiso faltante, cuota agotada). Nunca imprime el valor de una key. Con `--only groq,xpoz` prueba solo esos servicios; con `--json` da salida para scripts.
+`check_keys` (`apps/core/management/commands/check_keys.py`) hace una llamada mínima real a cada servicio configurado y muestra `OK`, `OMITIDA` (opcional, falta la variable) o `FALLA` con el error (key mal copiada, permiso faltante, cuota agotada). Nunca imprime el valor de una key y funciona con el entorno vacío.
 
-`check_keys` y los nombres marcados `nueva` son parte del plan: no existen en el repo hasta que LUMI-ARCHITECT, LUMI-INTELLIGENCE y LUMI-CONNECT los entreguen.
+- `--only id1,id2`: solo esos servicios. Ids: `database`, `secret`, `token_encryption`, `groq`, `openrouter`, `openlux`, `meta`, `linkedin`, `x` y los demás que registren INTELLIGENCE y CONNECT (`pfm`, `xpoz`, `google` cuando CONNECT los añada).
+- `--json`: salida para scripts.
+- Código de salida: `0` todo bien; `1` falta una obligatoria o falló un servicio configurado; `2` id desconocido.
