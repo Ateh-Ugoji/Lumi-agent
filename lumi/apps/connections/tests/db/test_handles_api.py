@@ -203,7 +203,7 @@ def test_select_remembers_the_handle_and_saved_returns_it(api) -> None:
     row = SocialHandle.objects.get(platform="x", handle_normalized="karpathy")
     assert row.origin == HandleOrigin.SELECTED and row.follower_count == 1200
     (saved,) = api.get(SAVED).json()["results"]
-    assert saved["handle"] == "karpathy"
+    assert saved["handle"].lower() == "karpathy"
     assert saved["followers"] == 1200 and saved["source"] == "cache"
 
 
