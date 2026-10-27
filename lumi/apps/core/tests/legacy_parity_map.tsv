@@ -1,0 +1,70 @@
+legacy_file	name_regex	status	owner	targets	note
+test_agent_claim_gate	.*	covered	INTELLIGENCE	lumi_ai/tests/agent/test_gates.py;lumi_ai/tests/agent/test_loop.py	Puerta de afirmaciones: patrones en test_gates, bucle en test_loop.
+test_agent_context	call_tool_.*|get_analytics_profile_id_not_required	replaced	INTELLIGENCE	lumi_ai/tests/tools/test_registry.py::profile_id_is_pinned;lumi_ai/tests/agent/test_loop.py::profile_id_comes_from_the_turn	El profile_id ya no se inyecta si falta: el turno lo fija y el modelo no puede cambiarlo.
+test_agent_context	.*	covered	INTELLIGENCE	lumi_ai/tests/agent/test_prompts.py	Prompt de sistema con contexto de perfil, fecha y reglas anti invención.
+test_agent_tool_errors	.*	covered	INTELLIGENCE	lumi_ai/tests/tools/test_registry.py::missing_required;lumi_ai/tests/agent/test_loop.py::malformed_arguments	
+test_context_budget	.*	covered	INTELLIGENCE	lumi_ai/tests/agent/test_context.py;lumi_ai/tests/agent/test_loop.py::oversized_history_is_trimmed	
+test_coverage_gate	system_prompt_.*	covered	INTELLIGENCE	lumi_ai/tests/agent/test_prompts.py	
+test_coverage_gate	get_peer_advice_returns_provenance	covered	INTELLIGENCE	lumi_ai/tests/competitors/test_tools.py::advice_returns_ranked_frameworks	
+test_coverage_gate	.*	covered	INTELLIGENCE	lumi_ai/tests/agent/test_gates.py;lumi_ai/tests/agent/test_loop.py	
+test_prompt5_acceptance	.*	covered	INTELLIGENCE	lumi_ai/tests/agent/test_loop.py;lumi_ai/tests/agent/test_turn_class.py;lumi_ai/tests/agent/test_gates.py	
+test_turn_class	greeting_whitelist_reexported_from_loop	replaced	INTELLIGENCE	lumi_ai/tests/agent/test_context_slim.py::greeting_variants	Ya no hay reexportación desde el bucle; la lista de saludos se prueba en su módulo.
+test_turn_class	.*	covered	INTELLIGENCE	lumi_ai/tests/agent/test_turn_class.py	
+test_loop_gates	platform_char_limits	covered	INTELLIGENCE	lumi_ai/tests/generation/test_platforms.py	
+test_loop_gates	normalize_phrases_.*	covered	INTELLIGENCE	lumi_ai/tests/generation/test_tools.py::phrases_accept	
+test_loop_gates	repurpose_tool_bound_to_real_function	covered	INTELLIGENCE	lumi_ai/tests/generation/test_tools.py::both_tools_are_registered	
+test_loop_gates	.*	covered	INTELLIGENCE	lumi_ai/tests/agent/test_context_slim.py	
+test_jev_layer	ask_.*	covered	INTELLIGENCE	lumi_ai/tests/judge/test_judge.py	
+test_jev_layer	retry_.*|no_retry_.*	covered	INTELLIGENCE	lumi_ai/tests/generation/test_enforcement.py;lumi_ai/tests/generation/test_flow.py	
+test_jev_layer	generate_platform_repurpose_appends_revision_feedback	covered	INTELLIGENCE	lumi_ai/tests/generation/test_writer.py::prompt_for_a_revision	
+test_jev_layer	judge_caption_falls_back_when_jev_broken	covered	INTELLIGENCE	lumi_ai/tests/judge/test_judge.py::fallback_uses_next_judge	
+test_jev_layer	enough_information_.*	covered	INTELLIGENCE	lumi_ai/tests/agent/test_loop.py::judge_early_exit;lumi_ai/tests/agent/test_loop.py::no_judge_verdict_keeps_the_loop_going	La suficiencia de información la decide el juez en el bucle.
+test_jev_layer	memory_gate_.*	covered	INTELLIGENCE	lumi_ai/tests/agent/test_loop.py::memory_extraction_is_gated_by_the_judge	
+test_jev_layer	relevance_filter_.*	replaced	INTELLIGENCE	lumi_ai/tests/competitors/test_tools.py::advice_returns_ranked_frameworks	El consejo ordena por relevancia vectorial (campo relevance) y ya no filtra con el juez.
+test_enforcement	.*	covered	INTELLIGENCE	lumi_ai/tests/generation/test_enforcement.py	
+test_repurpose	.*	covered	INTELLIGENCE	lumi_ai/tests/generation/test_difficulty.py;lumi_ai/tests/generation/test_platforms.py	
+test_repurpose_endpoint	tool_.*|generator_fallback.*	covered	INTELLIGENCE	lumi_ai/tests/generation/test_tools.py;lumi_ai/tests/generation/test_flow.py	
+test_repurpose_endpoint	core_.*	covered	INTELLIGENCE	lumi_ai/tests/generation/test_flow.py::regeneration_is_guided	
+test_repurpose_endpoint	.*	covered	INTELLIGENCE	apps/intelligence/tests/test_repurpose_endpoint.py	
+test_voice_routes	.*	covered	INTELLIGENCE	apps/intelligence/tests/test_repurpose_endpoint.py::TestTranscribe	
+test_provider_fallback	.*	covered	INTELLIGENCE	lumi_ai/tests/providers/test_chain.py;lumi_ai/tests/providers/test_factory_audio.py::defaults_match_the_legacy_chain	
+test_registry	.*	covered	INTELLIGENCE	lumi_ai/tests/tools/test_registry.py	
+test_tool_tiers	.*	covered	INTELLIGENCE	lumi_ai/tests/tools/test_registry.py;lumi_ai/tests/tools/test_tools.py	
+test_user_request_tool	.*	covered	INTELLIGENCE	lumi_ai/tests/tools/test_tools.py::save_user_request	
+test_framework_corpus	.*	replaced	INTELLIGENCE	lumi_ai/tests/rag/test_rag.py;lumi_ai/tests/rag/test_vector_store.py	Chroma local pasa a un puerto de vectores con filas en PostgreSQL.
+test_voice_corpus	upsert_posts_.*	replaced	INTELLIGENCE	lumi_ai/tests/rag/test_rag.py::only_authentic_originals	Chroma local pasa a un puerto de vectores con filas en PostgreSQL.
+test_voice_corpus	.*	covered	INTELLIGENCE	lumi_ai/tests/style/test_style.py::spread_sample	
+test_memory	.*	replaced	INTELLIGENCE	lumi_ai/tests/rag/test_rag.py;apps/intelligence/tests/test_repos.py::TestMemory	memory.md y Chroma pasan a notas y resumen en PostgreSQL con vectores detrás de un puerto.
+test_voice	.*	covered	INTELLIGENCE	lumi_ai/tests/style/test_style.py	
+test_voice_index_sqlite	migrated_index_is_partial|only_one_current_row_per_profile	replaced	ARCHITECT	apps/intelligence/tests/test_models.py::one_current_voice_per_profile_and_platform	El índice parcial de SQLite pasa a una restricción única parcial de PostgreSQL.
+test_voice_index_sqlite	.*	covered	INTELLIGENCE	apps/intelligence/tests/test_repos.py::TestVoice	
+test_peer_store	.*	covered	INTELLIGENCE	apps/intelligence/tests/test_repos.py::TestReports;apps/intelligence/tests/test_repos.py::TestPeerPosts	
+test_peer_pipeline_wiring	.*	covered	INTELLIGENCE	lumi_ai/tests/competitors/test_pipeline.py::full_run;apps/intelligence/tests/test_runtime.py::TestBootstrapJob	
+test_peer_extract	.*	covered	INTELLIGENCE	lumi_ai/tests/competitors/test_extract.py	
+test_peer_schemas	.*	covered	INTELLIGENCE	lumi_ai/tests/competitors/test_schemas.py	
+test_peer_synthesize	.*	covered	INTELLIGENCE	lumi_ai/tests/competitors/test_synthesize.py	
+test_peer_winners	.*	covered	INTELLIGENCE	lumi_ai/tests/competitors/test_winners.py	
+test_niche_schemas	.*	gap	INTELLIGENCE		El esquema de nicho con geografía, consultas y vetado de pares del código legado no se portó. Hace falta decidir: portarlo o retirarlo.
+test_xpoz	.*	covered	CONNECT	apps/connections/tests/test_xpoz.py::user_posts_page	
+test_xpoz_resilience	niche_trends_.*|partial_handle_failure.*	covered	INTELLIGENCE	lumi_ai/tests/competitors/test_tools.py::trends	
+test_xpoz_resilience	.*	covered	CONNECT	apps/connections/tests/test_xpoz.py	
+test_handle_db	remember_.*	covered	CONNECT	apps/connections/tests/db/test_stores.py::remember_new_keeps	
+test_handle_db	no_chroma_config_is_a_noop	replaced	CONNECT	apps/connections/tests/db/test_stores.py	El almacén de handles ya no depende de Chroma ni de Firestore: vive en PostgreSQL.
+test_handle_db	user_profile_.*	covered	CONNECT	apps/connections/tests/test_xpoz.py::key_rotates;apps/connections/tests/test_xpoz.py::user_posts_page	
+test_handle_db	.*	gap	CONNECT		Guardar en la tabla de handles los autores que descubre un escaneo de nicho (tendencias, frameworks, enriquecimiento con tope) no tiene test ni uso en el código nuevo.
+test_handle_search_mvp	.*	covered	CONNECT	apps/connections/tests/handles/test_service.py;apps/connections/tests/handles/test_ranking.py;apps/connections/tests/db/test_handles_api.py;apps/connections/tests/db/test_stores.py	
+test_handle_search_platforms	fat_pull_.*|cache_read_pages_.*	replaced	CONNECT	apps/connections/tests/db/test_stores.py::cache_entry_round_trips	La cuota de lectura y recorte de Firestore no existe en PostgreSQL.
+test_handle_search_platforms	stats_exposes_the_platform_catalog	covered	CONNECT	apps/connections/tests/db/test_handles_api.py::stats	
+test_handle_search_platforms	.*	covered	CONNECT	apps/connections/tests/handles/test_service.py;apps/connections/tests/handles/test_live.py;apps/connections/tests/test_xpoz.py;apps/connections/tests/db/test_handles_api.py	
+test_handles_router	.*	replaced	CONNECT	apps/connections/tests/db/test_handles_api.py;apps/core/tests/test_url_mounts.py	Los routers de FastAPI pasan a vistas DRF; se prueban por HTTP y por montaje de rutas.
+test_mcp_google_router	.*	covered	CONNECT	apps/connections/tests/db/test_google_api.py	
+test_mcp	exchange_code_.*|.*token.*|invalid_grant.*	covered	CONNECT	apps/connections/tests/mcp/test_gateway.py::an_expiring_token;apps/connections/tests/mcp/test_google.py;apps/connections/tests/db/test_google_api.py	
+test_mcp	.*	covered	CONNECT	apps/connections/tests/mcp/test_gateway.py;apps/connections/tests/mcp/test_connectors.py	
+test_post_filter	upsert_posts_skips_polluted_captions|reply_style_defaults_empty	replaced	CONNECT	apps/connections/tests/test_ingest.py::map_pfm_item_drops_unusable_items	El filtro de captions contaminadas vive en los mapeadores de ingesta, no en el upsert.
+test_post_filter	.*	covered	CONNECT	apps/connections/tests/test_ingest.py	
+test_profile_extract_fixes	first_int_.*|map_.*|api_structured_.*|heuristic_.*|detect_truncation_boundaries	covered	CONNECT	apps/connections/tests/test_ingest.py	
+test_profile_extract_fixes	store_raw_item_writes_null_snapshot_for_missing_metrics	covered	ARCHITECT	apps/profiles/tests/test_services.py::no_metrics_means_no_snapshot	
+test_profile_extract_fixes	store_raw_item_self_reply_creates_thread_posts	covered	CONNECT	apps/connections/tests/test_ingest.py::self_reply_is_a_thread_continuation	
+test_profile_extract_fixes	baseline_exclusions_and_math|own_.*	covered	INTELLIGENCE	lumi_ai/tests/competitors/test_winners.py::baseline;lumi_ai/tests/competitors/test_own.py	
+test_profile_extract_fixes	.*	gap	ARCHITECT		Política de la pasada de ingesta que el código nuevo aún no tiene.
+test_metrics	.*	gap	ARCHITECT		Velocidad y detección de picos de likes por hora sin portar.

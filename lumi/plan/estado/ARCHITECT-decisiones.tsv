@@ -60,3 +60,4 @@ ts	phase	decision	why	evidence	result
 2026-10-27T07:28:52Z	T12	reescribir docs/how-to-setup.md (Postgres, migrate, createsuperuser, check_keys, import_legacy, ASGI); frontend intacto	orchestrator 7:12 (b)	docs only; claims checked against code	pushed
 2026-10-27T07:28:52Z	T12	how-to-setup rewrite	T12 b	docs	pushed
 2026-10-27T07:33:34Z	T12	post_media.kind nullable (profiles.0002) + CONTRATOS OPENROUTER opcional + push gate	ports 1.9 admite None; Christian aprobó NULL sin adivinar; legado sin medios	test_services x2, test_models, parity row 21, legacy no-media; control rojo del push	pendiente push
+2026-10-27T07:39:40Z	paridad	mapa de paridad contra los 418 tests legados con comprobador	el equipo necesita cifras y huecos que no se desvíen al borrar lumi/app	legacy_tests.tsv congelado; 6 tests; control negativo falla; 337 covered, 45 replaced, 36 gap	listo

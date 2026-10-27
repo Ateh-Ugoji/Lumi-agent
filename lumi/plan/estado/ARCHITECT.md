@@ -43,7 +43,7 @@ Rama: `lumi-orquestador`. Registro de decisiones: `ARCHITECT-decisiones.tsv`.
 
 ## Matriz de paridad
 
-Cada fila es un comportamiento donde el backend nuevo difiere del legado a propósito (sección 11 de `docs/CONTRATOS.md`) y el test que lo fija. Lo que se comporta igual lo cubren los tests de cada app; esta matriz no sustituye la comparación endpoint por endpoint con los 418 tests legados de `lumi/tests/`, que sigue sin hacerse.
+Cada fila es un comportamiento donde el backend nuevo difiere del legado a propósito (sección 11 de `docs/CONTRATOS.md`) y el test que lo fija. Lo que se comporta igual lo cubren los tests de cada app; la comparación con los 418 tests legados de `lumi/tests/` está en [`PARIDAD-LEGADO.md`](PARIDAD-LEGADO.md), que genera `apps/core/tests/legacy_parity.py` desde `legacy_parity_map.tsv`. Un test falla si algún test legado queda sin mapa, si un destino no existe o si el informe se desvía.
 
 | Fila | Comportamiento | Legado | Nuevo | Estado | Test |
 | --- | --- | --- | --- | --- | --- |
