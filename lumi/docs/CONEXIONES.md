@@ -228,3 +228,36 @@ Google no es un `SocialProvider`. `GoogleOAuth` cumple el protocolo `OAuthProvid
 Sin verificar contra el servicio real: el servidor MCP de Google, el consentimiento y el refresco solo se probaron con servidores simulados en loopback.
 
 Los límites de longitud al publicar salen de `lumi_ai.generation.platforms` (`SocialProvider.validate_draft`), la misma fuente que usa el generador: X 280, LinkedIn 3000, Facebook 63.206 (no oficial), Instagram 2200 con máximo 5 hashtags, TikTok 2200 en unidades UTF-16. Ya no hay tabla local.
+
+## Importador del legado (T8)
+
+`apps/connections/legacy_import.py` registra dos importadores en `import_legacy` (orden 200 y 210, rango CONNECT de CONTRATOS §10).
+
+- `mcp_auth_accounts`: cada fila pasa a `McpAuthAccount` del usuario importado. Los tokens se cifran al guardar. Los permisos (`scopes`) pasan de texto separado por espacios a lista. Una fila sin token se omite con aviso.
+- `profiles.pfm_account_id`: crea una `ConnectedAccount` con proveedor `pfm`, ligada al perfil que sobrevive (`profile_targets`). Un id vacío o que empieza por `demo-` no crea cuenta. Si dos perfiles legados se fusionaron, solo el primero conserva la cuenta y el otro deja un aviso.
+- El id de PFM queda en `external_account_id` en claro, no cifrado. Es la clave única con la que se llama a PFM y no es un token (PFM guarda las credenciales). Cifrarlo obligaría a duplicarlo en otra columna. Si ARCHITECT prefiere cifrarlo, hace falta un cambio de modelo.
+- Ni los tokens ni los ids salen en avisos, en el informe ni en logs. Una segunda ejecución no cambia nada.
+
+## Medios de los posts (propuesta, 2026-10-27)
+
+Hoy `ingest.py` no rellena `PostIn.media`, porque ninguna de las dos fuentes da un tipo fiable. La investigación de las especificaciones públicas (solo lectura, sin llamadas con clave):
+
+| Fuente | Qué devuelve | Fuente de la afirmación |
+| --- | --- | --- |
+| PFM `GET /v1/social-account-feeds/{id}` con `expand=metrics` | `PlatformPostDto.media`: lista de medios del post propio. El esquema declara cada elemento como un arreglo sin forma (`items: {type: array}`), así que el contenido real queda **sin verificar** | https://api.postforme.dev/docs/json |
+| PFM `GET /v1/social-post-results` | `SocialPostResultDto.media`: lista de `SocialPostMediaDto` (`url`, `thumbnail_url`, `alt_text`). Solo existe para posts que se publicaron por PFM | misma página |
+| Xpoz, posts de un usuario en X (`/api/data/twitter/posts/users/{username}/live`) | Campo `mediaUrls`, que `USER_LIVE_FIELDS` ya pide. Sin tipo | https://api.xpoz.ai/openapi.json |
+| Xpoz, posts de un usuario en Instagram (`/api/data/instagram/posts/users/{identifier}/live`) | Campos `mediaType`, `imageUrl`, `videoUrl`, `audioOnlyUrl`. Con tipo | misma página |
+| Xpoz, posts de un usuario en TikTok (`/api/data/tiktok/posts/users/{identifier}/live`) | Campos `videoThumbnail`, `videoUrl`, `duration` | misma página |
+
+Costo. Los campos son parte de la misma consulta (`fields=`): Xpoz cobra por consulta y las filas son gratis, según https://www.xpoz.ai/pricing (X y Reddit 2 créditos, TikTok 5, Instagram 12). Pedir los campos de medios no añade una llamada. Que no cuesten más por campo es lo que dice la tarifa, pero **sin verificar** con una consulta real.
+
+Propuesta concreta para `PostIn.media`:
+
+1. Posts propios (PFM): pedir `expand=metrics` ya se hace. Leer `media` del feed sin gasto extra. Mapear solo cuando el elemento trae `url` y un tipo reconocible. Si el contenido real resulta un arreglo anidado, se deja vacío y se avisa.
+2. Posts de pares en Instagram y TikTok (Xpoz): añadir `imageUrl`, `videoUrl`, `mediaType` (Instagram) y `videoThumbnail`, `videoUrl` (TikTok) a los campos de la consulta que ya se hace para leer sus posts. Costo extra: 0 créditos. El tipo sale de `mediaType` en Instagram. En TikTok todo es vídeo.
+3. X: `mediaUrls` llega sin tipo. Deducir el tipo por la extensión de la URL es una suposición. Propuesta: `kind=None` o descartar.
+4. Si INTELLIGENCE necesita el medio de un post concreto que no llegó, una segunda llamada por post (`/posts/{id}/live`) cuesta lo mismo que una consulta (2 créditos en X, 12 en Instagram, 5 en TikTok). No se recomienda como ruta normal.
+5. Alternativa sin costo: que el usuario pegue el enlace del medio en el chat y que INTELLIGENCE lo use como `MediaRef` de esa petición.
+
+CONNECT puede implementar los puntos 1 y 2 en el siguiente cambio si ARCHITECT confirma que `MediaRef.kind` admite el valor de cada tipo.
