@@ -225,3 +225,10 @@ El orquestador eligió (c) mientras Christian decide. Entretanto, ARCHITECT comp
 2. Revisar los términos de Google, X, Instagram y TikTok sobre analizar videos de terceros.
 3. Pegar `GROQ_API_KEY` y `TYPESAFE_API_KEY` (y `OPENROUTER_API_KEY` si se quiere) en `lumi/.env`, y autorizar los tests live y `ai_eval --live`, que gastan cuota.
 4. Pasar posts reales aceptados y rechazados para calibrar los umbrales de los jueces.
+
+## INTELLIGENCE en espera, 27 oct 07:47 UTC (`761185f`)
+- T0–T12 terminadas. Ports en 1.10. Las sondas y los tests live están escritos y no se corrieron; no se gastó cuota. lumi_ai + apps/intelligence: 640 tests pasan. Ruff y makemigrations limpios.
+- T4b: pasarela MCP con `resolve_pending` (`0c07e2e`) y resultado de `connect_account` filtrado por campos permitidos (`5b35885`). CONNECT tiene los SHA para su e2e real.
+- Timeout de tools corregido (`761185f`): CancelToken + `@aio` con `atomic()` y una compuerta antes del commit que revierte si se canceló. Hay test con base real. Sin cubrir: escrituras anteriores dentro de la misma tool, llamadas externas y Chroma (se repara con `reindex_vectors`).
+- Pendientes de otros. CONNECT: OwnPostSync, ConnectionLinks y que sus escrituras usen `@aio`. ARCHITECT: `.gitignore`, `.env.example` de video, el arranque ASGI sin key y su test de `legacy_import`.
+- INTELLIGENCE espera las keys y las 4 decisiones de Christian.
