@@ -303,6 +303,33 @@ class HandleSearchCacheEntry(models.Model):
         ordering = ["rank", "id"]
 
 
+class UserSavedHandle(models.Model):
+    """A handle one user picked in the handle search (``POST /handles/select``).
+
+    ``social_handles`` is a shared cache of public identities, so who saved what lives here,
+    one row per ``(user, handle)``. ``GET /handles/saved`` reads only the caller's rows.
+    """
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="saved_handles"
+    )
+    handle = models.ForeignKey(
+        SocialHandle, on_delete=models.CASCADE, related_name="saved_by"
+    )
+    created_at = models.DateTimeField(db_default=Now(), editable=False)
+
+    class Meta:
+        db_table = "user_saved_handles"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "handle"], name="uq_user_saved_handle"
+            )
+        ]
+        indexes = [
+            models.Index(fields=["user", "-created_at"], name="ix_user_saved_recent")
+        ]
+
+
 class XpozCreditLedger(models.Model):
     """One row per paid Xpoz call. The key is identified by slot (1 or 2), never by value."""
 

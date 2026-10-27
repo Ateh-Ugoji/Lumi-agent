@@ -48,6 +48,7 @@ from .models import (
     OAuthState,
     PublishJob,
     PublishStatus,
+    UserSavedHandle,
     XpozCreditLedger,
 )
 from .oauth import OAuthStateRecord
@@ -328,8 +329,9 @@ class DjangoHandleStore:
     """Handle tables over Postgres.
 
     ``user_id`` limits "handles of profiles already in Lumi" to the caller's own profiles, so
-    one user's profile list never leads another user's dropdown. Remembered handles and the
-    search cache stay shared: they are public identities and public search results.
+    one user's profile list never leads another user's dropdown, and "saved" to the handles the
+    caller picked (``user_saved_handles``). Remembered handles and the search cache stay
+    shared: they are public identities and public search results.
     """
 
     def __init__(self, user_id: int | None = None) -> None:
@@ -471,23 +473,38 @@ class DjangoHandleStore:
         if name is None:
             return None
         try:
-            get_or_create_handle(platform, name, origin=HandleOrigin.CACHE)
+            handle_id = get_or_create_handle(platform, name, origin=HandleOrigin.CACHE)
         except InvalidHandle:
             return None
+        if self._user_id is not None:
+            UserSavedHandle.objects.get_or_create(
+                user_id=self._user_id, handle_id=handle_id
+            )
         return name
 
     def saved(self, platforms: list[str], limit: int) -> list[HandleRow]:
-        """Own profile handles first-class, then remembered ones, followers first."""
+        """The caller's own profile handles first-class, then the ones they picked.
+
+        Nobody else's picks show up: ``social_handles`` is shared, so "saved" is read from
+        ``user_saved_handles``. Followers first.
+        """
+        if self._user_id is None:
+            return []
         rows: dict[str, HandleRow] = {}
-        own = SocialProfile.objects.filter(handle__platform__in=platforms)
-        if self._user_id is not None:
-            own = own.filter(user_id=self._user_id)
+        own = SocialProfile.objects.filter(
+            user_id=self._user_id, handle__platform__in=platforms
+        )
         for h in SocialHandle.objects.filter(pk__in=own.values("handle_id")):
             rows[f"{h.platform}:{h.handle_normalized}"] = replace(_row(h), source="db")
-        remembered = SocialHandle.objects.filter(platform__in=platforms).order_by(
-            F("follower_count").desc(nulls_last=True), "handle_normalized"
-        )[:limit]
-        for h in remembered:
+        picked = SocialHandle.objects.filter(
+            platform__in=platforms,
+            pk__in=UserSavedHandle.objects.filter(user_id=self._user_id).values(
+                "handle_id"
+            ),
+        ).order_by(F("follower_count").desc(nulls_last=True), "handle_normalized")[
+            :limit
+        ]
+        for h in picked:
             rows.setdefault(f"{h.platform}:{h.handle_normalized}", _row(h))
         ordered = sorted(
             rows.values(),
