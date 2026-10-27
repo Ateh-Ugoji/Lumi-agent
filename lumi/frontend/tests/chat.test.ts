@@ -3,6 +3,7 @@ import { test } from "node:test";
 import {
   agentErrorMessage,
   analyticsFrom,
+  chatErrorMessage,
   connectLinksFrom,
   parseSseChunk,
   streamChatMessage,
@@ -67,9 +68,18 @@ async function rejection(promise: Promise<unknown>): Promise<ApiError> {
 }
 
 test("agentErrorMessage translates known codes and falls back to the server text", () => {
-  assert.match(agentErrorMessage("llm_unavailable", "The language models are unavailable"), /no está disponible/);
+  assert.match(agentErrorMessage("llm_unavailable", "server text"), /isn't available right now/);
   assert.equal(agentErrorMessage("other", "server text"), "server text");
-  assert.match(agentErrorMessage(undefined), /falló/);
+  assert.match(agentErrorMessage(undefined), /failed before it finished/);
+});
+
+test("chatErrorMessage never shows raw status codes or HTML to the chat", () => {
+  assert.match(chatErrorMessage(new ApiError(0, "network_error", "sin red")), /Couldn't reach the Lumi server/);
+  assert.match(chatErrorMessage(new ApiError(502, "http_error", "x")), /isn't responding/);
+  assert.match(chatErrorMessage(new ApiError(500, "http_error", "x")), /ran into a problem/);
+  assert.equal(chatErrorMessage(new ApiError(400, "validation_error", "Bad profile")), "Bad profile");
+  assert.equal(chatErrorMessage(new ApiError(0, "agent_timeout", "The agent didn't respond in time. Try again.")), "The agent didn't respond in time. Try again.");
+  assert.equal(chatErrorMessage(null), "Something went wrong. Try again.");
 });
 
 test("streamChatMessage hands the agent error event to the caller", async () => {

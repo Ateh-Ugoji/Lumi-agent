@@ -41,6 +41,7 @@ import {
   sendChatMessage,
   streamChatMessage,
   agentErrorMessage,
+  chatErrorMessage,
   CALLBACK_DONE_URL,
   type CallbackLanding,
   type ConnectLink,
@@ -933,7 +934,7 @@ export default function App() {
                     ...c,
                     messages: [
                       ...c.messages,
-                      { id: refusedId, role: "agent", text: `⚠️ ${err.message}` },
+                      { id: refusedId, role: "agent", text: `⚠️ ${chatErrorMessage(err)}` },
                     ],
                   }
                 : c,
@@ -971,10 +972,7 @@ export default function App() {
             speak(direct.content || "Done!");
           }
         } catch (fallbackErr: any) {
-          const errorMsg =
-            fallbackErr?.message ||
-            err?.message ||
-            "No se pudo contactar con el agente de Lumi. Revisa que el servidor esté en marcha en http://localhost:8000.";
+          const errorMsg = chatErrorMessage(fallbackErr ?? err);
 
           const errorId = nextId++;
           setRevealingId(errorId);

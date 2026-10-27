@@ -30,17 +30,34 @@ export type StreamEvent =
   | { type: "done"; content: string; tool_executions: ToolExecution[] }
   | { type: "error"; error: string; code?: string };
 
-/** Spanish text for the error codes the agent stream can send; the server text is English. */
+/** Text for the error codes the agent stream can send. */
 const AGENT_ERROR_MESSAGES: Record<string, string> = {
   llm_unavailable:
-    "El agente no está disponible ahora mismo: los modelos de lenguaje no responden. Inténtalo de nuevo en un momento.",
+    "The agent isn't available right now: the language models aren't responding. Try again in a moment.",
 };
+
+/** The line the chat shows for any failed turn; HTML and raw status codes never reach it. */
+export function chatErrorMessage(err: unknown): string {
+  if (err instanceof ApiError) {
+    if (err.code === "network_error") {
+      return "Couldn't reach the Lumi server. Check that it is running.";
+    }
+    if (err.code === "http_error") {
+      if (err.status === 502 || err.status === 503 || err.status === 504) {
+        return "The Lumi server isn't responding. Try again in a moment.";
+      }
+      if (err.status >= 500) return "The Lumi server ran into a problem. Try again in a moment.";
+    }
+    return err.message;
+  }
+  return err instanceof Error && err.message ? err.message : "Something went wrong. Try again.";
+}
 
 export function agentErrorMessage(code: string | undefined, fallback?: string): string {
   return (
     (code && AGENT_ERROR_MESSAGES[code]) ||
     fallback ||
-    "El agente falló antes de terminar. Inténtalo de nuevo."
+    "The agent failed before it finished. Try again."
   );
 }
 
@@ -86,7 +103,7 @@ export async function streamChatMessage(
     throw new ApiError(
       502,
       "bad_response",
-      "El servidor respondió algo que no es el agente (¿un proxy o el servidor equivocado?). Inténtalo de nuevo.",
+      "The server answered with something that isn't the agent (a proxy or the wrong server?). Try again.",
     );
   }
   const idleMs = opts?.idleMs ?? STREAM_IDLE_MS;
@@ -115,7 +132,7 @@ export async function streamChatMessage(
     const idle = new Promise<never>((_, reject) => {
       timer = setTimeout(() => {
         reject(
-          new ApiError(0, "agent_timeout", "El agente no respondió a tiempo. Inténtalo de nuevo."),
+          new ApiError(0, "agent_timeout", "The agent didn't respond in time. Try again."),
         );
         void reader.cancel().catch(() => undefined);
       }, idleMs);
@@ -138,7 +155,7 @@ export async function streamChatMessage(
     throw new ApiError(
       0,
       "stream_incomplete",
-      "La respuesta del agente se cortó antes de terminar. Inténtalo de nuevo.",
+      "The agent's reply was cut off before it finished. Try again.",
     );
   }
   return finalResult;
