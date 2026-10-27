@@ -16,6 +16,7 @@ from apps.intelligence.repos.profiles import (
     ProfileRepo,
 )
 from apps.intelligence.repos.reports import ReportRepo
+from apps.intelligence.repos.video import VideoRepo
 from apps.intelligence.repos.voice import VoiceRepo
 
 __all__ = [
@@ -31,5 +32,6 @@ __all__ = [
     "RepurposeRepo",
     "RequestRepo",
     "TurnLogRepo",
+    "VideoRepo",
     "VoiceRepo",
 ]

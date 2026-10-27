@@ -33,6 +33,9 @@ ENV_FIELDS: tuple[str, ...] = (
     "chroma_path",
     "video_provider",
     "video_api_key",
+    "video_model",
+    "video_max_mb",
+    "video_max_per_run",
     "provider_cooldown_seconds",
     "provider_cooldown_max_seconds",
     "llm_timeout_seconds",
@@ -83,6 +86,12 @@ class AIConfig:
     chroma_path: str = ".chroma"
     video_provider: str | None = None
     video_api_key: str | None = None
+    video_model: str = "gemini-3.5-flash-lite"  # only read when VIDEO_PROVIDER=gemini
+    video_max_mb: int = (
+        20  # bigger videos are skipped, never truncated (Gemini inline limit)
+    )
+    video_max_per_run: int = 5  # new (uncached) analyses one pipeline run may start
+    video_timeout_seconds: float = 120.0
 
     # --- agent loop (legacy lumi/app/agent/loop.py) ---
     max_tool_iterations: int = 6

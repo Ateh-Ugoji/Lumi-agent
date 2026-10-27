@@ -46,6 +46,8 @@ from lumi_ai.style import tools as style_tools
 from lumi_ai.style.service import StyleService
 from lumi_ai.tools import ToolDeps, build_registry
 from lumi_ai.tools.registry import ToolRegistry
+from lumi_ai.video import build_video_analyzer
+from lumi_ai.video import tools as video_tools
 
 
 class SystemClock:
@@ -194,6 +196,10 @@ def get_wiring() -> Wiring:
         judge=judge if judge.available else None,
     )
 
+    # Off (None) unless VIDEO_PROVIDER and VIDEO_API_KEY are set; then the pipeline is unchanged.
+    video = build_video_analyzer(config)
+    video_store = repos.VideoRepo()
+
     competitors = CompetitorServices(
         pipeline=PipelineDeps(
             social=RunSocialData(),
@@ -202,6 +208,8 @@ def get_wiring() -> Wiring:
             peer_posts=peers,
             config=config,
             index_peer_posts=indexer.index_peer_posts,
+            video=video,
+            video_store=video_store,
         ),
         profiles=profiles,
         posts=posts,
@@ -227,6 +235,7 @@ def get_wiring() -> Wiring:
             *rag_tools.build(memory),
             *style_tools.build(style),
             *competitor_tools.build(competitors),
+            *video_tools.build(video, video_store, config),
         ],
     )
     loop = AgentLoop(

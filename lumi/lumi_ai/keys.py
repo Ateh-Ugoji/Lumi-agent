@@ -19,6 +19,8 @@ import httpx
 from lumi_ai.config import AIConfig
 from lumi_ai.ports import KeyProbe, ProbeResult
 from lumi_ai.providers.urls import GROQ_BASE_URL, OPENLUX_BASE_URL, OPENROUTER_BASE_URL
+from lumi_ai.video.factory import video_status
+from lumi_ai.video.gemini import GEMINI_BASE_URL
 
 PROBE_TIMEOUT_SECONDS = 20.0
 
@@ -214,33 +216,59 @@ class _JevProbe:
         return ProbeResult(self.name, "ok", "system_one respondió")
 
 
-class _OptionalVarProbe:
-    """Reports the video provider configuration without calling anything (T10 replaces it)."""
+class _VideoProbe:
+    """Video analysis: skipped when off, otherwise reads the model's metadata (free, no analysis)."""
 
     name = "video"
     required = False
     env_vars = ("VIDEO_PROVIDER", "VIDEO_API_KEY")
 
-    def __init__(self, provider: str | None, api_key: str | None) -> None:
-        self._provider, self._api_key = provider, api_key
+    def __init__(
+        self, config: AIConfig, transport: httpx.AsyncBaseTransport | None = None
+    ) -> None:
+        self._config = config
+        self._transport = transport
 
     async def run(self) -> ProbeResult:
-        if not self._provider:
+        status = video_status(self._config)
+        if not status.enabled:
+            if not (self._config.video_provider or "").strip():
+                return ProbeResult(
+                    self.name,
+                    "skipped",
+                    "OMITIDA (análisis de video apagado: falta VIDEO_PROVIDER)",
+                )
+            return ProbeResult(self.name, "error", status.reason)
+        key = self._config.video_api_key
+        model = self._config.video_model
+        try:
+            async with httpx.AsyncClient(
+                base_url=GEMINI_BASE_URL,
+                headers={"x-goog-api-key": key or ""},
+                timeout=PROBE_TIMEOUT_SECONDS,
+                transport=self._transport,
+            ) as http:
+                reply = await http.get(f"/models/{model}")
+        except Exception as exc:  # noqa: BLE001 - a probe never raises
             return ProbeResult(
-                self.name,
-                "skipped",
-                "OMITIDA (análisis de video apagado: falta VIDEO_PROVIDER)",
+                self.name, "error", _redact(f"{type(exc).__name__}: {exc}", key)
             )
-        if not self._api_key:
+        if reply.status_code == 404:
             return ProbeResult(
                 self.name,
                 "error",
-                f"VIDEO_PROVIDER={self._provider} pero falta VIDEO_API_KEY",
+                f"el modelo VIDEO_MODEL={model} no existe en gemini (HTTP 404)",
+            )
+        if reply.status_code != 200:
+            return ProbeResult(
+                self.name,
+                "error",
+                f"GET /models/{model}: HTTP {reply.status_code} {_redact(reply.text, key)}",
             )
         return ProbeResult(
             self.name,
-            "skipped",
-            "pendiente: la sonda real llega con el adaptador de video",
+            "ok",
+            f"gemini {model} existe (sin analizar nada; el costo sale al analizar videos)",
         )
 
 
@@ -292,5 +320,5 @@ def build_probes(
         ),
         _JevProbe(config.typesafe_api_key),
         _NeatlogsProbe(config.neatlogs_api_key),
-        _OptionalVarProbe(config.video_provider, config.video_api_key),
+        _VideoProbe(config, transport),
     ]

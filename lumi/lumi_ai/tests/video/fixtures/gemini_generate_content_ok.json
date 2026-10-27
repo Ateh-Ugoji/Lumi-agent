@@ -1,0 +1,35 @@
+{
+ "candidates": [
+  {
+   "content": {
+    "role": "model",
+    "parts": [
+     {
+      "text": "thinking...",
+      "thought": true
+     },
+     {
+      "text": "```json\n{\"duration_seconds\": 41.6, \"hook_first_3s\": \"A man in a hoodie holds up a phone and says: I lost 10k in a week.\", \"transcript\": \"I lost 10k in a week. Here is what I changed. First, I stopped posting daily.\", \"on_screen_text\": [\"10k IN A WEEK\", \"what I changed\", \"Follow for part 2\"], \"cut_count\": 14, \"pace\": \"fast\", \"has_captions\": true, \"call_to_action\": \"Follow for part 2\", \"format\": \"Talking Head\"}\n```"
+     }
+    ]
+   },
+   "finishReason": "STOP"
+  }
+ ],
+ "usageMetadata": {
+  "promptTokenCount": 10790,
+  "candidatesTokenCount": 212,
+  "totalTokenCount": 11002,
+  "promptTokensDetails": [
+   {
+    "modality": "VIDEO",
+    "tokenCount": 10700
+   },
+   {
+    "modality": "TEXT",
+    "tokenCount": 90
+   }
+  ]
+ },
+ "modelVersion": "gemini-3.5-flash-lite"
+}

@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 
@@ -64,7 +64,10 @@ from lumi_ai.ports import (
     SocialData,
     SocialDataError,
     UnsupportedPlatform,
+    VideoAnalysisStore,
+    VideoAnalyzer,
 )
+from lumi_ai.video import VideoBatch, analyze_videos, for_tagging, persist, video_urls
 
 log = logging.getLogger(__name__)
 
@@ -81,6 +84,9 @@ class PipelineDeps:
     config: AIConfig = field(default_factory=AIConfig)
     #: Called with the stored winner posts so the caller can index their vectors (sync, may block).
     index_peer_posts: Callable[[Sequence[PeerPostOut]], object] | None = None
+    #: Video analysis (T10). ``None`` (``VIDEO_PROVIDER`` empty) leaves the pipeline exactly as it was.
+    video: VideoAnalyzer | None = None
+    video_store: VideoAnalysisStore | None = None
 
 
 @dataclass(slots=True)
@@ -95,6 +101,10 @@ class PipelineResult:
     failures: list[str] = field(default_factory=list)
     detail: str | None = None
     stored_posts: list[PeerPostOut] = field(default_factory=list)
+    video_analyzed: int = 0  # videos read now (cache hits are not counted)
+    video_notes: list[str] = field(
+        default_factory=list
+    )  # one line per skipped or failed video
 
 
 def scraped_from_post(post: PostIn, handle: str) -> ScrapedPost | None:
@@ -279,7 +289,9 @@ async def run_peer_pipeline(
             tagging = from_record(record, platform)
             if tagging is not None and tagging.status == "ok":
                 cached[tagging.post_id] = tagging
-    fresh = await tag_posts(deps.llm, [m for m in to_tag if m.post_id not in cached])
+    untagged = [m for m in to_tag if m.post_id not in cached]
+    video_batch, video_by_post = await _read_videos(deps, untagged, raw_by_key)
+    fresh = await tag_posts(deps.llm, untagged, video_by_post)
     taggings = [*cached.values(), *fresh]
     if fresh:
         records = [r for t in fresh if (r := to_record(t, platform))]
@@ -360,6 +372,14 @@ async def run_peer_pipeline(
 
     winner_ext = set(report.winner_post_ids)
     winner_rows = [p for p in stored if p.external_id in winner_ext]
+    if video_batch is not None:
+        await persist(
+            video_batch,
+            deps.video_store,
+            provider=_video_provider(deps),
+            model=deps.config.video_model,
+        )
+
     if deps.index_peer_posts is not None and winner_rows:
         await asyncio.to_thread(deps.index_peer_posts, winner_rows)
 
@@ -372,7 +392,51 @@ async def run_peer_pipeline(
         failures=failures,
         detail=detail,
         stored_posts=stored,
+        video_analyzed=len(video_batch.fresh) if video_batch else 0,
+        video_notes=video_batch.notes() if video_batch else [],
     )
+
+
+def _video_provider(deps: PipelineDeps) -> str:
+    return getattr(deps.video, "provider", None) or (deps.config.video_provider or "")
+
+
+async def _read_videos(
+    deps: PipelineDeps,
+    posts: Sequence[PostStats],
+    raw_by_key: Mapping[str, PostIn],
+) -> tuple[VideoBatch | None, dict[str, dict[str, object]]]:
+    """Analyse the videos of the posts about to be tagged. ``(None, {})`` when video is off.
+
+    Winners come first in ``posts`` so the per-run cap never drops them. The reading is an extra
+    field of the blind tagging (``for_tagging`` carries no views or winner flags).
+    """
+    if deps.video is None:
+        return None, {}
+    urls_by_post: dict[str, list[str]] = {}
+    contexts: dict[str, str] = {}
+    for m in posts:
+        raw = raw_by_key.get(f"{m.handle}:{m.post_id}")
+        urls, _ = video_urls(raw.media or ()) if raw is not None else ([], [])
+        if urls:
+            urls_by_post[m.post_id] = urls[
+                :1
+            ]  # one video per post is enough to read its hook
+            contexts[urls[0]] = m.text
+    batch = await analyze_videos(
+        [u for urls in urls_by_post.values() for u in urls],
+        deps.video,
+        store=deps.video_store,
+        config=deps.config,
+        provider=_video_provider(deps),
+        contexts=contexts,
+    )
+    by_post = {
+        post_id: for_tagging(batch.results[urls[0]])
+        for post_id, urls in urls_by_post.items()
+        if urls[0] in batch.results
+    }
+    return batch, by_post
 
 
 def _peer_post(

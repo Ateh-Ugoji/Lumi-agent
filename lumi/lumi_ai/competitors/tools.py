@@ -176,6 +176,10 @@ def build(services: CompetitorServices) -> list[ToolSpec]:
             out["detail"] = result.detail
         if result.failures:
             out["failed_handles"] = result.failures
+        if result.video_analyzed or result.video_notes:
+            out["videos_analyzed"] = result.video_analyzed
+            if result.video_notes:
+                out["video_notes"] = result.video_notes
         return out
 
     # -- get_peer_advice ----------------------------------------------------

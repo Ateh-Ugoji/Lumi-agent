@@ -38,7 +38,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Literal, Protocol, get_args, runtime_checkable
 
-PORTS_VERSION = "1.9"  # 1.1: SemanticJudge, 1.2: OwnPostSync, 1.3: AttemptIn.is_fallback, EvaluationRecord.attempt_id required, 1.4: MemoryStore.touch_notes, save_voice model/prompt_version, 1.5: tool_call_id, report query/peers, repurpose mode/brief, user request platform, 1.6: MatchStore, 1.7: create_request_with_attempts(source_post_id=), 1.8: create_request_with_attempts(evaluations=) + EvaluationIn, 1.9: MediaRef.kind may be None (type unknown)
+PORTS_VERSION = "1.10"  # 1.1: SemanticJudge, 1.2: OwnPostSync, 1.3: AttemptIn.is_fallback, EvaluationRecord.attempt_id required, 1.4: MemoryStore.touch_notes, save_voice model/prompt_version, 1.5: tool_call_id, report query/peers, repurpose mode/brief, user request platform, 1.6: MatchStore, 1.7: create_request_with_attempts(source_post_id=), 1.8: create_request_with_attempts(evaluations=) + EvaluationIn, 1.9: MediaRef.kind may be None (type unknown), 1.10: VideoAnalysisStore
 
 # ---------------------------------------------------------------------------
 # Shared vocabulary
@@ -1086,6 +1086,37 @@ class VideoAnalyzer(Protocol):
         self, media_url: str, *, context: str | None = None
     ) -> VideoAnalysis:
         """Return the structured analysis; raise :class:`VideoUnavailable` when it cannot run."""
+        ...
+
+
+@runtime_checkable
+class VideoAnalysisStore(Protocol):
+    """Cache of video analyses in ``video_analysis_records``, keyed by stored media row.
+
+    The key is ``(media row, provider, prompt_version)``. A URL that has no ``post_media`` row yet
+    is simply not cached: ``cached`` omits it and ``save_*`` skips it and says so in the count.
+    """
+
+    async def cached(
+        self, media_urls: Sequence[str], *, provider: str, prompt_version: str
+    ) -> dict[str, VideoAnalysis]:
+        """Successful analyses already stored, by media URL."""
+        ...
+
+    async def save(self, analyses: Sequence[VideoAnalysis], *, model: str) -> int:
+        """Store successful analyses; return how many were written (rows without media are skipped)."""
+        ...
+
+    async def save_failure(
+        self,
+        media_url: str,
+        *,
+        provider: str,
+        model: str,
+        prompt_version: str,
+        error: str,
+    ) -> bool:
+        """Record why an analysis failed (never replaces a successful one); ``False`` if skipped."""
         ...
 
 
