@@ -146,6 +146,20 @@ Un enlace en el texto cuesta trece veces más que un post sin enlace. Antes de p
 
 Con 500 créditos y 2 por consulta de X caben 250 consultas por key. El plan del orquestador cuenta unas 125 con la key 1, porque parte de los créditos ya se usó. Por eso `XPOZ_LIVE_ENABLED=false` y `XPOZ_RUN_CREDIT_BUDGET` frenan el gasto. `getAccountDetails` es gratis y sirve para leer el saldo antes de cada ejecución.
 
+## Credenciales de la app (tablas `services` y `service_credentials`)
+
+Hoy las credenciales de la app (`META_APP_ID`, `PFM_JWT_TOKEN`, etc.) se leen del entorno (`REQUIRED_ENV` en `apps/connections/accounts.py`). Las tablas `services` y `service_credentials` (`connections.0010`, ver `SCHEMA.md` sección 8) existen para guardarlas en la base, cifradas. **Por ahora solo existen las tablas y el catálogo: el lector llega en la fase 3, así que el entorno sigue siendo la única fuente que el código lee.**
+
+Contrato acordado para las fases siguientes:
+
+- **Precedencia (fase 3):** la credencial activa de la base va primero y el entorno es el respaldo. `check_keys` dirá de cuál salió (`db` o `env`).
+- **Quién escribe (fase 4):** solo personal (`is_staff`) desde el admin de Django. El secreto es un campo de solo escritura; la pantalla muestra `secret_hint`, nunca el valor. **No hay endpoint REST** para credenciales.
+- **Qué no entra:** `DATABASE_URL`, `SECRET_KEY` y `TOKEN_ENCRYPTION_KEY` se quedan en el entorno, porque se necesitan para arrancar y para descifrar. Las claves de modelos de lenguaje (`kind=llm`) se quedan en el entorno hasta una fase posterior.
+- **Qué guarda cada campo:** un servicio `oauth2` tiene `app_id` (público, en claro) y `app_secret` (cifrado). Uno `api_key` o `bearer` (Post for Me, Xpoz) no tiene id de cliente: `app_id` queda vacío y `app_secret` guarda la clave.
+- **`extra`** guarda ajustes que no son secretos. Una clave cuyo nombre contenga `secret`, `token`, `password`, `api_key` o `private` se rechaza en `clean()`.
+- **`youtube`** está en el catálogo con `is_active=false`: Lumi no tiene adaptador de YouTube. Añadir la fila no lo hace conectable.
+- **Riesgo conocido:** quien obtenga la base y la `TOKEN_ENCRYPTION_KEY` obtiene las credenciales. Esa clave se guarda aparte de la base.
+
 ## Diferencias con `research.md`
 
 - Meta. La página de Pages API dice que `GET /{user-id}/accounts` con un token de usuario de corta duración devuelve un token de página de corta duración. El token de página sin caducidad solo sale de un token de usuario de larga duración. `research.md` lo daba por sentado. El adaptador canjea primero el token de usuario.
