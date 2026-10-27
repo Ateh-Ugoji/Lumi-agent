@@ -35,17 +35,17 @@ export async function getSavedHandles(): Promise<HandleRow[]> {
   }
 }
 
-/** Remember a picked handle for the next search. Best effort: it never blocks the composer. */
+/**
+ * Tell the server which handle was picked, so the next search knows it. Only the handle goes:
+ * the photo, name and followers stay in this browser's search state and are never sent back,
+ * because the server shares what it stores with every user and takes those only from the provider.
+ * Best effort: it never blocks the composer.
+ */
 export async function selectHandle(row: HandleRow): Promise<void> {
   try {
     await request<unknown>("/handles/select", {
       method: "POST",
-      body: {
-        handle: row.handle,
-        display_name: row.display_name ?? "",
-        avatar_url: row.avatar_url ?? "",
-        followers: row.followers ?? null,
-      },
+      body: { handle: row.handle },
     });
   } catch {
     // remembered-next-time is best effort

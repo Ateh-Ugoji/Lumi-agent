@@ -666,7 +666,8 @@ export default function PromptBar({
     if (!row) return;
     if (row.handle) {
       // Tag the account: drop `@handle` in at the caret-token position and
-      // remember its picture/name/followers for the next search (0 credits).
+      // tell the server which handle was picked (0 credits). Its picture, name and followers
+      // stay in this row of the local search state; the server never stores them from here.
       // The lookup itself happens on send, per the agent's existing rule 13.
       const picked = row.handle;
       setDraft(`${token ? draft.slice(0, token.start) : draft}@${picked.handle} `);

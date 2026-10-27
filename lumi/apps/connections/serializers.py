@@ -138,18 +138,11 @@ class HandleSavedResponseSerializer(serializers.Serializer):
 
 
 class HandleSelectSerializer(serializers.Serializer):
+    """Only the handle. A photo, name or follower count in the body is ignored, never stored."""
+
     handle = serializers.CharField(min_length=1, max_length=101)
     platform = serializers.ChoiceField(
         choices=["x", "instagram", "tiktok", "linkedin", "facebook"], default="x"
-    )
-    display_name = serializers.CharField(
-        required=False, allow_blank=True, default="", max_length=200
-    )
-    avatar_url = serializers.URLField(
-        required=False, allow_blank=True, default="", max_length=2000
-    )
-    followers = serializers.IntegerField(
-        required=False, allow_null=True, default=None, min_value=0
     )
     selected_query = serializers.CharField(
         required=False, allow_blank=True, default="", max_length=100

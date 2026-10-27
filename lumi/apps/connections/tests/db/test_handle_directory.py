@@ -84,18 +84,6 @@ def test_a_row_the_directory_got_from_posts_only_fills(db) -> None:
     )
 
 
-def test_a_picked_row_comes_from_the_client_and_never_repaints_a_public_photo(
-    db,
-) -> None:
-    services.get_or_create_handle(
-        "x", "karpathy", origin=HandleOrigin.NICHE, avatar_url="https://img/old.jpg"
-    )
-    DjangoHandleStore().select(row("karpathy", avatar="https://evil/x.jpg"))
-    assert SocialHandle.objects.get(handle_normalized="karpathy").avatar_url == (
-        "https://img/old.jpg"
-    )
-
-
 def test_an_author_the_scan_knew_gets_a_picture_when_it_had_none(db) -> None:
     services.get_or_create_handle("x", "sama", origin=HandleOrigin.NICHE)
     async_to_sync(DjangoHandleStore().remember_live)(

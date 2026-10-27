@@ -88,19 +88,16 @@ def saved(user, platforms: str) -> dict[str, Any]:
 
 
 def select(user, data: dict[str, Any]) -> dict[str, Any] | None:
-    """Remember a picked handle. ``None`` means the handle is not a valid name."""
-    row = HandleRow(
-        handle=normalize_query(data["handle"]),
-        platform=data["platform"],
-        display_name=data.get("display_name", ""),
-        avatar_url=data.get("avatar_url", ""),
-        followers=data.get("followers"),
-        source="live",
-    )
-    name = DjangoHandleStore(user.id).select(row)
+    """Remember a picked handle. ``None`` means the handle is not a valid name.
+
+    Only ``handle`` and ``platform`` are read: whatever else the client sent (a photo, a name, a
+    follower count) is never stored, because ``social_handles`` is shared by every user.
+    """
+    platform = data["platform"]
+    name = DjangoHandleStore(user.id).select(platform, normalize_query(data["handle"]))
     if name is None:
         return None
-    return {"remembered": True, "handle": name, "platform": row.platform}
+    return {"remembered": True, "handle": name, "platform": platform}
 
 
 def stats(user) -> dict[str, Any]:

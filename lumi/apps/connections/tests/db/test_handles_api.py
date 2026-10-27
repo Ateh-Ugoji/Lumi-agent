@@ -12,6 +12,7 @@ from apps.connections.handles.live import XpozHandleLive
 from apps.connections.models import HandleSearchCache, XpozCreditLedger
 from apps.connections.stores import DjangoCreditLedger
 from apps.connections.tests.fakes import Recorder, fixture
+from apps.profiles import services
 from apps.profiles.models import HandleOrigin, SocialHandle, SocialProfile
 
 from .test_api import client_for
@@ -184,30 +185,6 @@ def test_profile_handles_lead_only_for_their_owner(
     assert saved["navalmine"] == "db" and saved.get("navalrival") != "db"
 
 
-def test_select_remembers_the_handle_and_saved_returns_it(api) -> None:
-    response = api.post(
-        SELECT,
-        {
-            "handle": "@Karpathy",
-            "display_name": "Andrej",
-            "avatar_url": "https://img.example/a.png",
-            "followers": 1200,
-        },
-        format="json",
-    )
-    assert response.status_code == 200
-    assert response.json() == {
-        "remembered": True,
-        "handle": "karpathy",
-        "platform": "x",
-    }
-    row = SocialHandle.objects.get(platform="x", handle_normalized="karpathy")
-    assert row.origin == HandleOrigin.SELECTED and row.follower_count == 1200
-    (saved,) = api.get(SAVED).json()["results"]
-    assert saved["handle"].lower() == "karpathy"
-    assert saved["followers"] == 1200 and saved["source"] == "cache"
-
-
 def test_selecting_twice_keeps_one_row(api) -> None:
     for _ in range(2):
         api.post(SELECT, {"handle": "karpathy"}, format="json")
@@ -219,8 +196,6 @@ def test_select_rejects_bad_handles_and_platforms(api) -> None:
         {"handle": "has space"},
         {"handle": "!!"},
         {"handle": "ok", "platform": "myspace"},
-        {"handle": "ok", "followers": -1},
-        {"handle": "ok", "avatar_url": "javascript:alert(1)"},
         {},
     ):
         response = api.post(SELECT, body, format="json")
@@ -236,11 +211,10 @@ def test_saved_filters_by_platform_and_orders_by_followers(api) -> None:
         ("unknown", "x", None),
         ("igone", "instagram", 99),
     ):
-        api.post(
-            SELECT,
-            {"handle": handle, "platform": platform, "followers": followers},
-            format="json",
+        services.get_or_create_handle(
+            platform, handle, origin=HandleOrigin.LIVE, follower_count=followers
         )
+        api.post(SELECT, {"handle": handle, "platform": platform}, format="json")
     x_only = api.get(SAVED, {"platforms": "x"}).json()
     assert [r["handle"].lower() for r in x_only["results"]] == [
         "big",

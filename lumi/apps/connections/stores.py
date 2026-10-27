@@ -458,12 +458,22 @@ class DjangoHandleStore:
             )
         return [existing[n] for n in names if n in existing]
 
-    def select(self, row: HandleRow) -> str | None:
-        """Remember a handle the user picked. Returns the normalized handle, or ``None``."""
-        name = normalize_handle(row.handle)
+    def select(self, platform: str, handle: str) -> str | None:
+        """Resolve or create the handle a user picked. Returns its normalized name, or ``None``.
+
+        The client sent this request, so it is the one writer of ``social_handles`` whose data
+        nobody checked: only ``(platform, handle)`` is used. No photo, name or follower count
+        reaches the table, an existing handle is left as it is, and a new one is stored at the
+        ``cache`` origin (never ``live``), with the normalized name as its display handle. Its
+        photo and numbers arrive later from the provider.
+        """
+        name = normalize_handle(handle)
         if name is None:
             return None
-        self._remember([row], HandleOrigin.SELECTED, True)
+        try:
+            get_or_create_handle(platform, name, origin=HandleOrigin.CACHE)
+        except InvalidHandle:
+            return None
         return name
 
     def saved(self, platforms: list[str], limit: int) -> list[HandleRow]:
