@@ -90,3 +90,9 @@ ts	phase	decision	why	evidence	result
 2026-10-27T11:59:45Z	R9	Los handles elegidos del legado no estan en el SQLite	viven en Chroma handle_mappings, global; legacy_schema.sql no tiene tabla de elegidos	mvp/handle_search/server.py _mapping_put, legacy_schema.sql	'--handle-mappings PATH opcional; verify extendido con --user
 2026-10-27T11:59:45Z	R9	import_legacy escribe user_saved_handles del --user	el legado era de un solo usuario; requisito del orquestador	apps/core/legacy_import/handle_mappings.py, test_legacy_saved_handles.py	idempotente, conserva ts, verify falla si falta uno
 2026-10-27T11:59:45Z	R9	Aplicado handles-contract.md con dos correcciones	platform de select distingue mayusculas; no existe bloque de tests 'platform obligatorio' ni tabla de migraciones en 12	probe de la API y lectura de tests	CONTRATOS 4 y filas 30 y 31, SCHEMA 8 y 10.7
+2026-10-27T12:59:45Z	R10	git mv app,alembic,tests,5 scripts a lumi/legacy en commit aparte	conservar historial y revisar el diff de rutas por separado	145 renames puros	7fff124
+2026-10-27T12:59:45Z	R10	legacy/pytest.ini con -p no:django, conftest propio, pythonpath . ..	pytest-django pedia DATABASE_URL; el conftest raiz ya no aplica	422 passed sin DATABASE_URL	ok
+2026-10-27T12:59:45Z	R10	norecursedirs lista los valores por defecto mas legacy; testpaths=apps	norecursedirs reemplaza los defaults de pytest	default 1471 passed	ok
+2026-10-27T12:59:45Z	R10	ruff src=[., legacy]	app se clasificaba como tercero (32 I001)	ruff check limpio	ok
+2026-10-27T12:59:45Z	R10	test de fixtures congelados sigue activo via syspath_prepend	no dejarlo omitido	4 tests frozen pasan	ok
+2026-10-27T12:59:45Z	R10	no se excluye legacy del despliegue	Railpack sin ignore; startCommand no lo ejecuta	test_deploy_config	documentado

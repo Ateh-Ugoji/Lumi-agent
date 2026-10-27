@@ -81,15 +81,27 @@ Nota sobre la fila 18: `reach_series` y `saves_series` siguen recorriendo todas 
 | --- | --- |
 | FK | `user` CASCADE y `handle` CASCADE se quedan. `social_handles` no se borra en ningún código (los importadores fusionan por `handle_normalized`) y las demás tablas derivadas del handle ya usan CASCADE. PROTECT haría imposible borrar un handle con elecciones sin ganar nada. |
 | Restricción única | `uq_user_saved_handle` está en la base (`sqlmigrate` y `pg_indexes`). |
-| Índices (EXPLAIN, 20 000 handles, 10 000 filas) | `saved` tarda menos de 1 ms. `ix_user_saved_recent` sí se usa, pero solo para filtrar por usuario; sin él y sin el índice automático de `user_id` el plan es el mismo con `uq_user_saved_handle`. Ninguna consulta ordena por `created_at`. Propuesta a CONNECT: quitar `ix_user_saved_recent` y poner `db_index=False` en `user`. |
+| Índices (EXPLAIN, 20 000 handles, 10 000 filas) | (Resuelto: CONNECT quitó `ix_user_saved_recent` en `2b00a07`.) `saved` tarda menos de 1 ms. `ix_user_saved_recent` sí se usaba, pero solo para filtrar por usuario; sin él y sin el índice automático de `user_id` el plan es el mismo con `uq_user_saved_handle`. Ninguna consulta ordena por `created_at`. CONNECT lo quitó en `2b00a07` (migración `0009_user_saved_handles_lighter`). |
 | Sin duplicados con `social_profiles` | Los perfiles propios se leen de `social_profiles` por `user_id`; la tabla nueva solo guarda elecciones. |
 | N+1 | `saved` hace 2 consultas con 5 y con 50 elegidos. |
 | Concurrencia | 12 hilos haciendo `select` del mismo handle: todos 200, una fila en `user_saved_handles`, un handle. |
 | Migración | `0008` hacia delante, `migrate connections 0007`, otra vez hacia delante sobre una copia con 20 000 handles y 10 000 filas: sin error. El retroceso borra la tabla (es lo esperable en `CreateModel`); `social_handles` queda intacto. `makemigrations --check`: sin cambios. |
-| `3c57f88` | Los códigos son `validation_error`; los mensajes están en español; `details.platform` en select y `details.platforms` en search y saved; sin token 401 `unauthenticated`. `test_error_codes` pasa. Diferencia sin documentar hasta hoy: `platform` de select distingue mayúsculas y espacios (`X`, `x ` dan 400), `platforms` no. Mensaje de select para valor no válido: `"X" no es una elección válida.` (el de DRF, sin la lista de redes). Sugerencia menor a CONNECT: normalizar `platform` igual que `platforms`. |
+| `3c57f88` | Los códigos son `validation_error`; los mensajes están en español; `details.platform` en select y `details.platforms` en search y saved; sin token 401 `unauthenticated`. `test_error_codes` pasa. Diferencia sin documentar hasta hoy: `platform` de select distingue mayúsculas y espacios (`X`, `x ` dan 400), `platforms` no. Mensaje de select para valor no válido: `"X" no es una elección válida.` (el de DRF, sin la lista de redes). Resuelto por CONNECT en `2b00a07`: `platform` se normaliza igual que `platforms` y los 400 listan las 5 redes. |
 | Texto de CONNECT (`/workspace/handles-contract.md`) | Dos errores corregidos al aplicarlo: (1) decía que `platform` no distingue mayúsculas, solo es cierto para `platforms`; (2) citaba un bloque "platform obligatorio" que no existe, ahora cita los cuatro tests por nombre. Tampoco existe una tabla de migraciones en §12 (es "Cómo se pide un cambio"): la migración queda en la fila 31 y en SCHEMA §8. El "(8)" de las pruebas es exacto. |
 | Legado | El `lumi.db` no tiene handles guardados ni elegidos (`legacy_schema.sql`): vivían en Chroma `handle_mappings`, global. Por eso `import_legacy` recibe `--handle-mappings PATH` (JSON de esa colección) y escribe `user_saved_handles` del `--user` con `ts` como `created_at`. `--verify` falla si falta alguno. Los perfiles propios del SQLite ya van a `social_profiles`. Sin el archivo no hay nada que importar. |
 | Demo | "Los handles existentes no tienen dueño" es aceptable para la demo: `saved` muestra los perfiles propios y se llena al elegir. Con datos del legado hace falta el export de Chroma. |
+
+## Ronda 10: el backend FastAPI viejo pasa a `lumi/legacy/`
+
+| Tema | Detalle |
+| --- | --- |
+| Qué se movió | `git mv` sin tocar contenido (commit aparte, el historial se conserva): `app/` (85 archivos), `alembic/` (14), `alembic.ini`, `tests/` (40 archivos, 422 tests) y 5 scripts (`classifier_report`, `cleanup_authentic_posts`, `own_report`, `smoke_memory`, `smoke_voice_corpus`). Nada se borró. |
+| Qué no se movió | `mvp/` y `scripts/dev_postgres.py`: los usa Django. |
+| Pytest | `testpaths = ["apps"]` y `legacy` en `norecursedirs`. El pytest por defecto ya no recoge el legado. `legacy/pytest.ini` y `legacy/conftest.py` propios (con `-p no:django`) dejan correr los 422 a mano, sin Postgres. |
+| Ruff | `src = [".", "legacy"]` para que `app` cuente como código propio; el legado se sigue revisando y está limpio. |
+| Despliegue | Railpack no tiene forma de excluir carpetas de la subida. El legado no se ejecuta (`startCommand` es `config.asgi:application`) y `test_deploy_config` lo vigila. |
+| Congelados | `legacy_regen.py` y el test de fixtures congelados añaden `legacy/` al `sys.path` al importar `app.models`. `import_legacy` nunca importó `app`. |
+| Cuentas | Antes: 1883 pasaron, 3 omitidos. Ahora: 1461 + 10 de CONNECT (`2b00a07`) = 1471, 3 omitidos. La diferencia de 422 son los tests legados. `pytest apps lumi_ai`: 2031 (antes 2021 + 10 de CONNECT). |
 
 ## Notas del esqueleto
 
