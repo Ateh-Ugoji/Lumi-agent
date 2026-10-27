@@ -146,8 +146,13 @@ class PublishJob(models.Model):
         blank=True,
         related_name="publish_jobs",
     )
-    # A foreign key to ``repurpose_attempts`` arrives in 0002, once INTELLIGENCE publishes it.
-    attempt_id = models.BigIntegerField(null=True, blank=True)
+    attempt = models.ForeignKey(
+        "intelligence.RepurposeAttempt",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="publish_jobs",
+    )
     platform = models.CharField(max_length=20, choices=Platform.choices)
     text = models.TextField()
     status = models.CharField(

@@ -4,13 +4,14 @@ from __future__ import annotations
 
 from django.http import HttpResponseRedirect
 from drf_spectacular.utils import OpenApiParameter, extend_schema
+from rest_framework import status as http_status
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.core.errors import ApiError
 
-from . import accounts, handles_api
+from . import accounts, handles_api, publish_api
 from .serializers import (
     ConnectRequestSerializer,
     ConnectResponseSerializer,
@@ -22,6 +23,8 @@ from .serializers import (
     HandleSelectResponseSerializer,
     HandleSelectSerializer,
     HandleStatsSerializer,
+    PublishRequestSerializer,
+    PublishResponseSerializer,
     StatusSerializer,
 )
 
@@ -153,3 +156,32 @@ class HandleStatsView(APIView):
     @extend_schema(responses=HandleStatsSerializer, summary="Credit meter and counts")
     def get(self, request):
         return Response(handles_api.stats(request.user))
+
+
+class PublishView(APIView):
+    @extend_schema(
+        request=PublishRequestSerializer,
+        parameters=[OpenApiParameter("Idempotency-Key", str, OpenApiParameter.HEADER)],
+        responses={200: PublishResponseSerializer, 201: PublishResponseSerializer},
+        summary="Publish a draft. Needs confirm=true and an Idempotency-Key unless dry_run",
+    )
+    def post(self, request):
+        body = PublishRequestSerializer(data=request.data or {})
+        body.is_valid(raise_exception=True)
+        data = body.validated_data
+        result = publish_api.publish_post(
+            request.user,
+            profile_id=data["profile_id"],
+            platform=data["platform"],
+            text=data.get("text"),
+            attempt_id=data.get("attempt_id"),
+            link=data.get("link"),
+            confirm=data["confirm"],
+            dry_run=data["dry_run"],
+            idempotency_key=request.headers.get("Idempotency-Key"),
+        )
+        created = result["status"] == "done" and not result["replayed"]
+        return Response(
+            PublishResponseSerializer(result).data,
+            status=http_status.HTTP_201_CREATED if created else http_status.HTTP_200_OK,
+        )

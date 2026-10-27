@@ -56,19 +56,19 @@ def env(monkeypatch):
 @pytest.fixture
 def providers(monkeypatch):
     """Route provider and PFM calls to mock handlers. Returns the recorders by name."""
-    recorders: dict[str, Recorder] = {}
+    recorders: dict[str, list[Recorder]] = {}
     handlers: dict[str, object] = {}
 
     def make(name: str):
         rec = Recorder(handlers.get(name) or (lambda r: httpx.Response(500)))
-        recorders[name] = rec
+        recorders.setdefault(name, []).append(rec)
         return build_provider(name, accounts.get_config(), transport=rec.transport)
 
     def make_pfm():
         from apps.connections.clients.pfm import PfmClient
 
         rec = Recorder(handlers.get("pfm") or (lambda r: httpx.Response(500)))
-        recorders["pfm"] = rec
+        recorders.setdefault("pfm", []).append(rec)
 
         async def no_sleep(_: float) -> None:
             return None
@@ -83,7 +83,7 @@ def providers(monkeypatch):
             handlers[name] = routes(table)
 
         def requests(self, name: str) -> list:
-            return recorders[name].requests if name in recorders else []
+            return [r for rec in recorders.get(name, []) for r in rec.requests]
 
     return Wiring()
 

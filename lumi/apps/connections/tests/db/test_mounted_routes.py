@@ -29,6 +29,7 @@ pytestmark = pytest.mark.django_db
         ("handles-saved", {}, "/api/v1/handles/saved"),
         ("handles-select", {}, "/api/v1/handles/select"),
         ("handles-stats", {}, "/api/v1/handles/stats"),
+        ("publish", {}, "/api/v1/publish"),
     ],
 )
 def test_every_route_is_mounted_under_api_v1(name, kwargs, path) -> None:
@@ -56,3 +57,14 @@ def test_the_callback_is_public_in_the_default_urlconf(client, monkeypatch) -> N
     assert response.status_code == 302
     assert response["Location"].startswith("http://localhost:5173")
     assert "error=" in response["Location"]
+
+
+def test_publish_is_mounted_and_guarded_in_the_default_urlconf(user, client) -> None:
+    assert (
+        client.post("/api/v1/publish", {}, content_type="application/json").status_code
+        == 401
+    )
+    api = client_for(user)
+    empty = api.post("/api/v1/publish", {}, format="json")
+    assert empty.status_code == 400
+    assert empty.json()["error"]["code"] == "validation_error"

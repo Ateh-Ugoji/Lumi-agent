@@ -139,3 +139,34 @@ class HandleStatsSerializer(serializers.Serializer):
     remembered_handles = serializers.IntegerField()
     cached_searches = serializers.IntegerField()
     available_platforms = serializers.ListField(child=serializers.DictField())
+
+
+class PublishRequestSerializer(serializers.Serializer):
+    profile_id = serializers.IntegerField(min_value=1)
+    platform = serializers.ChoiceField(
+        choices=["x", "instagram", "tiktok", "linkedin", "facebook"]
+    )
+    text = serializers.CharField(
+        required=False, allow_blank=False, max_length=5000, trim_whitespace=True
+    )
+    attempt_id = serializers.IntegerField(required=False, min_value=1)
+    link = serializers.URLField(required=False, allow_blank=True, max_length=2000)
+    confirm = serializers.BooleanField(required=False, default=False)
+    dry_run = serializers.BooleanField(required=False, default=False)
+
+    def validate(self, attrs):
+        if "text" not in attrs and "attempt_id" not in attrs:
+            raise serializers.ValidationError("Envía text o attempt_id.")
+        return attrs
+
+
+class PublishResponseSerializer(serializers.Serializer):
+    status = serializers.ChoiceField(choices=["done", "dry_run"])
+    dry_run = serializers.BooleanField()
+    replayed = serializers.BooleanField()
+    job_id = serializers.IntegerField(allow_null=True)
+    platform = serializers.CharField()
+    external_post_id = serializers.CharField(allow_null=True)
+    url = serializers.CharField(allow_null=True)
+    estimated_cost_usd = serializers.FloatField(allow_null=True)
+    warnings = serializers.ListField(child=serializers.CharField())
