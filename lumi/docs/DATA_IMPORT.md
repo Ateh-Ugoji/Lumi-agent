@@ -30,10 +30,11 @@ uv run python manage.py reindex_vectors   # regenera los vectores de Chroma desd
 
 - Todos los datos legados son de un solo usuario. `--user` lo crea con contraseña inutilizable si no existe.
 - Es repetible: escribe `legacy_import_map` y una segunda ejecución no duplica ni cambia nada.
-- Orden: handles, perfiles, posts, métricas, chat, inteligencia, conexiones; cada tabla en una transacción.
+- Orden: handles, perfiles, posts, métricas, chat, inteligencia, conexiones; todo en una transacción, con un savepoint por importador.
 - Enums en minúsculas; `alerted_at` y `alert_dismissed` pasan a `alerts`; fechas y métricas desconocidas quedan `NULL` (no 0).
 - `--verify` cubre las 21 tablas legadas.
-- Los tokens de `mcp_auth_accounts` y `profiles.pfm_account_id` se cifran con `EncryptedTextField` al escribirse y nunca van a logs.
+- Los tokens de `mcp_auth_accounts` se cifran con `EncryptedTextField` al escribirse y nunca van a logs. `profiles.pfm_account_id` queda en claro porque es un identificador, no una credencial (CONTRATOS §11, fila 20).
+- `import_legacy` necesita `TOKEN_ENCRYPTION_KEY` definida, porque guarda cifrado el payload de las filas fusionadas o descartadas. Esas filas se conservan y `--verify` las cuenta como fusionadas, no como perdidas.
 - Un dump de Postgres no está soportado por el contrato; si llega uno, pídelo a ARCHITECT. `LEGACY_DATABASE_URL` de `.env.example` no lo usa este comando.
 
 ## 4. Después de importar

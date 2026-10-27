@@ -206,3 +206,10 @@ Cada tarea: responsable, entregable y cómo se verifica. Los detalles y rutas es
 - Cuando haya keys, aportar posts reales aceptados y rechazados para calibrar los umbrales de los jueces (Jev y la rúbrica de T9, pedido de INTELLIGENCE).
 - Para crear un superusuario en `/admin/`: `uv run python manage.py createsuperuser`.
 - Nota de modelos: `qwen/qwen3.8-27b` está en Preview en Groq y puede retirarse sin aviso. Los modelos gpt-oss-120b, gpt-oss-20b y whisper-large-v3-turbo están en Production (según INTELLIGENCE).
+
+## Decisión pendiente de Christian: el MVP legado (27 oct 2026, 07:35 UTC)
+ARCHITECT verificó que ningún archivo de INTELLIGENCE ni de CONNECT importa `app.*`. Lo único que sigue usándolo es el MVP legado de Ateh Ugoji: `lumi/alembic/env.py`, 5 scripts (classifier_report, cleanup_authentic_posts, own_report, smoke_memory, smoke_voice_corpus), unos 39 archivos de test en `lumi/tests/` (418 tests), `AGENTS.md` y `before-deployment.md`. Si se borra `lumi/app/`, todo eso se va con él. Las opciones son:
+- (a) Borrarlo todo junto, con la paridad cubierta por los tests de Django.
+- (b) Moverlo a `lumi/legacy/` como referencia, fuera de la suite de tests.
+- (c) Esperar.
+El orquestador eligió (c) mientras Christian decide. Entretanto, ARCHITECT completa la matriz de paridad contra los 418 tests legados y congela en un fixture el esquema de `legacy_regen.py`. No se borra ni se mueve nada.

@@ -46,7 +46,7 @@ Son opcionales: sin ellas Lumi funciona, con menos calidad de evaluación y sin 
 | `X_CLIENT_ID`, `X_CLIENT_SECRET` | real | OAuth de X | https://console.x.com |
 | `X_LIVE_ENABLED` | real | Interruptor de llamadas reales a X. Por defecto `false`. Cada post en X gasta créditos prepagados; no se activa sin que Christian lo pida | no es una key |
 | `XPOZ_LIVE_ENABLED` | real | Interruptor de llamadas reales a Xpoz. Por defecto `false`. Cada consulta gasta créditos | no es una key |
-| `XPOZ_RUN_CREDIT_BUDGET` | real | Tope de créditos de Xpoz por ejecución. Por defecto `10` | no es una key |
+| `XPOZ_RUN_CREDIT_BUDGET` | real | Tope de créditos de Xpoz por ejecución. Por defecto `12` (una corrida de Instagram cuesta 12). Opcionales por red: `XPOZ_RUN_CREDIT_BUDGET_X`, `XPOZ_RUN_CREDIT_BUDGET_INSTAGRAM`, `XPOZ_RUN_CREDIT_BUDGET_TIKTOK` y `XPOZ_RUN_CREDIT_BUDGET_REDDIT` | no es una key |
 | `HANDLE_CACHE_TTL_MINUTES` | real | Minutos de vigencia de la caché de búsqueda de handles. Por defecto `60`. Sustituye a `MVP_CACHE_TTL_MINUTES` | no es una key |
 | `TOKEN_ENCRYPTION_KEY_PREVIOUS` | real | Clave Fernet anterior, solo mientras se rota `TOKEN_ENCRYPTION_KEY`. Vacía en el uso normal | no es una key |
 | `LINKEDIN_API_VERSION`, `META_GRAPH_VERSION` | real | Versiones de API que usan los adaptadores. Por defecto `202609` y `v26.0` | no son keys |
@@ -95,7 +95,7 @@ Fuentes https://docs.xpoz.ai/authentication y https://docs.xpoz.ai/pricing (2026
 
 1. Crea una cuenta en https://www.xpoz.ai.
 2. Abre https://www.xpoz.ai/get-token y copia la clave de acceso a `XPOZ_API_KEY`.
-3. El plan gratis da 500 créditos una sola vez y no se renuevan. Una consulta de X cuesta 2. Lumi arranca con `XPOZ_LIVE_ENABLED=false` y `XPOZ_RUN_CREDIT_BUDGET=10`. Cambia a `true` solo cuando quieras gastar créditos.
+3. El plan gratis da 500 créditos una sola vez y no se renuevan. Una consulta de X cuesta 2. Lumi arranca con `XPOZ_LIVE_ENABLED=false` y `XPOZ_RUN_CREDIT_BUDGET=12`. Cambia a `true` solo cuando quieras gastar créditos.
 4. Para una segunda cuenta con otros 500 créditos repite los pasos y guarda la clave en `XPOZ_API_KEY_2`.
 5. Las herramientas de cuenta, como leer el saldo, no gastan créditos.
 
