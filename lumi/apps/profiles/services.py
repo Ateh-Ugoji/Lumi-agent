@@ -921,15 +921,23 @@ def set_listening(config: ListeningConfig) -> ListeningConfig:
 
 
 def claim_due_polls(limit: int = 50) -> list[int]:
-    """Claim profiles whose poll is due. One ``UPDATE ... RETURNING``; two workers never claim
-    the same profile (``FOR UPDATE SKIP LOCKED``)."""
+    """Claim profiles whose poll is due. One statement; two workers never claim the same
+    profile (``FOR UPDATE SKIP LOCKED``).
+
+    The ids come from a ``MATERIALIZED`` CTE, which Postgres evaluates once. With
+    ``id IN (SELECT ... LIMIT ... FOR UPDATE SKIP LOCKED)`` the planner may run the subquery
+    more than once, and ``LockRows`` skips rows this statement already updated, so a second run
+    would pick further rows and claim more than ``limit``. One full-suite run returned 3 ids for
+    ``limit=2`` that way; a plan that re-runs it was not reproduced in isolation.
+    """
     with connection.cursor() as cursor:
         cursor.execute(
-            "UPDATE poll_configs SET last_polled_at = now() WHERE id IN ("
+            "WITH due AS MATERIALIZED ("
             " SELECT id FROM poll_configs WHERE is_active AND (last_polled_at IS NULL OR"
             " last_polled_at <= now() - interval_minutes * interval '1 minute')"
             " ORDER BY last_polled_at NULLS FIRST, id LIMIT %s FOR UPDATE SKIP LOCKED)"
-            " RETURNING profile_id",
+            " UPDATE poll_configs AS p SET last_polled_at = now() FROM due WHERE p.id = due.id"
+            " RETURNING p.profile_id",
             [limit],
         )
         return sorted(row[0] for row in cursor.fetchall())
