@@ -264,12 +264,20 @@ def test_missing_file_is_a_clear_error(tmp_path):
         run(tmp_path / "nope.db")
 
 
-def test_legacy_tables_list_matches_the_legacy_models():
-    from sqlmodel import SQLModel
+def test_legacy_tables_list_matches_the_frozen_schema(legacy):
+    import sqlite3
 
-    import app.models  # noqa: F401
-
-    assert set(LEGACY_TABLES) == set(SQLModel.metadata.tables)
+    conn = sqlite3.connect(legacy)
+    try:
+        names = {
+            n
+            for (n,) in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table'"
+            )
+        }
+    finally:
+        conn.close()
+    assert set(LEGACY_TABLES) == names
     assert connection.vendor == "postgresql"
 
 
@@ -434,3 +442,27 @@ def test_skip_accepts_a_bare_legacy_id_and_still_keeps_the_row(legacy):
     entry = LegacyImportMap.objects.get(source_table="posts", source_pk="11")
     assert entry.outcome == "skipped"
     assert json.loads(entry.payload)["id"] == 11
+
+
+def test_frozen_fixtures_still_match_the_legacy_models(tmp_path):
+    """While lumi/app/ exists, the frozen SQL must describe the same schema and rows.
+
+    After lumi/app/ is removed this test skips and the SQL files are the only source.
+    """
+    pytest.importorskip("app.models")
+    import sqlite3
+
+    from apps.core.tests import legacy_regen
+    from apps.core.tests.legacy_db import build_legacy_db
+
+    def dump(path):
+        conn = sqlite3.connect(path)
+        try:
+            return sorted(conn.iterdump())
+        finally:
+            conn.close()
+
+    frozen = build_legacy_db(tmp_path / "frozen.db")
+    legacy_regen.regenerate()  # rewrites the files in place; a diff means they were stale
+    again = build_legacy_db(tmp_path / "again.db")
+    assert dump(frozen) == dump(again)

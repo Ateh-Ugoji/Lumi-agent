@@ -247,7 +247,7 @@ Renueva los tokens que caducan en menos de 7 días e imprime solo recuentos, nun
 
 | Punto | Regla |
 | --- | --- |
-| Entrada | Un `lumi.db` de SQLite del sistema anterior. Es el único uso de SQLite que queda. Se abre solo lectura (`mode=ro`) y el archivo no cambia. Una tabla que falta se trata como vacía. No había un `lumi.db` real en `/workspace/lumi-data/`: los tests usan una base sintética construida con los modelos legados (`apps/core/tests/legacy_db.py`). |
+| Entrada | Un `lumi.db` de SQLite del sistema anterior. Es el único uso de SQLite que queda. Se abre solo lectura (`mode=ro`) y el archivo no cambia. Una tabla que falta se trata como vacía. No había un `lumi.db` real en `/workspace/lumi-data/`: los tests usan una base sintética construida con los modelos legados (`apps/core/tests/legacy_db.py`, que carga `legacy_schema.sql` y `legacy_rows.sql`; `legacy_regen.py` los regenera mientras exista `lumi/app/`). |
 | Usuario | Todos los datos legados son de un solo usuario. `--user` lo crea con contraseña inutilizable si no existe. Sin `--user` se usa `importado@lumi.invalid`. |
 | Transacción | **Una sola transacción para todo** (cambio respecto a "cada tabla en una transacción"), con un savepoint por importador. Un error deja la base como estaba. `--dry-run` corre todo y revierte al final. |
 | Repetible | Cada fila legada queda en `legacy_import_map` con un `outcome`: `imported` (pasó a una fila nueva), `merged` (otra fila ya la cubría) o `skipped` (no se pudo importar; `target_table = "(omitida)"`, `target_pk = 0`). Una segunda ejecución no duplica ni cambia nada y cuenta las filas como "ya importadas". |
