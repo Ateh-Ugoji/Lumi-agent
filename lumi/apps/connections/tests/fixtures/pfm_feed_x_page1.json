@@ -1,0 +1,60 @@
+{
+  "data": [
+    {
+      "platform": "x",
+      "platform_post_id": "101",
+      "social_account_id": "sa_1",
+      "platform_account_id": "9001",
+      "platform_url": "https://x.com/ateh/status/101",
+      "caption": "Don't run out of money. That's the whole job.",
+      "media": [],
+      "posted_at": "2026-10-20T10:00:00Z",
+      "metrics": {
+        "public_metrics": {
+          "like_count": 12,
+          "reply_count": 3,
+          "retweet_count": 2,
+          "impression_count": 900,
+          "quote_count": 1,
+          "bookmark_count": 4
+        }
+      }
+    },
+    {
+      "platform": "x",
+      "platform_post_id": "100",
+      "social_account_id": "sa_1",
+      "platform_account_id": "9001",
+      "platform_url": "https://x.com/ateh/status/100",
+      "caption": "@tsola_ps 😂😂",
+      "media": [],
+      "posted_at": "2026-10-19T10:00:00Z",
+      "metrics": {
+        "public_metrics": {
+          "like_count": 1,
+          "reply_count": 0,
+          "retweet_count": 0,
+          "impression_count": 40,
+          "quote_count": 0,
+          "bookmark_count": 0
+        }
+      }
+    },
+    {
+      "platform": "x",
+      "platform_post_id": "99",
+      "social_account_id": "sa_1",
+      "platform_account_id": "9001",
+      "platform_url": "https://x.com/ateh/status/99",
+      "caption": "No metrics on this one",
+      "media": [],
+      "posted_at": "2026-10-18T10:00:00Z"
+    }
+  ],
+  "meta": {
+    "cursor": "pgn_next_1",
+    "limit": 3,
+    "next": "https://api.postforme.dev/v1/social-account-feeds/sa_1?cursor=pgn_next_1",
+    "has_more": true
+  }
+}

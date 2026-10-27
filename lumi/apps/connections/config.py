@@ -16,6 +16,8 @@ DEFAULT_PUBLIC_BASE_URL = "http://localhost:8000"
 DEFAULT_FRONTEND_URL = "http://localhost:3010"
 DEFAULT_LINKEDIN_VERSION = "202609"
 DEFAULT_META_GRAPH_VERSION = "v26.0"
+DEFAULT_XPOZ_RUN_CREDIT_BUDGET = 10
+DEFAULT_HANDLE_CACHE_TTL_MINUTES = 60
 
 _TRUE = {"1", "true", "yes", "on"}
 _FALSE = {"", "0", "false", "no", "off"}
@@ -33,6 +35,19 @@ def parse_bool(value: str | None, *, name: str) -> bool:
     raise ConfigError(f"{name} must be true or false")
 
 
+def parse_non_negative_int(value: str | None, *, name: str, default: int) -> int:
+    text = (value or "").strip()
+    if not text:
+        return default
+    try:
+        number = int(text)
+    except ValueError:
+        raise ConfigError(f"{name} must be a whole number") from None
+    if number < 0:
+        raise ConfigError(f"{name} must not be negative")
+    return number
+
+
 @dataclass(frozen=True, slots=True)
 class ConnectionsConfig:
     public_base_url: str = DEFAULT_PUBLIC_BASE_URL
@@ -46,6 +61,12 @@ class ConnectionsConfig:
     linkedin_client_secret: str = field(default="", repr=False)
     x_client_id: str = ""
     x_client_secret: str = field(default="", repr=False)
+    pfm_jwt_token: str = field(default="", repr=False)
+    xpoz_api_key: str = field(default="", repr=False)
+    xpoz_api_key_2: str = field(default="", repr=False)
+    xpoz_live_enabled: bool = False
+    xpoz_run_credit_budget: int = DEFAULT_XPOZ_RUN_CREDIT_BUDGET
+    handle_cache_ttl_minutes: int = DEFAULT_HANDLE_CACHE_TTL_MINUTES
 
     @classmethod
     def from_env(cls, env: Mapping[str, str]) -> ConnectionsConfig:
@@ -70,7 +91,28 @@ class ConnectionsConfig:
             linkedin_client_secret=get("LINKEDIN_CLIENT_SECRET"),
             x_client_id=get("X_CLIENT_ID"),
             x_client_secret=get("X_CLIENT_SECRET"),
+            pfm_jwt_token=get("PFM_JWT_TOKEN"),
+            xpoz_api_key=get("XPOZ_API_KEY"),
+            xpoz_api_key_2=get("XPOZ_API_KEY_2"),
+            xpoz_live_enabled=parse_bool(
+                env.get("XPOZ_LIVE_ENABLED"), name="XPOZ_LIVE_ENABLED"
+            ),
+            xpoz_run_credit_budget=parse_non_negative_int(
+                env.get("XPOZ_RUN_CREDIT_BUDGET"),
+                name="XPOZ_RUN_CREDIT_BUDGET",
+                default=DEFAULT_XPOZ_RUN_CREDIT_BUDGET,
+            ),
+            handle_cache_ttl_minutes=parse_non_negative_int(
+                env.get("HANDLE_CACHE_TTL_MINUTES"),
+                name="HANDLE_CACHE_TTL_MINUTES",
+                default=DEFAULT_HANDLE_CACHE_TTL_MINUTES,
+            ),
         )
+
+    @property
+    def xpoz_api_keys(self) -> tuple[str, ...]:
+        """Configured Xpoz keys in rotation order, blanks dropped."""
+        return tuple(k for k in (self.xpoz_api_key, self.xpoz_api_key_2) if k)
 
     def redirect_uri(self, provider: str) -> str:
         return f"{self.public_base_url}/api/v1/connections/{provider}/callback"

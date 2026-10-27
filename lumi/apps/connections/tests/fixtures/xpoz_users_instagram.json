@@ -1,0 +1,14 @@
+{
+  "results": [
+    {
+      "username": "ateh.ig",
+      "fullName": "Ateh",
+      "profilePicUrl": "https://img.example/i.jpg",
+      "followerCount": 900
+    }
+  ],
+  "count": 1,
+  "dataSource": "live",
+  "has_more": false,
+  "next_page_cursor": null
+}

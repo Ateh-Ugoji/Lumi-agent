@@ -55,3 +55,42 @@ def test_secrets_stay_out_of_repr() -> None:
     )
     text = repr(config)
     assert "s3cret" not in text
+
+
+def test_xpoz_and_pfm_defaults_never_spend() -> None:
+    config = ConnectionsConfig.from_env({})
+    assert config.xpoz_live_enabled is False
+    assert config.xpoz_run_credit_budget == 10
+    assert config.handle_cache_ttl_minutes == 60
+    assert config.xpoz_api_keys == ()
+
+
+def test_xpoz_keys_keep_rotation_order_and_drop_blanks() -> None:
+    config = ConnectionsConfig.from_env({"XPOZ_API_KEY": " ", "XPOZ_API_KEY_2": "k2"})
+    assert config.xpoz_api_keys == ("k2",)
+    both = ConnectionsConfig.from_env({"XPOZ_API_KEY": "k1", "XPOZ_API_KEY_2": "k2"})
+    assert both.xpoz_api_keys == ("k1", "k2")
+
+
+@pytest.mark.parametrize("name", ["XPOZ_RUN_CREDIT_BUDGET", "HANDLE_CACHE_TTL_MINUTES"])
+@pytest.mark.parametrize("value", ["ten", "-1", "1.5"])
+def test_numeric_settings_reject_bad_values_by_name(name: str, value: str) -> None:
+    with pytest.raises(ConfigError) as caught:
+        ConnectionsConfig.from_env({name: value})
+    assert name in str(caught.value) and value not in str(caught.value)
+
+
+def test_xpoz_switch_typo_fails() -> None:
+    with pytest.raises(ConfigError):
+        ConnectionsConfig.from_env({"XPOZ_LIVE_ENABLED": "yess"})
+
+
+def test_pfm_and_xpoz_secrets_stay_out_of_repr() -> None:
+    config = ConnectionsConfig.from_env(
+        {
+            "PFM_JWT_TOKEN": "pfm-s3cret",
+            "XPOZ_API_KEY": "xp-s3cret",
+            "XPOZ_API_KEY_2": "xp2-s3cret",
+        }
+    )
+    assert "s3cret" not in repr(config)
