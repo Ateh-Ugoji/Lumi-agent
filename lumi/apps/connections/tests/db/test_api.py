@@ -749,3 +749,23 @@ def test_a_healthy_account_is_left_alone_by_the_quarantine(user) -> None:
     assert accounts.quarantine_unreadable() == 0
     row.refresh_from_db()
     assert row.status == AccountStatus.ACTIVE
+
+
+def test_a_facebook_login_with_no_pages_says_pages_are_needed(
+    api, env, providers, user
+) -> None:
+    env(META_ENV)
+    table = {**META_TABLE, ("GET", "/v26.0/me/accounts"): httpx.Response(200, json={"data": []})}
+    providers.on("meta", table)
+    state = state_of(connect(api, "meta").json()["authorize_url"])
+    response = complete("meta", state, "c0de", user=user)
+    assert response.status_code == 422
+    error = response.json()["error"]
+    assert error["code"] == "connections.no_accounts"
+    assert "Página" in error["message"] and "perfiles personales" in error["message"]
+    assert ConnectedAccount.objects.filter(user=user).count() == 0
+
+
+def test_the_no_accounts_message_is_specific_only_where_it_helps() -> None:
+    assert "Página" in accounts.no_accounts_message("meta")
+    assert accounts.no_accounts_message("linkedin") == "La autorización no incluyó ninguna cuenta."

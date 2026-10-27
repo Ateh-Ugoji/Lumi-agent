@@ -185,7 +185,7 @@ export async function finishConnect(landing: CallbackLanding): Promise<ConnectRe
 /** What the page shows once the landing is handled. */
 export type ConnectReturn =
   | { kind: "connected"; provider: string }
-  | { kind: "error"; code: string };
+  | { kind: "error"; code: string; provider?: string };
 
 const RETURN_ERRORS: Record<string, string> = {
   "connections.state_invalid": "El enlace de conexión no es válido. Empieza de nuevo.",
@@ -202,7 +202,18 @@ const RETURN_ERRORS: Record<string, string> = {
   internal_error: "Algo falló en el servidor. Inténtalo otra vez.",
 };
 
-export function connectErrorMessage(code: string): string {
+/** Facebook lists Pages only, so a personal profile finishes the login and then has nothing to store. */
+const NO_ACCOUNTS_BY_PROVIDER: Record<string, string> = {
+  meta:
+    "Facebook no devolvió ninguna Página. Lumi conecta Páginas de Facebook, no perfiles personales: " +
+    "necesitas ser administrador de una Página y elegirla al autorizar.",
+};
+
+export function connectErrorMessage(code: string, provider?: string): string {
+  if (provider && (code === "connections.no_accounts" || code === "no_accounts")) {
+    const specific = NO_ACCOUNTS_BY_PROVIDER[provider];
+    if (specific) return specific;
+  }
   // CONTRATOS lists the codes bare; the callback sends most of them as `connections.<code>`.
   return RETURN_ERRORS[code] ?? RETURN_ERRORS[`connections.${code}`] ?? "No se pudo conectar la cuenta.";
 }

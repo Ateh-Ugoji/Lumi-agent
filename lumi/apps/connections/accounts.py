@@ -130,6 +130,20 @@ def pfm_external_id(user, *, create: bool = False) -> str | None:
     return link.external_id
 
 
+_NO_ACCOUNTS = {
+    "meta": (
+        "Facebook no devolvió ninguna Página. Lumi conecta Páginas de Facebook, no perfiles "
+        "personales: necesitas ser administrador de una Página y elegirla al autorizar."
+    ),
+}
+
+
+def no_accounts_message(provider: str) -> str:
+    """Why a finished grant stored nothing. Meta lists Pages only, so a personal profile with no
+    Page lands here after a login that worked; saying so beats a generic sentence."""
+    return _NO_ACCOUNTS.get(provider, "La autorización no incluyó ninguna cuenta.")
+
+
 def missing_env(provider: str, config: ConnectionsConfig) -> list[str]:
     return [
         name
@@ -291,7 +305,7 @@ def complete_connect(
         if count == 0:
             raise ApiError(
                 "connections.no_accounts",
-                "La autorización no incluyó ninguna cuenta.",
+                no_accounts_message(provider),
                 status_code=422,
             )
         return {

@@ -184,3 +184,11 @@ test("a refused link says why", () => {
   assert.match(linkErrorMessage(new ApiError(409, "connections.account_unusable", "x")), /reconect/);
   assert.match(linkErrorMessage(new Error("boom")), /No se pudo enlazar/);
 });
+
+test("a Facebook login with no Pages explains that Lumi connects Pages, not personal profiles", () => {
+  const meta = connectErrorMessage("connections.no_accounts", "meta");
+  assert.match(meta, /Página/);
+  assert.match(meta, /perfiles personales/);
+  assert.equal(connectErrorMessage("connections.no_accounts", "linkedin"), connectErrorMessage("connections.no_accounts"));
+  assert.equal(connectErrorMessage("connections.access_denied", "meta"), connectErrorMessage("connections.access_denied"));
+});

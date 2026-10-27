@@ -146,6 +146,10 @@ Modo Development, sin revisión. Sirve para publicar en tus propias páginas.
 9. Ten en cuenta el límite de un máximo de 15 apps sin verificar por desarrollador.
 10. Prueba con `uv run python manage.py check_keys --only meta`.
 
+**Facebook conecta Páginas, no perfiles personales.** Lumi pide a Meta la lista de Páginas del usuario (`GET /me/accounts`) y guarda cada una como cuenta. Con una cuenta personal sin Páginas el login de Facebook funciona, pero no hay nada que guardar y la app muestra "Facebook no devolvió ninguna Página" (código `connections.no_accounts`, HTTP 422). Hace falta ser administrador de una Página (se crea gratis en https://www.facebook.com/pages/create) y elegirla en el diálogo de autorización. Si Facebook ya recordaba una autorización anterior sin Páginas, quítala en Facebook, Configuración, Integraciones comerciales, y vuelve a conectar. Visto el 27 de octubre de 2026 con una cuenta sin Páginas.
+
+**Si el login muestra "Invalid Scopes: pages_read_engagement, pages_manage_posts, read_insights"**, la app de Meta no tiene esos permisos disponibles. Revisa en el panel de la app, Use cases, el caso "Manage everything on your Page", Customize, Permissions and features, y añádelos. Visto el 27 de octubre de 2026; la causa exacta no se confirmó con documentación oficial de Meta, así que si no basta, copia el texto del error.
+
 Para abrir Lumi a personas sin rol (App Review), solo cuando quieras lanzarlo.
 
 1. Pon la app en Live solo después de que App Review apruebe los permisos. Los posts de prueba se vuelven visibles al pasar a Live (https://developers.facebook.com/docs/development/build-and-test/app-modes).

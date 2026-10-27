@@ -170,7 +170,7 @@ export default function ConnectionsPanel({
         >
           <span>
             {returned.kind === "error"
-              ? connectErrorMessage(returned.code)
+              ? connectErrorMessage(returned.code, returned.provider)
               : `${PROVIDER_LABELS[returned.provider as Provider] ?? returned.provider} conectado.`}
           </span>
           <button type="button" className={styles.textBtn} onClick={onDismissReturn}>

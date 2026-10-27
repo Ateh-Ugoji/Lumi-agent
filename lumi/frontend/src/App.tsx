@@ -409,13 +409,21 @@ export default function App() {
         setConnectReturn(
           done.connected
             ? { kind: "connected", provider: done.provider }
-            : { kind: "error", code: "connections.no_accounts" },
+            : {
+                kind: "error",
+                code: "connections.no_accounts",
+                provider: landing.kind === "pfm" ? "pfm" : landing.provider,
+              },
         );
         refreshProfiles();
       })
       .catch((err: unknown) => {
         const code = err instanceof ApiError ? err.code : "internal_error";
-        setConnectReturn({ kind: "error", code });
+        setConnectReturn({
+          kind: "error",
+          code,
+          provider: landing.kind === "pfm" ? "pfm" : landing.provider,
+        });
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
