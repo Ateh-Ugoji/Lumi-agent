@@ -43,7 +43,7 @@ def test_authorize_url_has_scopes_state_and_version() -> None:
     provider, rec = make()
     request = provider.build_authorize_url(
         state="st",
-        redirect_uri="http://localhost:8000/api/v1/connections/meta/callback",
+        redirect_uri="http://localhost:3010/connections/meta/callback",
     )
     parts = urlsplit(request.url)
     query = parse_qs(parts.query)

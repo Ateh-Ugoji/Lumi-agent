@@ -44,7 +44,7 @@ from ..handles.fakes import Clock, ScriptedLive
 
 pytestmark = pytest.mark.django_db
 
-CALLBACK = "http://localhost:8000/api/v1/connections/{}/callback"
+CALLBACK = "http://localhost:3010/connections/{}/callback"
 
 
 def redirect_uri_for(provider: str) -> str:

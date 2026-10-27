@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import httpx
 import pytest
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
@@ -85,6 +86,39 @@ def test_sync_stores_the_users_accounts_and_is_idempotent(
     assert providers.requests("pfm")[0].url.params["external_id"] == "lumi-link-1"
 
 
+@pytest.mark.parametrize("failure", [503, 401, 429])
+def test_sync_says_stale_and_keeps_the_saved_accounts_when_pfm_fails(
+    api, linked, providers, failure
+) -> None:
+    def saved():
+        return list(
+            ConnectedAccount.objects.filter(provider="pfm")
+            .order_by("pk")
+            .values(
+                "pk",
+                "external_account_id",
+                "platform",
+                "display_name",
+                "handle",
+                "status",
+                "updated_at",
+            )
+        )
+
+    first = api.post("/api/v1/connections/pfm/sync").json()
+    before = saved()
+    assert first["stale"] is False and len(before) == 1
+
+    providers.on("pfm", {("GET", "/v1/social-accounts"): httpx.Response(failure)})
+    response = api.post("/api/v1/connections/pfm/sync")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["stale"] is True
+    assert body["accounts"] == first["accounts"] and body["connected"] is True
+    assert saved() == before  # nothing was deleted, revoked or rewritten
+
+
 def test_sync_without_a_link_asks_pfm_nothing(api, env, providers) -> None:
     env(PFM_ENV)
     providers.on("pfm", PFM_ACCOUNTS)
@@ -129,3 +163,29 @@ def test_sync_is_throttled_per_user(api, linked, other_user, settings) -> None:
     assert (
         client_for(other_user).post("/api/v1/connections/pfm/sync").status_code == 200
     )
+
+
+def test_a_method_the_route_lacks_answers_405_even_when_the_limit_is_spent(
+    api, linked
+) -> None:
+    from django.core.cache import cache
+
+    cache.clear()
+    assert [
+        api.post("/api/v1/connections/pfm/sync").status_code for _ in range(12)
+    ] == [200] * 12
+    assert api.post("/api/v1/connections/pfm/sync").status_code == 429
+    for method in (api.get, api.put, api.delete):
+        assert method("/api/v1/connections/pfm/sync").status_code == 405
+
+
+def test_a_405_does_not_spend_the_sync_budget(api, linked) -> None:
+    from django.core.cache import cache
+
+    cache.clear()
+    assert [api.get("/api/v1/connections/pfm/sync").status_code for _ in range(15)] == [
+        405
+    ] * 15
+    assert [
+        api.post("/api/v1/connections/pfm/sync").status_code for _ in range(12)
+    ] == [200] * 12

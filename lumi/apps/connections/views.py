@@ -99,6 +99,12 @@ class PfmSyncView(APIView):
 
     throttle_classes = [PfmSyncThrottle]
 
+    def check_throttles(self, request):
+        """DRF throttles before it looks for the method, so a GET would answer 429 (and spend
+        the budget) instead of 405. Only a method this view handles counts against the limit."""
+        if hasattr(self, request.method.lower()):
+            super().check_throttles(request)
+
     @extend_schema(
         request=None,
         responses=StatusSerializer,

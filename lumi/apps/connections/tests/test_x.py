@@ -89,7 +89,7 @@ async def test_authorize_url_and_dry_run_are_local_with_x_off() -> None:
     provider, rec = make(live=False)
     request = provider.build_authorize_url(
         state="st",
-        redirect_uri="http://127.0.0.1:8000/api/v1/connections/x/callback",
+        redirect_uri="http://127.0.0.1:3010/connections/x/callback",
         code_challenge="ch",
     )
     query = parse_qs(urlsplit(request.url).query)
