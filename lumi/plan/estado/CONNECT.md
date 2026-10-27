@@ -11,8 +11,23 @@ Rama `lumi-orquestador`. Se actualiza en cada reporte.
 | T2 Fusión de frontends | hecho | `lumi/frontend` es el único frontend. Typecheck, build y 17 pruebas Node pasan. No hay linter en ninguno de los dos (solo `tsc`). |
 | T13 MUSE.md | hecha | Solo documentación, fuentes de dev.meta.ai con fecha 2026-10-27 |
 | Capa de adaptadores | hecha (sin Django) | Cifrado, OAuth, http, Meta, LinkedIn, X, publicación, claves. 139 pruebas sin red. |
-| T3 modelos | bloqueada | Faltan `accounts.0001_initial` y `profiles.0001_initial` de ARCHITECT |
+| T3 modelos | en curso | Desbloqueada con `accounts.0001` y `profiles.0001` |
+| T7 clientes PFM y Xpoz | hecha (sin red) | Mocks y fixtures. Sin llamadas en vivo. La ingesta a Postgres espera `apps.profiles.services` (T5 de ARCHITECT) |
+| T8 búsqueda de handles | parte pura hecha | Falta el almacén Postgres y las rutas `/handles/*` |
 | T4 a T12 y T14 | pendientes | T5 y T11 exigen `CONTRATOS.md`, que aún no está publicado |
+
+## Contrato
+
+CONTRATO ARCHITECT ACEPTADO f212586 (`CONTRATOS.md` v1.0, completo).
+
+Compatible. Puntos concretos:
+
+- Aceptados sin cambios: sección 11, filas 3 a 7 (`pfm_account_id` vive en `connected_accounts`, `PublishJob.status` con `fingerprint`, `OAuthState.consume` en un solo `UPDATE ... RETURNING`, `EncryptedTextField` en `apps.core.fields`, `connect` en JSON y `callback` público con `302`).
+- Rutas: el plan de CONNECT decía `/connections/<provider>/start`. Se usa `/connect` como fija el contrato. El contrato no trae `GET /connections` ni un `refresh` manual. Se propone añadirlos en una versión menor si el frontend los necesita. Mientras tanto, `status` por proveedor basta.
+- `publish_jobs.attempt_id` apunta a `repurpose_attempts`, que aún no existe (la app `intelligence` no tiene migraciones). `0001` crea la columna como `bigint` nula sin FK y `0002` añade la FK cuando INTELLIGENCE publique su migración. Esto es una desviación temporal de SCHEMA §8.
+- `google` aparece en las rutas pero no en `connected_accounts.provider`. Se mantiene así: Google vive en `mcp_auth_accounts` y `OAuthState` (T9).
+- `xpoz_credit_ledger` será tabla (auditoría por clave y corrida). `mcp_pending_writes` se decide en T9. El presupuesto de una corrida es un contador en memoria de esa corrida y no sustituye al registro.
+- Los handles de Reddit salen de la capa de búsqueda porque SCHEMA v2 quitó `reddit` de `Platform`. El cliente Xpoz conserva la capacidad.
 
 ## Bloqueos
 
