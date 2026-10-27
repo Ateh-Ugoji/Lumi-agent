@@ -1,10 +1,23 @@
 # Esquema de base de datos (PostgreSQL)
 
-Estado: **propuesta v1.1 para revisión** de LUMI-INTELLIGENCE y LUMI-CONNECT. Autor: LUMI-ARCHITECT. Rama `lumi-orquestador`. Este archivo no cambia sin avisar en `plan/estado/ARCHITECT.md`. La API y las firmas de servicio están en `CONTRATOS.md`.
+Estado: **propuesta v2 para revisión** de LUMI-INTELLIGENCE y LUMI-CONNECT. Autor: LUMI-ARCHITECT. Rama `lumi-orquestador`. Este archivo no cambia sin avisar en `plan/estado/ARCHITECT.md`. La API y las firmas de servicio están en `CONTRATOS.md`.
 
 El texto de los documentos va en español. Los nombres de tablas, columnas, modelos y funciones van en inglés.
 
-Cambios de v1 a v1.1 (por la revisión de INTELLIGENCE en `estado/INTELLIGENCE.md`): `posts.language` y `poll_configs.keywords` nuevas; `generation_evaluations.attempt_id` obligatorio; `Platform` se mantiene amplio y los puertos de `lumi_ai` filtran; los tipos de post de `apps.profiles.services` son los de `lumi_ai.ports`.
+Cambios de v1 a v2 (respuesta a la revisión de INTELLIGENCE en `estado/INTELLIGENCE.md`):
+
+| N.º | Tema | Decisión |
+| --- | --- | --- |
+| 1 | `Platform` | Igual que `lumi_ai.ports.Platform` (`PORTS_VERSION` 1.3): `x`, `linkedin`, `facebook`, `instagram`, `tiktok`. Se quitan `youtube` y `reddit`. Añadir una plataforma es una migración de `profiles` que pide quien la necesite. |
+| 2 | `generation_evaluations.attempt_id` | Clave foránea obligatoria. El servicio de generación crea el intento y la evaluación en una transacción. INTELLIGENCE pasa `EvaluationRecord.attempt_id` como obligatorio en los puertos 1.3. |
+| 3 | Palabras clave de escucha | Tabla `listening_keywords` (una fila por palabra y perfil). Se quita la columna `keywords` que v1.1 proponía en `poll_configs`. |
+| 4 | `user_search_requests` y la plataforma | La plataforma sale de `social_handles` (la FK ya la fija). Regla de servicio: si quien llama no da plataforma, se usa la del perfil. |
+| 5 | `niche_preferences` | Columnas `niche_key`, `title`, `source`, `is_active`, y tablas hijas `niche_preference_keywords` y `niche_preference_handles` (FK a `social_handles`). Un solo nicho activo por perfil. |
+| 6 | `frameworks` | Se añade `payload` jsonb (salida cruda del modelo). No se añade `title`: `name` es el título. |
+| 7 | `turn_classifications` | Se añaden `message_preview` y `path_taken`. Las columnas `jev_*` conservan su nombre porque el importador las copia 1:1. |
+| 8 | `repurpose_attempts.is_fallback` | Ya estaba en v1 (booleano obligatorio, defecto `false`). INTELLIGENCE añade `is_fallback` a `AttemptIn` en los puertos 1.3. |
+| 9 | `posts.language` | Nueva columna (`PostIn.language`). |
+| 10 | Tipos de post | `apps.profiles.services` usa los de `lumi_ai.ports` (`PostIn`, `PostOut`, `PostMetrics`, `MediaRef`, `PeerPostIn`, `BaselineOut`). |
 
 ## 1. Objetivo y alcance
 
@@ -42,7 +55,7 @@ Reglas del proyecto que el esquema cumple:
 
 | Enum | Valores |
 | --- | --- |
-| `Platform` | `x`, `linkedin`, `facebook`, `instagram`, `tiktok`, `youtube`, `reddit` |
+| `Platform` | `x`, `linkedin`, `facebook`, `instagram`, `tiktok` (los mismos que `lumi_ai.ports.Platform`) |
 | `IngestSource` | `pfm`, `xpoz`, `meta`, `linkedin`, `x`, `import`, `manual` |
 | `PostKind` | `original`, `reply`, `retweet`, `quote` |
 | `JobStatus` | `queued`, `running`, `succeeded`, `failed`, `cancelled` |
@@ -69,9 +82,9 @@ Los posts de otros usuarios (competidores) son compartidos: dos perfiles que sig
 | --- | --- | --- |
 | `accounts` | ARCHITECT | `users`, `auth_tokens` (más las tablas M2M de grupos y permisos que genera Django) |
 | `core` | ARCHITECT | `background_jobs`, `legacy_import_map` |
-| `profiles` | ARCHITECT | `social_handles`, `handle_snapshots`, `social_profiles`, `profile_baselines`, `poll_configs`, `posts`, `post_media`, `metric_snapshots`, `alerts`, `listening_matches` |
+| `profiles` | ARCHITECT | `social_handles`, `handle_snapshots`, `social_profiles`, `profile_baselines`, `poll_configs`, `listening_keywords`, `posts`, `post_media`, `metric_snapshots`, `alerts`, `listening_matches` |
 | `chat` | ARCHITECT | `chat_messages` |
-| `intelligence` | INTELLIGENCE (columnas finales); ARCHITECT fija nombres, FK y únicos | `voice_profiles`, `voice_profile_examples`, `style_answers`, `niche_preferences`, `post_taggings`, `niche_reports`, `niche_report_peers`, `frameworks`, `framework_evidence`, `repurpose_requests`, `repurpose_attempts`, `generation_evaluations`, `user_actions`, `turn_classifications`, `user_search_requests`, `memory_notes`, `profile_memory_summaries`, `video_analysis_records` |
+| `intelligence` | INTELLIGENCE (columnas finales); ARCHITECT fija nombres, FK y únicos | `voice_profiles`, `voice_profile_examples`, `style_answers`, `niche_preferences`, `niche_preference_keywords`, `niche_preference_handles`, `post_taggings`, `niche_reports`, `niche_report_peers`, `frameworks`, `framework_evidence`, `repurpose_requests`, `repurpose_attempts`, `generation_evaluations`, `user_actions`, `turn_classifications`, `user_search_requests`, `memory_notes`, `profile_memory_summaries`, `video_analysis_records` |
 | `connections` | CONNECT (columnas finales); ARCHITECT fija nombres, FK y únicos | `connected_accounts`, `oauth_states`, `publish_jobs`, `mcp_auth_accounts`, `mcp_pending_writes`, `handle_search_cache`, `handle_search_cache_entries`, `xpoz_credit_ledger` |
 
 Los nombres de modelo de INTELLIGENCE y CONNECT son los de sus planes (`RepurposeRequest`, `UserAction`, `PublishJob`, `VideoAnalysisRecord`, `GenerationEvaluation`, `NichePreference`). No se renombran.
@@ -87,6 +100,10 @@ erDiagram
     social_handles ||--o{ handle_snapshots : registra
     social_handles ||--o{ posts : escribe
     social_profiles ||--o| poll_configs : configura
+    social_profiles ||--o{ listening_keywords : sigue
+    social_profiles ||--o{ niche_preferences : elige
+    niche_preferences ||--o{ niche_preference_handles : sigue
+    social_handles ||--o{ niche_preference_handles : es
     social_profiles ||--o{ profile_baselines : calcula
     social_profiles ||--o{ alerts : recibe
     social_profiles ||--o{ listening_matches : escucha
@@ -253,11 +270,21 @@ La plataforma y el handle viven en `social_handles`. La identidad externa de la 
 | `profile_id` | OneToOne `social_profiles` NN | `CASCADE`. |
 | `interval_minutes` | smallint NN | Defecto 5. Entre 1 y 1440 (`ck_poll_configs_interval`). |
 | `is_active` | boolean NN | Defecto `false`. |
-| `keywords` | text[] NN | Defecto `{}`. Palabras que sigue la escucha social (las lee y escribe `ListeningStore`). |
 | `last_polled_at` | timestamptz | Nulo. |
 | `created_at`, `updated_at` | timestamptz NN | |
 
 Índice parcial (`last_polled_at`) donde `is_active`. El poller reclama los vencidos con un solo `UPDATE ... SET last_polled_at = now() WHERE is_active AND (last_polled_at IS NULL OR last_polled_at <= now() - interval_minutes * interval '1 minute') RETURNING profile_id`. Dos workers no reclaman el mismo perfil.
+
+**`listening_keywords`** (`profiles.ListeningKeyword`). Palabras que sigue la escucha social de un perfil. Las lee y escribe `ListeningStore` a través de `get_listening` y `set_listening`.
+
+| Columna | Tipo | Reglas |
+| --- | --- | --- |
+| `id` | bigint PK | |
+| `profile_id` | FK `social_profiles` NN | `CASCADE`. |
+| `keyword` | varchar(100) NN | Sin espacios en los extremos. No vacía (`ck_listening_keywords_not_blank`). |
+| `created_at` | timestamptz NN | Defecto ahora. |
+
+Único `uq_listening_keywords_profile_keyword` (`profile`, `Lower("keyword")`). El orden es el de `id`. `set_listening` reemplaza el conjunto en una transacción (borra las que sobran e inserta las nuevas).
 
 **`posts`** (`profiles.Post`). Tabla única de posts propios y ajenos. Une las tablas legadas `posts` (propios), `user_activity` (replies y retweets propios) y los posts que antes solo vivían en `listening_matches` o en Chroma.
 
@@ -376,23 +403,25 @@ Todas dependen de `profiles.0001_initial` (y `chat.0001_initial` en `turn_classi
 | `voice_profiles` (`VoiceProfile`) | `id`, `profile_id` FK `CASCADE`, `platform` varchar(20) NN defecto `general` (`Platform` o `general`; sustituye al "nulo = general" del plan para que el único funcione sin `NULLS NOT DISTINCT`), `version` integer NN, `is_current` boolean NN defecto `false`, `source` varchar(10) NN (`posts` o `questions`), `payload` jsonb NN, `model` varchar(100) NN defecto `''`, `prompt_version` varchar(40) NN defecto `''`, `created_at` | Único (`profile`, `platform`, `version`). Único parcial (`profile`, `platform`) donde `is_current`. Cambiar la voz actual es una transacción con `select_for_update` sobre la fila vigente. |
 | `voice_profile_examples` (`VoiceProfileExample`) | `id`, `voice_profile_id` FK `CASCADE`, `post_id` FK `posts` `CASCADE`, `position` smallint NN | Único (`voice_profile`, `post`). Sustituye a `voice_profiles.example_post_ids` (JSON sin FK). |
 | `style_answers` (`StyleAnswer`) | `id`, `profile_id` FK `CASCADE`, `question_key` varchar(80) NN, `answer` text NN, `created_at`, `updated_at` | Único (`profile`, `question_key`); se escribe con upsert. Lectores actuales: ninguno. Desde este diseño lo lee `answer_style_questions` (arranque en frío). |
-| `niche_preferences` (`NichePreference`) | `id`, `profile_id` FK `CASCADE`, `niche` varchar(200) NN, `source` varchar(10) NN (`user`, `inferred`), `is_active` boolean NN, `created_at`, `updated_at` | Único (`profile`, `niche`) sobre el valor en minúsculas. Tabla nueva, sin datos legados. |
+| `niche_preferences` (`NichePreference`) | `id`, `profile_id` FK `CASCADE`, `niche_key` varchar(120) NN (forma `<slug>:<geo_scope>`), `title` varchar(200) NN, `source` varchar(10) NN (`user`, `inferred`), `is_active` boolean NN defecto `true`, `created_at`, `updated_at` | Único (`profile`, `niche_key`). Único parcial (`profile`) donde `is_active`: un solo nicho activo por perfil. Tabla nueva, sin datos legados. |
+| `niche_preference_keywords` (`NichePreferenceKeyword`) | `id`, `preference_id` FK `CASCADE`, `keyword` varchar(100) NN | Único (`preference`, `Lower("keyword")`). |
+| `niche_preference_handles` (`NichePreferenceHandle`) | `id`, `preference_id` FK `CASCADE`, `handle_id` FK `social_handles` `CASCADE` | Único (`preference`, `handle`). Sustituye a `tracked_handles` por plataforma; la plataforma sale del handle. |
 | `post_taggings` (`PostTagging`) | `id`, `post_id` FK `posts` `CASCADE`, `prompt_version` varchar(40) NN defecto `''`, `status` varchar(10) NN defecto `pending` (`pending`, `ok`, `failed`), `analysis` jsonb nulo, `framework_guess` varchar(120) NN defecto `''`, `validation_error` text NN defecto `''`, `tagged_at` timestamptz nulo, `created_at` | Único (`post`, `prompt_version`). Une `own_post_analysis` y `post_taggings`, que tenían la misma forma. |
 | `niche_reports` (`NicheReport`) | `id`, `profile_id` FK `CASCADE`, `query` text NN, `niche` varchar(200) NN, `status` varchar(18) NN (`pending`, `ok`, `insufficient_data`, `failed`), `posts_analyzed` integer NN, `winner_count` integer NN, `peers_analyzed` integer NN, `report` jsonb NN (salida cruda validada), `origin` varchar(20) NN (`pipeline`, `legacy_peer_frameworks`, `legacy_niche_report`), `created_at` | Índice (`profile`, `-created_at`). Une `peer_frameworks` y `niche_framework_reports`. |
 | `niche_report_peers` (`NicheReportPeer`) | `id`, `report_id` FK `CASCADE`, `handle_id` FK `social_handles` `CASCADE` | Único (`report`, `handle`). El legado solo guarda el conteo, así que los datos legados no la llenan. |
-| `frameworks` (`Framework`) | `id`, `report_id` FK `CASCADE`, `name` varchar(160) NN, `description` text NN, `lift` double precision nulo, `confidence` double precision nulo (entre 0 y 1), `ordinal` smallint NN | Único (`report`, `ordinal`). |
+| `frameworks` (`Framework`) | `id`, `report_id` FK `CASCADE`, `name` varchar(160) NN, `description` text NN, `lift` double precision nulo, `confidence` double precision nulo (entre 0 y 1), `payload` jsonb nulo (salida cruda del modelo para este framework), `ordinal` smallint NN | Único (`report`, `ordinal`). |
 | `framework_evidence` (`FrameworkEvidence`) | `id`, `framework_id` FK `CASCADE`, `post_id` FK `posts` `CASCADE` | Único (`framework`, `post`). La evidencia deja de ser texto dentro del JSON. |
 | `repurpose_requests` (`RepurposeRequest`) | `id`, `profile_id` FK `CASCADE`, `source_caption` text NN, `source_post_id` FK `posts` `SET_NULL` nulo, `route_label` varchar(10) nulo (`easy`, `standard`, `hard`), `created_at`; INTELLIGENCE añade `mode` y `brief` para la generación desde un tema | `ck_repurpose_requests_route`. Índice (`profile`, `-created_at`). |
 | `repurpose_attempts` (`RepurposeAttempt`) | `id`, `request_id` FK `CASCADE`, `platform` varchar(20) NN, `tier` varchar(10) nulo, `model` varchar(100) nulo, `provider` varchar(20) nulo, `attempt_no` smallint NN, `output` text NN, `must_keep_passed` boolean NN, `judge_verdict` varchar(3) nulo (`yes`, `no`), `judge_confidence` double precision nulo, `is_fallback` boolean NN defecto `false` (nuevo: hoy se pierde), `created_at` | Único (`request`, `platform`, `attempt_no`). Este es el borrador que el usuario revisa en React. |
-| `generation_evaluations` (`GenerationEvaluation`) | `id`, `attempt_id` FK `CASCADE`, `style_score` double precision nulo, `decision` varchar(10) NN (`pass`, `regenerate`, `fail`), `evaluation` jsonb NN, `created_at` | Índice (`attempt`). Tabla nueva. |
+| `generation_evaluations` (`GenerationEvaluation`) | `id`, `attempt_id` FK `CASCADE`, `style_score` double precision nulo, `decision` varchar(10) NN (`pass`, `regenerate`, `fail`), `evaluation` jsonb NN, `created_at` | `attempt_id` obligatorio (decisión 2). Índice (`attempt`). Tabla nueva. |
 | `user_actions` (`UserAction`) | `id`, `attempt_id` FK `CASCADE`, `action` varchar(6) NN (`accept`, `edit`, `reject`), `edited_text` text nulo, `created_at` | `ck_user_actions_edited`: `edited_text` no es nulo solo si `action = 'edit'`. |
-| `turn_classifications` (`TurnClassification`) | Las columnas legadas: `profile_id` FK `CASCADE`, `message_id` FK `chat_messages` `SET_NULL`, `created_at`, `message_text_hash`, `rule_class`, `rule_matched`, `jev_called`, `jev_class`, `jev_probs` jsonb, `jev_confidence`, `jev_latency_ms`, `jev_error`, `final_class`, `tools_called` text[], `total_latency_ms`, `user_corrected`, `timings` jsonb | Índices (`profile`, `-created_at`) y (`message`). |
-| `user_search_requests` (`UserSearchRequest`) | `id`, `profile_id` FK `CASCADE`, `handle_id` FK `social_handles` `CASCADE`, `request_note` text NN defecto `''`, `created_at` | Índice (`profile`, `-created_at`). |
+| `turn_classifications` (`TurnClassification`) | Las columnas legadas: `profile_id` FK `CASCADE`, `message_id` FK `chat_messages` `SET_NULL`, `created_at`, `message_text_hash`, `message_preview` text NN defecto `''` (primeros 160 caracteres), `path_taken` varchar(4) nulo (`fast`, `full`), `rule_class`, `rule_matched`, `jev_called`, `jev_class`, `jev_probs` jsonb, `jev_confidence`, `jev_latency_ms`, `jev_error`, `final_class`, `tools_called` text[], `total_latency_ms`, `user_corrected`, `timings` jsonb | Índices (`profile`, `-created_at`) y (`message`). |
+| `user_search_requests` (`UserSearchRequest`) | `id`, `profile_id` FK `CASCADE`, `handle_id` FK `social_handles` `CASCADE`, `request_note` text NN defecto `''`, `created_at` | Índice (`profile`, `-created_at`). La plataforma es la de `handle`. Si la tool no la recibe, el servicio usa la plataforma principal del perfil (`get_or_create_handle(platform, handle)`). |
 | `memory_notes` (`MemoryNote`) | `id`, `profile_id` FK `CASCADE`, `kind` varchar(20) NN, `content` text NN, `content_hash` char(64) NN, `created_at`, `last_accessed_at`, `access_count` integer NN | Único (`profile`, `content_hash`). El decaimiento semanal borra por `last_accessed_at`. Id de Chroma: `memory:{id}`. Sustituye a las colecciones con texto. |
 | `profile_memory_summaries` (`ProfileMemorySummary`) | `id`, `profile_id` OneToOne `CASCADE`, `summary_md` text NN, `updated_at` | Sustituye a `memory.md`. |
 | `video_analysis_records` (`VideoAnalysisRecord`) | `id`, `media_id` FK `post_media` `CASCADE`, `provider` varchar(30) NN, `model` varchar(100) NN, `prompt_version` varchar(40) NN, `status` varchar(10) NN, `result` jsonb nulo, `error` text NN defecto `''`, `created_at` | Único (`media`, `provider`, `prompt_version`): sirve de caché por medio y versión. |
 
-Las tablas `niche_preferences`, `generation_evaluations`, `video_analysis_records` y `niche_report_peers` no tienen origen legado.
+Las tablas `niche_preferences` (con sus hijas), `generation_evaluations`, `video_analysis_records`, `niche_report_peers` y `listening_keywords` no tienen origen legado.
 
 ## 8. Tablas de CONNECT (app `connections`)
 
@@ -528,7 +557,7 @@ Las 21 tablas legadas están mapeadas: `profiles`, `profile_snapshots`, `profile
 | 4 | ¿Velocidad de alerta guardada o recalculada? | INTELLIGENCE | Guardada (`velocity`, `baseline_velocity`) para poder explicar el aviso después. |
 | 5 | Chat de un solo hilo por perfil o varias conversaciones | Orquestador y frontend | Un hilo, como hoy. Varias conversaciones exigen `chat_threads`. |
 | 6 | ¿Hace falta una tabla de seguimiento de vectores? | INTELLIGENCE | No: `upsert` es idempotente y `content_hash` evita recalcular. |
-| 7 | `voice_profiles.platform` con `general` en lugar de nulo | INTELLIGENCE | `general`. |
+| 7 | `voice_profiles.platform` con `general` en lugar de nulo | INTELLIGENCE | `general` (aceptado por INTELLIGENCE). |
 | 8 | `publish_jobs.idempotency_key` único por perfil | CONNECT | Sí. |
 | 9 | Importar el texto de Chroma o la `memory.md` si llegan junto al `lumi.db` | Orquestador | No por defecto. Opción `--memory-md PATH` en T8 si el archivo existe. |
 | 10 | Tras borrar un usuario, ¿se conservan los posts compartidos de competidores? | Orquestador | Sí; los barre `prune_orphans` tras 30 días sin referencias. |
