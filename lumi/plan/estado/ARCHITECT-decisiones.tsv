@@ -57,3 +57,5 @@ ts	phase	decision	why	evidence	result
 2026-10-27T07:23:22Z	T12	profile.bootstrap handled by INTELLIGENCE; profile.refresh marked pending with tests	refresh needs connections ingest + baseline	2 tests	pushed
 2026-10-27T07:25:45Z	T12	quitar lumi_pytest_env; DJANGO_SETTINGS_MODULE en pyproject; conftest raiz omite live salvo LUMI_RUN_LIVE=1	orchestrator 7:13 (c)	1408 passed 3 skipped; apps+lumi_ai 1453 passed con env -i	pushed
 2026-10-27T07:27:03Z	T12	collectstatic lenient; STATIC_ROOT env; prod manifest storage; buildCommand in railway.json	build has no DB or secret	4 tests; real subprocess with empty env	pushed
+2026-10-27T07:28:52Z	T12	reescribir docs/how-to-setup.md (Postgres, migrate, createsuperuser, check_keys, import_legacy, ASGI); frontend intacto	orchestrator 7:12 (b)	docs only; claims checked against code	pushed
+2026-10-27T07:28:52Z	T12	how-to-setup rewrite	T12 b	docs	pushed
