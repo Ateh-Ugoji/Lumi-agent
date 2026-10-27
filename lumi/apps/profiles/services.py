@@ -12,6 +12,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, TypedDict
+from urllib.parse import urlsplit
 
 from asgiref.sync import sync_to_async
 from django.db import connection, transaction
@@ -219,6 +220,74 @@ def get_or_create_handle(
                 captured_at=now,
             )
     return row.pk
+
+
+AVATAR_URL_MAX = 2048
+
+
+def clean_avatar_url(value: str | None) -> str | None:
+    """``value`` stripped when it is an absolute http(s) URL with a host, else ``None``.
+
+    Stricter than ``public_avatar_url``, which only vets what goes out: this one vets what comes in,
+    so a ``javascript:``, ``data:`` or host-less value never reaches ``social_handles``.
+    """
+    url = (value or "").strip()
+    if (
+        not url
+        or len(url) > AVATAR_URL_MAX
+        or any(c.isspace() or ord(c) < 0x20 for c in url)
+    ):
+        return None
+    try:
+        parts = urlsplit(url)
+        host = parts.hostname
+    except ValueError:
+        return None
+    return url if parts.scheme.lower() in ("http", "https") and host else None
+
+
+def update_handle_avatar(handle_id: int, url: str | None) -> bool:
+    """Refresh a handle's picture. ``True`` only when the stored URL changed.
+
+    ``get_or_create_handle`` fills an empty picture and never replaces one. This is the refresh:
+    providers rotate their CDN URLs, so a newer valid URL overwrites the old one. ``''``, ``None``
+    and anything that is not an absolute http(s) URL are ignored, so a failed lookup never blanks
+    a photo. One ``UPDATE ... WHERE avatar_url IS DISTINCT FROM`` decides, so concurrent callers
+    cannot both report a change for the same URL and an unchanged URL writes nothing.
+    """
+    clean = clean_avatar_url(url)
+    if clean is None:
+        return False
+    return bool(
+        SocialHandle.objects.filter(pk=handle_id)
+        .exclude(avatar_url=clean)
+        .update(avatar_url=clean, updated_at=timezone.now())
+    )
+
+
+def update_profile_avatar(
+    profile_id: int, url: str | None, *, username: str | None
+) -> bool:
+    """Refresh the picture of the handle behind a profile, with the connected account's own photo.
+
+    ``social_handles`` is public and shared by everyone who follows the account, so the photo is
+    written only when ``username`` (what the provider calls the account) is the profile's handle.
+    A user who links some other account to their profile cannot repaint a handle with it. A
+    missing ``username``, a profile that does not exist and a username that differs all answer
+    ``False``. The rest is :func:`update_handle_avatar`.
+    """
+    profile = (
+        SocialProfile.objects.select_related("handle").filter(pk=profile_id).first()
+    )
+    if profile is None or not username:
+        return False
+    try:
+        same = normalize_handle(profile.handle.platform, username) == (
+            profile.handle.handle_normalized
+        )
+    except InvalidHandle:
+        return False
+    return same and update_handle_avatar(profile.handle_id, url)
 
 
 # --------------------------------------------------------------------------- profiles
@@ -1111,6 +1180,8 @@ _ASYNC = (
     "mark_bootstrapped",
     "record_listening_match",
     "public_avatar_url",
+    "update_handle_avatar",
+    "update_profile_avatar",
     "create_alert_once",
     "unread_alerts",
     "unread_alert_details",

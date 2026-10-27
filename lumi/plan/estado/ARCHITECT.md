@@ -68,6 +68,9 @@ Nota sobre la fila 18: `reach_series` y `saves_series` siguen recorriendo todas 
 - **INTELLIGENCE** (`apps/intelligence`, `lumi_ai`): el escaneo de tendencias debe pasar la foto que conozca al crear el handle del autor, con `services.get_or_create_handle(platform, handle, origin="niche", avatar_url=...)` (solo rellena si está vacía). Además, cada elemento de `viral_posts` del resultado de `scan_trends` puede traer `avatar_url` (cadena, vacía si no se sabe) y `extract_sample_posts` (`lumi_ai/agent/support.py`) debe copiarlo a `sample_posts[].avatar_url` del evento SSE `tool_done`. El frontend ya lo espera (`SamplePost.avatar_url?: string`).
 - **CONNECT** (`apps/connections/handles`): al buscar o refrescar un handle, guardar `avatar_url` en `social_handles` por `get_or_create_handle`, igual que hoy. Es lo que sustituye al `lookup` de `handle_db` del legado: no hace falta ninguna tabla nueva.
 - **Frontend**: `TrendMatch.author_avatar_url?: string | null` ya está en `api/trends.ts`; `ChronicOnline` usa la foto guardada y unavatar de respaldo.
+- **CONNECT, refresco de fotos** (`/handles/search`, ronda 5): `profiles.services.update_handle_avatar(handle_id, url) -> bool` sustituye la foto cuando llega una URL http(s) válida y distinta, e ignora vacíos. `get_or_create_handle` sigue siendo solo de relleno.
+- **CONNECT, foto de la cuenta de PFM**: en `sync_pfm_accounts`, tras `row.save()`, si la fila está `active` y enlazada: `update_profile_avatar(row.social_profile_id, acc.profile_photo_url, username=acc.username)`. Sin columna nueva (CONTRATOS 11, fila 28).
+- **INTELLIGENCE, 4 huecos de `test_handle_db`** (`check_niche_trends_*`, `frameworks_search_persists_every_author`): `af4e1d5` cubre solo la foto de la fuente y el alta del handle de cada autor con posts. Falta llamar a `HandleDirectory` (`remember_scanned`, `pictures`) desde el escaneo y probarlo.
 
 ## Notas del esqueleto
 
