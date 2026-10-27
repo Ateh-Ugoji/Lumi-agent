@@ -6,6 +6,8 @@ import dataclasses
 import inspect
 from datetime import UTC, datetime
 
+import pytest
+
 from lumi_ai import ports
 from lumi_ai.agent.result import SSEEvent, TurnResult
 from lumi_ai.config import AIConfig
@@ -143,3 +145,17 @@ def test_ai_config_from_mapping() -> None:
         assert "nope" in str(exc)
     else:
         raise AssertionError("unknown keys must raise")
+
+
+def test_ports_1_3_is_additive_for_attempts_and_requires_attempt_id():
+    from lumi_ai import ports
+
+    assert ports.PORTS_VERSION == "1.3"
+    old = ports.AttemptIn("x", "text", 1, True)  # a 1.2 call site still works
+    assert old.is_fallback is False
+    assert ports.AttemptIn("x", "text", 1, True, is_fallback=True).is_fallback is True
+
+    record = ports.EvaluationRecord(7, "x", "draft", "pass", {}, {}, attempt_id=3)
+    assert record.attempt_id == 3
+    with pytest.raises(TypeError):
+        ports.EvaluationRecord(7, "x", "draft", "pass", {}, {})  # type: ignore[call-arg]

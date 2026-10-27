@@ -38,7 +38,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Literal, Protocol, get_args, runtime_checkable
 
-PORTS_VERSION = "1.2"  # 1.1: SemanticJudge, 1.2: OwnPostSync
+PORTS_VERSION = "1.3"  # 1.1: SemanticJudge, 1.2: OwnPostSync, 1.3: AttemptIn.is_fallback, EvaluationRecord.attempt_id required
 
 # ---------------------------------------------------------------------------
 # Shared vocabulary
@@ -762,6 +762,9 @@ class AttemptIn:
     provider: str | None = None
     judge_verdict: Literal["yes", "no"] | None = None
     judge_confidence: float | None = None
+    is_fallback: bool = (
+        False  # 1.3: the model chain fell back to a lower tier for this attempt
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -874,7 +877,11 @@ class ListeningStore(Protocol):
 
 @dataclass(frozen=True, slots=True)
 class EvaluationRecord:
-    """Automatic quality evaluation of one generated draft."""
+    """Automatic quality evaluation of one generated draft.
+
+    1.3: ``attempt_id`` is required (the schema's ``generation_evaluations.attempt_id`` is a
+    non-null FK). It is keyword-only, so the position of every other argument is unchanged.
+    """
 
     profile_id: int
     platform: Platform
@@ -885,8 +892,8 @@ class EvaluationRecord:
     deterministic_failures: tuple[str, ...] = ()
     style_similarity: float | None = None
     judge: str | None = None  # "jev" | "groq-small" | "rules"
-    attempt_id: int | None = None
     config_version: str | None = None
+    attempt_id: int = field(kw_only=True)
 
 
 @runtime_checkable
