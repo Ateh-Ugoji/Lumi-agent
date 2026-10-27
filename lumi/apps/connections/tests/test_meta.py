@@ -28,6 +28,10 @@ PAGE = AccountInfo(
 )
 
 
+def _form(request: httpx.Request) -> dict[str, str]:
+    return dict(httpx.QueryParams(request.content.decode()))
+
+
 def make(handler=None):
     rec = Recorder(handler or (lambda r: httpx.Response(500)))
     return build_provider(
@@ -56,7 +60,7 @@ async def test_exchange_code_swaps_for_a_long_lived_token() -> None:
     steps: list[dict] = []
 
     def token(request: httpx.Request) -> httpx.Response:
-        params = dict(request.url.params)
+        params = _form(request)
         steps.append(params)
         return json_response(
             "meta_long_token.json"
@@ -64,7 +68,7 @@ async def test_exchange_code_swaps_for_a_long_lived_token() -> None:
             else "meta_short_token.json"
         )
 
-    provider, _ = make(routes({("GET", "/v26.0/oauth/access_token"): token}))
+    provider, _ = make(routes({("POST", "/v26.0/oauth/access_token"): token}))
     tokens = await provider.exchange_code(
         code="c0de", redirect_uri="http://localhost:8000/cb"
     )
@@ -170,7 +174,7 @@ async def test_fetch_posts_caps_limit_at_100() -> None:
 
     provider, _ = make(routes({("GET", "/v26.0/1001/posts"): posts}))
     await provider.fetch_posts(USER, PAGE, limit=500)
-    assert seen["limit"] == "100" and seen["access_token"] == "meta-page1-FAKE"
+    assert seen["limit"] == "100"
 
 
 async def test_fetch_metrics_uses_the_v25_metric_names() -> None:
@@ -222,10 +226,10 @@ async def test_refresh_repeats_the_long_lived_exchange() -> None:
     seen: dict = {}
 
     def token(request: httpx.Request) -> httpx.Response:
-        seen.update(request.url.params)
+        seen.update(_form(request))
         return json_response("meta_long_token.json")
 
-    provider, _ = make(routes({("GET", "/v26.0/oauth/access_token"): token}))
+    provider, _ = make(routes({("POST", "/v26.0/oauth/access_token"): token}))
     fresh = await provider.refresh(USER)
     assert (
         fresh.access_token == "meta-long-FAKE"
@@ -245,3 +249,39 @@ async def test_only_graph_host_is_ever_contacted() -> None:
     await provider.list_accounts(USER)
     await provider.get_account(USER)
     assert set(rec.hosts) == {"graph.facebook.com"}
+
+
+async def test_no_secret_ever_appears_in_a_request_url() -> None:
+    """httpx logs every URL at INFO, so a token or the app secret in a query leaks to the logs."""
+    provider, rec = make(
+        routes(
+            {
+                ("POST", "/v26.0/oauth/access_token"): json_response(
+                    "meta_long_token.json"
+                ),
+                ("GET", "/v26.0/me"): json_response("meta_me.json"),
+                ("GET", "/v26.0/me/accounts"): json_response("meta_accounts.json"),
+                ("GET", "/v26.0/1001/posts"): httpx.Response(200, json={"data": []}),
+                ("GET", "/v26.0/1001_555/insights"): json_response(
+                    "meta_insights.json"
+                ),
+                ("DELETE", "/v26.0/me/permissions"): httpx.Response(
+                    200, json={"success": True}
+                ),
+            }
+        )
+    )
+    await provider.exchange_code(code="c0de", redirect_uri="http://localhost:8000/cb")
+    await provider.check_app_credentials()
+    await provider.refresh(USER)
+    await provider.get_account(USER)
+    await provider.list_accounts(USER)
+    await provider.fetch_posts(USER, PAGE)
+    await provider.fetch_metrics(USER, PAGE, "1001_555")
+    await provider.revoke(USER)
+    assert len(rec.requests) >= 8
+    for request in rec.requests:
+        url = str(request.url)
+        assert "FAKE" not in url and "sec-1" not in url and "c0de" not in url, url
+    me = next(r for r in rec.requests if r.url.path.endswith("/me"))
+    assert me.headers["authorization"] == "Bearer meta-long-FAKE"

@@ -119,9 +119,9 @@ def location(response) -> tuple[str, dict[str, list[str]]]:
 
 
 META_TABLE = {
-    ("GET", "/v26.0/oauth/access_token"): lambda r: json_response(
+    ("POST", "/v26.0/oauth/access_token"): lambda r: json_response(
         "meta_long_token.json"
-        if r.url.params.get("grant_type")
+        if httpx.QueryParams(r.content.decode()).get("grant_type")
         else "meta_short_token.json"
     ),
     ("GET", "/v26.0/me/accounts"): json_response("meta_accounts.json"),
@@ -334,7 +334,7 @@ def test_provider_text_never_reaches_the_redirect(api, env, providers) -> None:
     providers.on(
         "meta",
         {
-            ("GET", "/v26.0/oauth/access_token"): httpx.Response(
+            ("POST", "/v26.0/oauth/access_token"): httpx.Response(
                 500, text="boom-secret-detail"
             )
         },
@@ -589,7 +589,7 @@ def test_refresh_keeps_the_account_when_the_provider_is_down(
     env, providers, user
 ) -> None:
     env(META_ENV)
-    providers.on("meta", {("GET", "/v26.0/oauth/access_token"): httpx.Response(503)})
+    providers.on("meta", {("POST", "/v26.0/oauth/access_token"): httpx.Response(503)})
     row = expiring(user)
     assert accounts.refresh_due() == {"retry_later": 1}
     row.refresh_from_db()
