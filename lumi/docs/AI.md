@@ -131,3 +131,22 @@ Con `VIDEO_PROVIDER=gemini` y `VIDEO_API_KEY`, los videos de competidores se ana
 | Video | `lumi_ai/video/` |
 | Persistencia Django | `apps/intelligence/repos/`, `models.py`, `wiring.py` |
 | Pruebas | `lumi_ai/tests/`, `apps/intelligence/tests/`; las de keys reales llevan `@pytest.mark.live` y exigen `LUMI_RUN_LIVE=1` |
+
+
+## Timeout de herramientas de escritura
+
+El bucle ejecuta cada herramienta con `asyncio.wait_for`. Cancelar la corrutina no detiene un hilo del ORM
+que ya está escribiendo, así que antes la fila podía guardarse *después* de decirle al modelo que la
+herramienta falló. Ahora (`lumi_ai/cancel.py`, `apps/intelligence/repos/aio.py`):
+
+- Las herramientas que escriben (`ToolSpec.writes`: coste `write` o efectos `writes_db`/`writes_index`)
+  reciben un `CancelToken` en un `ContextVar`. Las de solo lectura no, y se ejecutan igual que antes.
+- `@aio` ejecuta cada escritura dentro de `transaction.atomic()` y, justo antes del commit, pasa por
+  `token.commit_gate()`: si el token está cancelado lanza `WriteCancelled` y la transacción se revierte.
+- Al vencer el timeout el bucle activa la bandera y espera un commit que ya esté en curso (el candado cubre el
+  commit). Si algún commit llegó a ocurrir, el modelo recibe «ya se guardaron N escrituras, comprueba el estado»
+  en vez del mensaje de timeout normal.
+
+Límites: una herramienta con varias escrituras conserva las anteriores al timeout; las llamadas externas
+(Meta, MCP) y los vectores de Chroma no se pueden revertir (Chroma se reconstruye con `reindex_vectors`).
+Cualquier escritura de otro módulo (p. ej. CONNECT) que quiera la misma garantía debe pasar por `@aio`.

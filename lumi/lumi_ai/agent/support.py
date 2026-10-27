@@ -67,6 +67,14 @@ def timeout_message(name: str, seconds: float) -> str:
     )
 
 
+def timeout_after_write_message(name: str, seconds: float, commits: int) -> str:
+    return (
+        f"Tool {name} timed out after {seconds:g}s, but {commits} of its database "
+        "write(s) had already been saved. Do not claim it fully worked and do not "
+        "repeat it blindly: check the current state first or tell the user it may be partial."
+    )
+
+
 def malformed_arguments_message(name: str, parse_error: str) -> str:
     return (
         f"Arguments for {name} were not valid JSON object text ({parse_error}). "

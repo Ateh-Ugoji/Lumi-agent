@@ -60,3 +60,4 @@ fecha	qué	por qué	evidencia	resultado
 2026-10-27	El video se descarga y se manda en línea (base64) salvo YouTube; guarda SSRF y tope VIDEO_MAX_MB	Dejar que Google descargue la URL (las URL firmadas de CDN pueden estar bloqueadas; el límite 15 vs 100 MB es ambiguo)	docs de file-input-methods contradictorias; lumi_ai/tests/video/test_fetch.py
 2026-10-27	Los ids de probe son typesafe (antes jev) y chroma, para que valga el check_keys de PLAN §9	Dejar jev	check_keys --only ...typesafe,chroma daba 'Ids desconocidos'
 2026-10-27	/interrogate no se corrió; revisión manual de los tres archivos	Correrlo (varios modelos externos de pago)	Regla de no gastar dinero
+timeout-escritura	un timeout no puede dejar commit tardio	CancelToken+commit_gate en @aio dentro de atomic; flag antes de lock	640 tests; test falla sin la guarda	ok

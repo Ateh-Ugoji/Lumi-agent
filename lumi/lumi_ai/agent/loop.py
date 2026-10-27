@@ -15,6 +15,7 @@ from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
+from lumi_ai import cancel
 from lumi_ai.agent import gates
 from lumi_ai.agent.context import (
     build_tools_note,
@@ -34,6 +35,7 @@ from lumi_ai.agent.support import (
     malformed_arguments_message,
     memory_worthy,
     parse_tool_arguments,
+    timeout_after_write_message,
     timeout_message,
     tool_failed,
     tool_failure_message,
@@ -578,6 +580,11 @@ class _Turn:
             return {"error": malformed_arguments_message(name, parse_error)}
         started = time.perf_counter()
         timeout = self.cfg.tool_timeout_seconds
+        spec = self.deps.registry.get(name)
+        # A tool that writes gets a token: once it times out (or the turn is cancelled) no write
+        # of it may commit, see lumi_ai.cancel.
+        token = cancel.CancelToken() if spec is not None and spec.writes else None
+        reset = cancel.current.set(token) if token is not None else None
         try:
             return await asyncio.wait_for(
                 self.deps.registry.call(ctx, name, arguments, mcp_specs),
@@ -585,11 +592,20 @@ class _Turn:
             )
         except TimeoutError:
             logger.error("tool %s timed out after %gs", name, timeout)
+            commits = await asyncio.to_thread(token.cancel) if token else 0
+            if commits:
+                return {"error": timeout_after_write_message(name, timeout, commits)}
             return {"error": timeout_message(name, timeout)}
+        except asyncio.CancelledError:
+            if token is not None:
+                token.cancel_nowait()
+            raise
         except Exception as exc:
             logger.exception("tool %s raised %s", name, type(exc).__name__)
             return {"error": tool_failure_message(name, exc)}
         finally:
+            if reset is not None:
+                cancel.current.reset(reset)
             self.tool_ms += (time.perf_counter() - started) * 1000
 
     def _note_usage(self, llm_result: Any) -> None:

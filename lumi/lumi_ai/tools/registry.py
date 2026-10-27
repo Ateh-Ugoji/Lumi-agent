@@ -65,6 +65,14 @@ class ToolSpec:
             )
 
     @property
+    def writes(self) -> bool:
+        """True when the tool saves something locally, so its writes must be cancellable."""
+        return self.cost == "write" or self.side_effects in {
+            "writes_db",
+            "writes_index",
+        }
+
+    @property
     def ttl(self) -> float:
         if self.cache_ttl is not None:
             return float(self.cache_ttl)

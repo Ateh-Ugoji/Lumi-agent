@@ -312,6 +312,58 @@ async def test_hung_tool_degrades_to_a_visible_error_not_a_dead_turn():
     assert result.content == "That service is not answering."
 
 
+async def test_a_write_tool_gets_a_cancel_token_that_a_timeout_cancels():
+    from lumi_ai import cancel
+
+    seen: list = []
+
+    async def slow_write(ctx):
+        seen.append(cancel.current.get())
+        await asyncio.sleep(5)
+
+    rig = make_rig(
+        [use(call("save")), say("It may not have been saved.")],
+        [tool("save", slow_write, cost="write")],
+        config=AIConfig(tool_timeout_seconds=0.05),
+    )
+    await rig.run("save it")
+    assert len(seen) == 1 and seen[0].cancelled
+    assert cancel.current.get() is None  # the turn does not leak its token
+    assert "timed out" in json.loads(rig.llm.tool_messages(1)[0]["content"])["error"]
+
+
+async def test_a_read_tool_runs_without_a_cancel_token():
+    from lumi_ai import cancel
+
+    seen: list = []
+
+    async def read(ctx):
+        seen.append(cancel.current.get())
+        return {"ok": True}
+
+    rig = make_rig([use(call("peek")), say("Done.")], [tool("peek", read)])
+    await rig.run("look")
+    assert seen == [None]
+
+
+async def test_a_write_that_committed_before_the_timeout_is_reported_as_partial():
+    from lumi_ai import cancel
+
+    async def partial(ctx):
+        with cancel.current.get().commit_gate():
+            pass  # one commit went through
+        await asyncio.sleep(5)
+
+    rig = make_rig(
+        [use(call("save")), say("Possibly partial.")],
+        [tool("save", partial, cost="write")],
+        config=AIConfig(tool_timeout_seconds=0.05),
+    )
+    await rig.run("save it")
+    err = json.loads(rig.llm.tool_messages(1)[0]["content"])["error"]
+    assert "already been saved" in err and "1 of its" in err
+
+
 # --- coverage gate (ported from test_coverage_gate) -------------------------------
 
 
