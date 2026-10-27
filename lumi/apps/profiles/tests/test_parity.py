@@ -5,10 +5,11 @@ Each test is named in the parity matrix of ``plan/estado/ARCHITECT.md``.
 
 from datetime import UTC, datetime
 
+import pytest
 from django.db.models import Sum
 
 from apps.profiles import services
-from apps.profiles.models import MetricSnapshot, PostMedia
+from apps.profiles.models import MetricSnapshot, Post, PostMedia
 from lumi_ai.ports import MediaRef, PostIn, PostMetrics
 
 URL = "/api/v1/profiles/{}/analytics"
@@ -62,3 +63,50 @@ def test_row_21_media_of_unknown_type_is_stored_as_null_not_guessed(profile):
     assert list(PostMedia.objects.values_list("kind", "url")) == [
         (None, "https://x/bare.jpg")
     ]
+
+
+@pytest.mark.django_db
+def test_row_24_the_truncation_flag_follows_the_latest_fetch_not_a_sticky_one(
+    handle_id,
+):
+    """Legacy kept ``text_truncated`` once set. Here it describes the caption that is stored."""
+    cut = "x" * 274 + "…"
+    services.upsert_posts(handle_id, [_typed("300", text=cut, text_truncated=True)])
+    assert Post.objects.get(platform_post_id="300").text_truncated is True
+    services.upsert_posts(
+        handle_id, [_typed("300", text="the whole text", text_truncated=False)]
+    )
+    row = Post.objects.get(platform_post_id="300")
+    assert (row.text_truncated, row.caption) == (False, "the whole text")
+    services.upsert_posts(handle_id, [_typed("300", text=cut, text_truncated=True)])
+    assert Post.objects.get(platform_post_id="300").text_truncated is True
+
+
+@pytest.mark.django_db
+def test_row_25_a_snapshot_is_appended_only_when_a_metric_changed(handle_id):
+    """Legacy also appended every 6 hours and at the 24h, 72h, 7d and 30d marks."""
+    first = _typed("301", metrics=PostMetrics(likes=10, views=100))
+    services.upsert_posts(handle_id, [first])
+    for _ in range(3):  # repeated fetches with the same numbers
+        services.upsert_posts(handle_id, [first])
+    assert MetricSnapshot.objects.filter(post__platform_post_id="301").count() == 1
+    services.upsert_posts(
+        handle_id, [_typed("301", metrics=PostMetrics(likes=11, views=100))]
+    )
+    assert MetricSnapshot.objects.filter(post__platform_post_id="301").count() == 2
+
+
+@pytest.fixture
+def handle_id():
+    return services.get_or_create_handle("x", "@Ateh", origin="profile")
+
+
+def _typed(external_id, **kw):
+    base = {
+        "platform": "x",
+        "external_id": external_id,
+        "text": "word " * 5,
+        "kind": "original",
+        "published_at": datetime(2026, 10, 1, tzinfo=UTC),
+    }
+    return PostIn(**{**base, **kw})

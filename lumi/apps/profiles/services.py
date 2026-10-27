@@ -15,7 +15,7 @@ from typing import Any, TypedDict
 
 from asgiref.sync import sync_to_async
 from django.db import connection, transaction
-from django.db.models import Q
+from django.db.models import F, Q
 from django.utils import timezone
 
 from apps.core.choices import Platform, PostKind
@@ -636,6 +636,30 @@ def _write_snapshots(
         MetricSnapshot.objects.bulk_create(fresh, ignore_conflicts=True)
 
 
+def rethread_conversation(handle_id: int, conversation_id: str) -> int:
+    """Renumber the thread fields of one conversation by publish time. Returns the post count.
+
+    Ingest delivers newest first, so the position comes from ``published_at``, not from arrival.
+    Posts without a publish time go last. Idempotent. A blank ``conversation_id`` is a no-op.
+    """
+    if not conversation_id:
+        return 0
+    posts = list(
+        Post.objects.filter(author_id=handle_id, conversation_id=conversation_id)
+        .order_by(F("published_at").asc(nulls_last=True), "id")
+        .only("id", "thread_position", "is_thread_head")
+    )
+    changed = []
+    for position, post in enumerate(posts, start=1):
+        if post.thread_position != position or post.is_thread_head != (position == 1):
+            post.thread_position = position
+            post.is_thread_head = position == 1
+            changed.append(post)
+    if changed:
+        Post.objects.bulk_update(changed, ["thread_position", "is_thread_head"])
+    return len(posts)
+
+
 def append_metric_snapshots(post_id: int, snapshots: Sequence[SnapshotIn]) -> int:
     """Insert readings. A repeat of (post, captured_at) is ignored. Returns rows offered."""
     rows = [
@@ -1049,6 +1073,7 @@ _ASYNC = (
     "list_activity",
     "upsert_posts",
     "append_metric_snapshots",
+    "rethread_conversation",
     "latest_baseline",
     "save_baseline",
     "mark_bootstrapped",

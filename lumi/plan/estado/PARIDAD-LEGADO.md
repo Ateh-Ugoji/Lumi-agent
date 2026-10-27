@@ -11,10 +11,10 @@ la misma conducta, no que sea equivalente línea a línea.
 
 | Estado | Tests legados | Parte |
 | --- | ---: | ---: |
-| covered | 337 | 80.6 % |
+| covered | 349 | 83.5 % |
 | replaced | 45 | 10.8 % |
-| deviation | 0 | 0.0 % |
-| gap | 36 | 8.6 % |
+| deviation | 3 | 0.7 % |
+| gap | 21 | 5.0 % |
 | **Total** | **418** | 100 % |
 
 ## Por archivo legado
@@ -37,7 +37,7 @@ la misma conducta, no que sea equivalente línea a línea.
 | `test_mcp` | 20 | 20 | 0 | 0 | 0 |
 | `test_mcp_google_router` | 9 | 9 | 0 | 0 | 0 |
 | `test_memory` | 11 | 0 | 11 | 0 | 0 |
-| `test_metrics` | 7 | 0 | 0 | 0 | 7 |
+| `test_metrics` | 7 | 7 | 0 | 0 | 0 |
 | `test_niche_schemas` | 11 | 0 | 0 | 0 | 11 |
 | `test_peer_extract` | 13 | 13 | 0 | 0 | 0 |
 | `test_peer_pipeline_wiring` | 2 | 2 | 0 | 0 | 0 |
@@ -46,7 +46,7 @@ la misma conducta, no que sea equivalente línea a línea.
 | `test_peer_synthesize` | 8 | 8 | 0 | 0 | 0 |
 | `test_peer_winners` | 12 | 12 | 0 | 0 | 0 |
 | `test_post_filter` | 7 | 5 | 2 | 0 | 0 |
-| `test_profile_extract_fixes` | 27 | 15 | 0 | 0 | 12 |
+| `test_profile_extract_fixes` | 27 | 20 | 0 | 3 | 4 |
 | `test_prompt5_acceptance` | 8 | 8 | 0 | 0 | 0 |
 | `test_provider_fallback` | 10 | 10 | 0 | 0 | 0 |
 | `test_registry` | 4 | 4 | 0 | 0 | 0 |
@@ -64,29 +64,7 @@ la misma conducta, no que sea equivalente línea a línea.
 
 ## Huecos
 
-### ARCHITECT: 19 tests
-
-- `test_metrics::test_detect_spike_below_floor`: Velocidad y detección de picos de likes por hora sin portar.
-- `test_metrics::test_detect_spike_no_baseline_uses_floor`: Velocidad y detección de picos de likes por hora sin portar.
-- `test_metrics::test_detect_spike_no_spike_when_growth_is_steady`: Velocidad y detección de picos de likes por hora sin portar.
-- `test_metrics::test_detect_spike_relative_to_baseline`: Velocidad y detección de picos de likes por hora sin portar.
-- `test_metrics::test_velocity_needs_at_least_two_snapshots`: Velocidad y detección de picos de likes por hora sin portar.
-- `test_metrics::test_velocity_with_three_snapshots_computes_both`: Velocidad y detección de picos de likes por hora sin portar.
-- `test_metrics::test_velocity_with_two_snapshots_has_no_baseline`: Velocidad y detección de picos de likes por hora sin portar.
-- `test_profile_extract_fixes::test_final_metrics_picks_nearest_72h`: Política de la pasada de ingesta que el código nuevo aún no tiene.
-- `test_profile_extract_fixes::test_finalize_ingest_pass_two_miss_flow`: Política de la pasada de ingesta que el código nuevo aún no tiene.
-- `test_profile_extract_fixes::test_infer_timezone_needs_minimum_posts`: Política de la pasada de ingesta que el código nuevo aún no tiene.
-- `test_profile_extract_fixes::test_maybe_update_timezone_sets_inferred`: Política de la pasada de ingesta que el código nuevo aún no tiene.
-- `test_profile_extract_fixes::test_milestone_bucket_counts_targets`: Política de la pasada de ingesta que el código nuevo aún no tiene.
-- `test_profile_extract_fixes::test_pass_reached_window`: Política de la pasada de ingesta que el código nuevo aún no tiene.
-- `test_profile_extract_fixes::test_rethread_numbers_by_publish_time_not_arrival`: Política de la pasada de ingesta que el código nuevo aún no tiene.
-- `test_profile_extract_fixes::test_second_miss_bracket_and_window_guards`: Política de la pasada de ingesta que el código nuevo aún no tiene.
-- `test_profile_extract_fixes::test_second_miss_requires_two_complete_misses`: Política de la pasada de ingesta que el código nuevo aún no tiene.
-- `test_profile_extract_fixes::test_snapshot_skip_matrix`: Política de la pasada de ingesta que el código nuevo aún no tiene.
-- `test_profile_extract_fixes::test_truncation_flag_is_sticky_on_refetch`: Política de la pasada de ingesta que el código nuevo aún no tiene.
-- `test_profile_extract_fixes::test_user_confirmed_timezone_always_wins`: Política de la pasada de ingesta que el código nuevo aún no tiene.
-
-### CONNECT: 6 tests
+### CONNECT: 10 tests
 
 - `test_handle_db::test_check_niche_trends_persists_every_user_it_searches`: Guardar en la tabla de handles los autores que descubre un escaneo de nicho (tendencias, frameworks, enriquecimiento con tope) no tiene test ni uso en el código nuevo.
 - `test_handle_db::test_check_niche_trends_survives_handle_db_failure`: Guardar en la tabla de handles los autores que descubre un escaneo de nicho (tendencias, frameworks, enriquecimiento con tope) no tiene test ni uso en el código nuevo.
@@ -94,6 +72,10 @@ la misma conducta, no que sea equivalente línea a línea.
 - `test_handle_db::test_scanned_handles_enrich_only_unknown_within_cap`: Guardar en la tabla de handles los autores que descubre un escaneo de nicho (tendencias, frameworks, enriquecimiento con tope) no tiene test ni uso en el código nuevo.
 - `test_handle_db::test_scanned_handles_no_enrichment_when_store_is_down`: Guardar en la tabla de handles los autores que descubre un escaneo de nicho (tendencias, frameworks, enriquecimiento con tope) no tiene test ni uso en el código nuevo.
 - `test_handle_db::test_scanned_handles_zero_limit_saves_handles_only`: Guardar en la tabla de handles los autores que descubre un escaneo de nicho (tendencias, frameworks, enriquecimiento con tope) no tiene test ni uso en el código nuevo.
+- `test_profile_extract_fixes::test_finalize_ingest_pass_two_miss_flow`: Lógica de la pasada (second_miss, pass_reached_window, finalize_ingest_pass): depende de profile.refresh, aún pendiente en CONNECT. Se portan las partes puras cuando exista.
+- `test_profile_extract_fixes::test_pass_reached_window`: Lógica de la pasada (second_miss, pass_reached_window, finalize_ingest_pass): depende de profile.refresh, aún pendiente en CONNECT. Se portan las partes puras cuando exista.
+- `test_profile_extract_fixes::test_second_miss_bracket_and_window_guards`: Lógica de la pasada (second_miss, pass_reached_window, finalize_ingest_pass): depende de profile.refresh, aún pendiente en CONNECT. Se portan las partes puras cuando exista.
+- `test_profile_extract_fixes::test_second_miss_requires_two_complete_misses`: Lógica de la pasada (second_miss, pass_reached_window, finalize_ingest_pass): depende de profile.refresh, aún pendiente en CONNECT. Se portan las partes puras cuando exista.
 
 ### INTELLIGENCE: 11 tests
 
@@ -119,6 +101,8 @@ la misma conducta, no que sea equivalente línea a línea.
 - `test_jev_layer` (replaced): El consejo ordena por relevancia vectorial (campo relevance) y ya no filtra con el juez.
 - `test_memory` (replaced): memory.md y Chroma pasan a notas y resumen en PostgreSQL con vectores detrás de un puerto.
 - `test_post_filter` (replaced): El filtro de captions contaminadas vive en los mapeadores de ingesta, no en el upsert.
+- `test_profile_extract_fixes` (deviation): §11:25. Solo se añade una captura cuando cambia una métrica.
+- `test_profile_extract_fixes` (deviation): §11:24. La marca sigue a la última captura.
 - `test_turn_class` (replaced): Ya no hay reexportación desde el bucle; la lista de saludos se prueba en su módulo.
 - `test_voice_corpus` (replaced): Chroma local pasa a un puerto de vectores con filas en PostgreSQL.
 - `test_voice_index_sqlite` (replaced): El índice parcial de SQLite pasa a una restricción única parcial de PostgreSQL.

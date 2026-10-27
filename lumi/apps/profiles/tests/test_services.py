@@ -614,7 +614,9 @@ def test_a_foreign_due_row_takes_a_slot_unless_the_helper_switches_it_off(user):
         services.set_listening(ListeningConfig(pid, (), True, 5))
         pids.append(pid)
     *mine, foreign = pids  # ``foreign`` stands for a row another session committed
-    assert services.claim_due_polls(limit=3) == sorted(pids)  # it is claimed like any other
+    assert services.claim_due_polls(limit=3) == sorted(
+        pids
+    )  # it is claimed like any other
     PollConfig.objects.update(last_polled_at=None)
     only_these_polls(*mine)
     assert services.claim_due_polls(limit=3) == sorted(mine)
@@ -727,3 +729,36 @@ def test_analytics_query_count_is_constant(profile_id, handle_id):
     with CaptureQueriesContext(connection) as big:
         services.get_analytics(profile_id)
     assert len(big) == len(small)
+
+
+# ------------------------------------------------------------------ threads
+
+
+def test_rethread_numbers_by_publish_time_not_arrival(handle_id):
+    services.upsert_posts(
+        handle_id,
+        [  # newest first, as ingest delivers them
+            post_in("200", conversation_id="c1", published_at=T0),
+            post_in("199", conversation_id="c1", published_at=T0 - timedelta(hours=1)),
+            post_in("500", conversation_id="other", published_at=T0),
+        ],
+    )
+    assert services.rethread_conversation(handle_id, "c1") == 2
+    early = Post.objects.get(platform_post_id="199")
+    late = Post.objects.get(platform_post_id="200")
+    assert (early.thread_position, early.is_thread_head) == (1, True)
+    assert (late.thread_position, late.is_thread_head) == (2, False)
+    untouched = Post.objects.get(platform_post_id="500")
+    assert (untouched.thread_position, untouched.is_thread_head) == (None, None)
+
+
+def test_rethread_is_idempotent_and_ignores_a_blank_conversation(handle_id):
+    services.upsert_posts(
+        handle_id,
+        [post_in("1", conversation_id="c1"), post_in("2", conversation_id="")],
+    )
+    assert services.rethread_conversation(handle_id, "c1") == 1
+    with CaptureQueriesContext(connection) as queries:
+        assert services.rethread_conversation(handle_id, "c1") == 1
+    assert not [q for q in queries if q["sql"].lstrip().upper().startswith("UPDATE")]
+    assert services.rethread_conversation(handle_id, "") == 0

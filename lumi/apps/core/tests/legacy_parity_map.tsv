@@ -66,5 +66,10 @@ test_profile_extract_fixes	first_int_.*|map_.*|api_structured_.*|heuristic_.*|de
 test_profile_extract_fixes	store_raw_item_writes_null_snapshot_for_missing_metrics	covered	ARCHITECT	apps/profiles/tests/test_services.py::no_metrics_means_no_snapshot	
 test_profile_extract_fixes	store_raw_item_self_reply_creates_thread_posts	covered	CONNECT	apps/connections/tests/test_ingest.py::self_reply_is_a_thread_continuation	
 test_profile_extract_fixes	baseline_exclusions_and_math|own_.*	covered	INTELLIGENCE	lumi_ai/tests/competitors/test_winners.py::baseline;lumi_ai/tests/competitors/test_own.py	
-test_profile_extract_fixes	.*	gap	ARCHITECT		Política de la pasada de ingesta que el código nuevo aún no tiene.
-test_metrics	.*	gap	ARCHITECT		Velocidad y detección de picos de likes por hora sin portar.
+test_profile_extract_fixes	final_metrics_.*	covered	ARCHITECT	apps/profiles/tests/test_policy.py::final_metrics_picks_the_reading_nearest_72_hours	policy.final_metrics trabaja con la fecha de publicación porque la edad ya no es columna.
+test_profile_extract_fixes	milestone_bucket_.*|snapshot_skip_matrix	deviation	ARCHITECT	apps/profiles/tests/test_parity.py::row_25	§11:25. Solo se añade una captura cuando cambia una métrica.
+test_profile_extract_fixes	truncation_flag_is_sticky_on_refetch	deviation	ARCHITECT	apps/profiles/tests/test_parity.py::row_24	§11:24. La marca sigue a la última captura.
+test_profile_extract_fixes	rethread_.*	covered	ARCHITECT	apps/profiles/tests/test_services.py::rethread_numbers_by_publish_time_not_arrival	
+test_profile_extract_fixes	infer_timezone_.*|maybe_update_timezone_.*|user_confirmed_timezone_.*	covered	ARCHITECT	apps/profiles/tests/test_policy.py::timezone	Reglas puras en policy.py. Guardar la zona y confirmarla desde la API queda para el equipo que cree esa ruta.
+test_profile_extract_fixes	.*	gap	CONNECT		Lógica de la pasada (second_miss, pass_reached_window, finalize_ingest_pass): depende de profile.refresh, aún pendiente en CONNECT. Se portan las partes puras cuando exista.
+test_metrics	.*	covered	ARCHITECT	apps/profiles/tests/test_policy.py	Velocidad y picos de likes por hora en policy.py.
