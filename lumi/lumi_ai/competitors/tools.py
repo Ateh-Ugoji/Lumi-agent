@@ -9,9 +9,7 @@ with what it actually read: a missing report, a refused provider or a thin sampl
 
 from __future__ import annotations
 
-import asyncio
 import hashlib
-import math
 from dataclasses import dataclass, replace
 from typing import Any, get_args
 
@@ -19,6 +17,7 @@ from lumi_ai.competitors.extract import post_ref, tag_posts
 from lumi_ai.competitors.niche import make_niche_key, slugify
 from lumi_ai.competitors.own import compute_own_lift
 from lumi_ai.competitors.pipeline import PipelineDeps, run_peer_pipeline
+from lumi_ai.competitors.ranking import framework_key, rank_frameworks
 from lumi_ai.ports import (
     BudgetExceeded,
     Embedder,
@@ -61,25 +60,9 @@ class CompetitorServices:
     retriever: Retriever | None = None
 
 
-def _cosine(a: list[float], b: list[float]) -> float:
-    dot = sum(x * y for x, y in zip(a, b, strict=True))
-    norm = math.sqrt(sum(x * x for x in a)) * math.sqrt(sum(y * y for y in b))
-    return dot / norm if norm else 0.0
-
-
-def _framework_key(fw: FrameworkOut) -> str:
-    return str(fw.payload.get("key") or fw.name)
-
-
-def _framework_text(fw: FrameworkOut) -> str:
-    structure = fw.payload.get("structure")
-    parts = [fw.title, fw.description, structure if isinstance(structure, str) else ""]
-    return "\n".join(p for p in parts if p)
-
-
 def _framework_view(fw: FrameworkOut, relevance: float | None) -> dict[str, Any]:
     view: dict[str, Any] = {
-        "key": _framework_key(fw),
+        "key": framework_key(fw),
         "title": fw.title,
         "structure": fw.payload.get("structure"),
         "hook_formula": fw.payload.get("hook_formula"),
@@ -217,20 +200,10 @@ def build(services: CompetitorServices) -> list[ToolSpec]:
             }
         limit = ctx.config.peer_advice_max_items
         views = [_framework_view(f, None) for f in report.frameworks]
-        if s.embedder is not None and report.frameworks and topic.strip():
-            vectors = await asyncio.to_thread(
-                s.embedder.embed,
-                [topic, *[_framework_text(f) for f in report.frameworks]],
-            )
-            scores = [_cosine(vectors[0], v) for v in vectors[1:]]
-            views = [
-                _framework_view(f, sc)
-                for f, sc in sorted(
-                    zip(report.frameworks, scores, strict=True),
-                    key=lambda pair: pair[1],
-                    reverse=True,
-                )
-            ]
+        if s.embedder is not None:
+            ranked = await rank_frameworks(s.embedder, topic, report.frameworks)
+            if ranked:
+                views = [_framework_view(f, score) for f, score in ranked]
         examples: list[dict[str, Any]] = []
         if s.retriever is not None and topic.strip():
             for hit in await s.retriever.similar_peer_posts(
@@ -289,13 +262,13 @@ def build(services: CompetitorServices) -> list[ToolSpec]:
             return out
         key = slugify(analysis.body.primary_framework.replace("_", " "))
         match = next(
-            (f for f in report.frameworks if slugify(_framework_key(f)) == key), None
+            (f for f in report.frameworks if slugify(framework_key(f)) == key), None
         )
         out["niche_comparison"] = {
             "report_id": report.id,
             "matches_niche_framework": match is not None,
             "framework": _framework_view(match, None) if match else None,
-            "niche_frameworks": [_framework_key(f) for f in report.frameworks],
+            "niche_frameworks": [framework_key(f) for f in report.frameworks],
         }
         return out
 
