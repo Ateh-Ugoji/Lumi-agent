@@ -9,7 +9,8 @@ Rama `lumi-orquestador`. Se actualiza en cada reporte.
 | T0 Preparar | hecha | Línea base 418 pruebas pasan |
 | T1 CONEXIONES.md y API_KEYS.md | hecha | Revalidado el 2026-10-27 |
 | T2 Fusión de frontends | hecho | `lumi/frontend` es el único frontend. Typecheck, build y 17 pruebas Node pasan. No hay linter en ninguno de los dos (solo `tsc`). |
-| T3 a T14 | pendientes | Dependen del contrato de ARCHITECT (no hay `manage.py`, `SCHEMA.md` ni `CONTRATOS.md`) |
+| T13 MUSE.md | hecha | Solo documentación, fuentes de dev.meta.ai con fecha 2026-10-27 |
+| T3 a T12 y T14 | pendientes | Dependen del contrato de ARCHITECT (no hay `manage.py`, `SCHEMA.md` ni `CONTRATOS.md`) |
 
 ## Bloqueos
 
