@@ -137,6 +137,7 @@ class HandleSelectResponseSerializer(serializers.Serializer):
 class HandleStatsSerializer(serializers.Serializer):
     live_enabled = serializers.BooleanField()
     live_budget = serializers.IntegerField()
+    live_budget_by_platform = serializers.DictField(child=serializers.IntegerField())
     credits_spent_24h = serializers.IntegerField()
     cache_ttl_minutes = serializers.IntegerField()
     saved_handles = serializers.IntegerField()

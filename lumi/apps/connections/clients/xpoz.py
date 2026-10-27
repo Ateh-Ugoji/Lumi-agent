@@ -3,7 +3,7 @@
 Every call spends credits, so the client is built around three guards, in this order:
 
 1. ``XPOZ_LIVE_ENABLED`` must be true, or ``LiveDisabled`` is raised before anything else.
-2. The run budget (``XPOZ_RUN_CREDIT_BUDGET``) must have room for the price of the call, or
+2. The run budget (``XPOZ_RUN_CREDIT_BUDGET``, or ``XPOZ_RUN_CREDIT_BUDGET_<PLATFORM>`` when set) must have room for the price of the call, or
    ``BudgetExceeded`` is raised before any request leaves. A run therefore stops at the exact
    credit and never one call past it.
 3. Keys rotate in order (``XPOZ_API_KEY``, then ``XPOZ_API_KEY_2``) when a key answers 401,
@@ -176,6 +176,11 @@ class XpozClient:
         self.meter = meter or CreditMeter(
             config.xpoz_run_credit_budget, provider=PROVIDER
         )
+        # A platform with its own budget (XPOZ_RUN_CREDIT_BUDGET_<PLATFORM>) is metered apart.
+        self._platform_meters = {
+            platform: CreditMeter(budget, provider=PROVIDER)
+            for platform, budget in config.xpoz_platform_budgets.items()
+        }
         self._ledger = ledger
         self._run_id = run_id
         self._clock = clock
@@ -191,8 +196,16 @@ class XpozClient:
     def _live_slots(self) -> list[int]:
         return [i for i in range(1, len(self._keys) + 1) if i not in self._dead_slots]
 
+    def meter_for(self, platform: str) -> CreditMeter:
+        return self._platform_meters.get(platform, self.meter)
+
     async def _get(
-        self, route: str, path: str, params: Mapping[str, Any], credits: int
+        self,
+        route: str,
+        path: str,
+        params: Mapping[str, Any],
+        credits: int,
+        platform: str = "x",
     ) -> XpozPage:
         if not self._live:
             raise LiveDisabled("XPOZ_LIVE_ENABLED is false", provider=PROVIDER)
@@ -203,7 +216,8 @@ class XpozClient:
             raise ProviderAuthError(
                 "every Xpoz key was rejected in this run", provider=PROVIDER
             )
-        self.meter.charge(credits)  # raises BudgetExceeded before any request is sent
+        meter = self.meter_for(platform)
+        meter.charge(credits)  # raises BudgetExceeded before any request is sent
         refusals: list[int] = []
         for slot in slots:
             response = await self._http.request(
@@ -242,8 +256,8 @@ class XpozClient:
             raise BudgetExceeded(
                 "Xpoz reports no credits left on any key",
                 provider=PROVIDER,
-                spent=self.meter.spent,
-                budget=self.meter.budget,
+                spent=meter.spent,
+                budget=meter.budget,
             )
         raise ProviderAuthError(
             f"Xpoz rejected every key ({', '.join(str(c) for c in refusals)})",
@@ -305,5 +319,5 @@ class XpozClient:
         if cursor:
             params["cursor"] = cursor
         return await self._get(
-            f"{platform}.users.search", spec.path, params, spec.credits
+            f"{platform}.users.search", spec.path, params, spec.credits, platform
         )

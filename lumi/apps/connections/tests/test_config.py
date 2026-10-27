@@ -60,7 +60,9 @@ def test_secrets_stay_out_of_repr() -> None:
 def test_xpoz_and_pfm_defaults_never_spend() -> None:
     config = ConnectionsConfig.from_env({})
     assert config.xpoz_live_enabled is False
-    assert config.xpoz_run_credit_budget == 10
+    assert config.xpoz_run_credit_budget == 12
+    assert config.xpoz_platform_budgets == {}
+    assert config.xpoz_budget_for("instagram") == 12
     assert config.handle_cache_ttl_minutes == 60
     assert config.xpoz_api_keys == ()
 
@@ -94,3 +96,26 @@ def test_pfm_and_xpoz_secrets_stay_out_of_repr() -> None:
         }
     )
     assert "s3cret" not in repr(config)
+
+
+def test_platform_budgets_override_the_shared_one_and_ignore_blanks() -> None:
+    config = ConnectionsConfig.from_env(
+        {
+            "XPOZ_RUN_CREDIT_BUDGET": "4",
+            "XPOZ_RUN_CREDIT_BUDGET_INSTAGRAM": "12",
+            "XPOZ_RUN_CREDIT_BUDGET_X": "0",
+            "XPOZ_RUN_CREDIT_BUDGET_TIKTOK": "  ",
+        }
+    )
+    assert config.xpoz_platform_budgets == {"instagram": 12, "x": 0}
+    assert [config.xpoz_budget_for(p) for p in ("instagram", "x", "tiktok")] == [
+        12,
+        0,
+        4,
+    ]
+
+
+@pytest.mark.parametrize("value", ["-1", "many"])
+def test_a_bad_platform_budget_is_a_config_error(value) -> None:
+    with pytest.raises(ConfigError, match="XPOZ_RUN_CREDIT_BUDGET_INSTAGRAM"):
+        ConnectionsConfig.from_env({"XPOZ_RUN_CREDIT_BUDGET_INSTAGRAM": value})

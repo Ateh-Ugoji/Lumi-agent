@@ -16,7 +16,8 @@ DEFAULT_PUBLIC_BASE_URL = "http://localhost:8000"
 DEFAULT_FRONTEND_URL = "http://localhost:3010"
 DEFAULT_LINKEDIN_VERSION = "202609"
 DEFAULT_META_GRAPH_VERSION = "v26.0"
-DEFAULT_XPOZ_RUN_CREDIT_BUDGET = 10
+XPOZ_PLATFORMS = ("x", "instagram", "tiktok", "reddit")
+DEFAULT_XPOZ_RUN_CREDIT_BUDGET = 12  # one Instagram user search costs 12
 DEFAULT_HANDLE_CACHE_TTL_MINUTES = 60
 DEFAULT_MCP_TOOLS_TTL_SECONDS = 300
 DEFAULT_MCP_CALL_TIMEOUT_SECONDS = 60
@@ -75,6 +76,9 @@ class ConnectionsConfig:
     xpoz_api_key_2: str = field(default="", repr=False)
     xpoz_live_enabled: bool = False
     xpoz_run_credit_budget: int = DEFAULT_XPOZ_RUN_CREDIT_BUDGET
+    # Per-platform override of the run budget (XPOZ_RUN_CREDIT_BUDGET_<PLATFORM>). A platform
+    # listed here has its own meter; the others share ``xpoz_run_credit_budget``.
+    xpoz_platform_budgets: Mapping[str, int] = field(default_factory=dict)
     handle_cache_ttl_minutes: int = DEFAULT_HANDLE_CACHE_TTL_MINUTES
 
     @classmethod
@@ -129,6 +133,15 @@ class ConnectionsConfig:
                 name="XPOZ_RUN_CREDIT_BUDGET",
                 default=DEFAULT_XPOZ_RUN_CREDIT_BUDGET,
             ),
+            xpoz_platform_budgets={
+                platform: parse_non_negative_int(
+                    env.get(f"XPOZ_RUN_CREDIT_BUDGET_{platform.upper()}"),
+                    name=f"XPOZ_RUN_CREDIT_BUDGET_{platform.upper()}",
+                    default=-1,
+                )
+                for platform in XPOZ_PLATFORMS
+                if (env.get(f"XPOZ_RUN_CREDIT_BUDGET_{platform.upper()}") or "").strip()
+            },
             handle_cache_ttl_minutes=parse_non_negative_int(
                 env.get("HANDLE_CACHE_TTL_MINUTES"),
                 name="HANDLE_CACHE_TTL_MINUTES",
@@ -140,6 +153,10 @@ class ConnectionsConfig:
     def xpoz_api_keys(self) -> tuple[str, ...]:
         """Configured Xpoz keys in rotation order, blanks dropped."""
         return tuple(k for k in (self.xpoz_api_key, self.xpoz_api_key_2) if k)
+
+    def xpoz_budget_for(self, platform: str) -> int:
+        """Credits one run may spend on ``platform``: its override, or the shared budget."""
+        return self.xpoz_platform_budgets.get(platform, self.xpoz_run_credit_budget)
 
     def redirect_uri(self, provider: str) -> str:
         if provider == "google" and self.google_redirect_uri:

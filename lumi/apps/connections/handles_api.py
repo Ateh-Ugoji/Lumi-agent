@@ -111,6 +111,9 @@ def stats(user) -> dict[str, Any]:
     return {
         "live_enabled": config.xpoz_live_enabled and bool(config.xpoz_api_keys),
         "live_budget": config.xpoz_run_credit_budget,
+        "live_budget_by_platform": {
+            p: config.xpoz_budget_for(p) for p in PLATFORMS if p in USER_SEARCH
+        },
         "credits_spent_24h": spent.aggregate(total=Sum("credits"))["total"] or 0,
         "cache_ttl_minutes": config.handle_cache_ttl_minutes,
         "saved_handles": len(store.saved(list(PLATFORMS), SAVED_LIMIT)),

@@ -128,9 +128,10 @@ def test_a_narrower_query_reuses_the_cached_answer(api, xpoz) -> None:
     assert HandleSearchCache.objects.filter(platform="x").count() >= 1
 
 
-def test_instagram_is_refused_by_the_default_budget_and_nothing_is_sent(
-    api, xpoz
+def test_instagram_is_refused_when_its_own_budget_is_closed_and_nothing_is_sent(
+    api, xpoz, monkeypatch
 ) -> None:
+    monkeypatch.setenv("XPOZ_RUN_CREDIT_BUDGET_INSTAGRAM", "0")
     body = api.get(SEARCH, {"q": "ateh", "platforms": "instagram"}).json()
     assert body["reason"] == "budget_exhausted"
     assert xpoz.requests == [] and XpozCreditLedger.objects.count() == 0
@@ -257,7 +258,12 @@ def test_stats_counts_only_the_callers_credits(api, user, other_user, xpoz) -> N
     api.get(SEARCH, {"q": "naval"})
     body = api.get(STATS).json()
     assert body["credits_spent_24h"] == 2
-    assert body["live_enabled"] is True and body["live_budget"] == 10
+    assert body["live_enabled"] is True and body["live_budget"] == 12
+    assert body["live_budget_by_platform"] == {
+        "x": 12,
+        "instagram": 12,
+        "tiktok": 12,
+    }
     assert body["cached_searches"] == 1 and body["remembered_handles"] >= 3
     platforms = {p["id"]: p for p in body["available_platforms"]}
     assert platforms["instagram"] == {

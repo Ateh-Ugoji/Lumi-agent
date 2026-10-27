@@ -46,9 +46,11 @@ def make(
     live: str = "true",
     budget: str = "10",
     keys: tuple[str, ...] = (KEY1,),
+    extra_env: dict[str, str] | None = None,
     **kw,
 ):
     env = {"XPOZ_LIVE_ENABLED": live, "XPOZ_RUN_CREDIT_BUDGET": budget}
+    env.update(extra_env or {})
     if len(keys) > 0:
         env["XPOZ_API_KEY"] = keys[0]
     if len(keys) > 1:
@@ -273,3 +275,43 @@ async def test_has_more_without_a_cursor_is_not_followed() -> None:
         lambda r: httpx.Response(200, json={"results": [], "has_more": True})
     )
     assert (await make(rec).search_users("x", "naval")).has_more is False
+
+
+async def test_a_platform_override_gives_instagram_its_own_budget() -> None:
+    rec = Recorder(lambda r: json_response("xpoz_users_instagram.json"))
+    c = make(rec, budget="2", extra_env={"XPOZ_RUN_CREDIT_BUDGET_INSTAGRAM": "12"})
+    await c.search_users("instagram", "ateh")  # 12, from its own meter
+    assert c.meter_for("instagram").spent == 12 and c.meter.spent == 0
+    with pytest.raises(BudgetExceeded):
+        await c.search_users("instagram", "ateh")  # its 12 are used up
+    assert len(rec.requests) == 1
+
+
+async def test_a_platform_override_does_not_open_the_shared_budget() -> None:
+    rec = Recorder(users_ok)
+    c = make(rec, budget="2", extra_env={"XPOZ_RUN_CREDIT_BUDGET_INSTAGRAM": "12"})
+    await c.search_users("x", "naval")  # 2 from the shared meter
+    with pytest.raises(BudgetExceeded):
+        await c.search_users("x", "naval")
+    assert len(rec.requests) == 1
+
+
+async def test_a_platform_can_be_closed_while_the_others_stay_open() -> None:
+    rec = Recorder(users_ok)
+    c = make(rec, budget="12", extra_env={"XPOZ_RUN_CREDIT_BUDGET_X": "0"})
+    with pytest.raises(BudgetExceeded):
+        await c.search_users("x", "naval")
+    assert rec.requests == []
+
+
+async def test_the_default_budget_pays_for_one_instagram_search_and_no_more() -> None:
+    rec = Recorder(lambda r: json_response("xpoz_users_instagram.json"))
+    c = XpozClient(
+        ConnectionsConfig.from_env({"XPOZ_LIVE_ENABLED": "true", "XPOZ_API_KEY": KEY1}),
+        transport=rec.transport,
+        sleep=no_sleep,
+    )
+    await c.search_users("instagram", "ateh")
+    with pytest.raises(BudgetExceeded):
+        await c.search_users("x", "naval")
+    assert len(rec.requests) == 1
