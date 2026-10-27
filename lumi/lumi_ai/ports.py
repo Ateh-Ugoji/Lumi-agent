@@ -38,7 +38,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Literal, Protocol, get_args, runtime_checkable
 
-PORTS_VERSION = "1.6"  # 1.1: SemanticJudge, 1.2: OwnPostSync, 1.3: AttemptIn.is_fallback, EvaluationRecord.attempt_id required, 1.4: MemoryStore.touch_notes, save_voice model/prompt_version, 1.5: tool_call_id, report query/peers, repurpose mode/brief, user request platform, 1.6: MatchStore
+PORTS_VERSION = "1.7"  # 1.1: SemanticJudge, 1.2: OwnPostSync, 1.3: AttemptIn.is_fallback, EvaluationRecord.attempt_id required, 1.4: MemoryStore.touch_notes, save_voice model/prompt_version, 1.5: tool_call_id, report query/peers, repurpose mode/brief, user request platform, 1.6: MatchStore, 1.7: create_request_with_attempts(source_post_id=)
 
 # ---------------------------------------------------------------------------
 # Shared vocabulary
@@ -817,8 +817,12 @@ class RepurposeStore(Protocol):
         *,
         mode: Literal["repurpose", "topic"] = "repurpose",
         brief: str | None = None,
+        source_post_id: int | None = None,
     ) -> tuple[int, list[AttemptOut]]:
         """Store a request and its attempts in ONE transaction; return ``(request_id, attempts)``.
+
+        ``source_post_id`` links the stored post a repurpose started from (1.7); it must belong
+        to ``profile_id``.
 
         The old code saved the request before doing the work, so a failure left orphans.
         """

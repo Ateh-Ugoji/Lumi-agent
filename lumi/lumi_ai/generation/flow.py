@@ -144,6 +144,7 @@ class GenerationService:
             attempts,
             mode=brief.mode,
             brief=_brief_text(brief) if brief.mode == "topic" else None,
+            source_post_id=brief.source_post_id,
         )
         outcome = GenerationOutcome(
             brief=brief,

@@ -191,6 +191,14 @@ def test_ports_1_5_is_additive():
     )
 
 
+def test_ports_1_7_links_the_source_post_of_a_request():
+    assert tuple(map(int, ports.PORTS_VERSION.split("."))) >= (1, 7)
+    import inspect
+
+    sig = inspect.signature(ports.RepurposeStore.create_request_with_attempts)
+    assert sig.parameters["source_post_id"].default is None
+
+
 def test_ports_1_6_adds_the_match_store_without_touching_the_listening_store():
     assert tuple(map(int, ports.PORTS_VERSION.split("."))) >= (1, 6)
     assert {n for n in dir(ports.ListeningStore) if not n.startswith("_")} >= {

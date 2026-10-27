@@ -22,6 +22,7 @@ class GenerationBrief:
     topic: str | None = None
     goal: str | None = None
     must_keep: tuple[str, ...] = ()
+    source_post_id: int | None = None  # the stored post a repurpose came from
 
     @property
     def subject(self) -> str:

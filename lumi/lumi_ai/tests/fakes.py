@@ -220,6 +220,7 @@ class FakeRepurpose:
         *,
         mode="repurpose",
         brief=None,
+        source_post_id=None,
     ):
         request_id = len(self.requests) + 1
         self.requests.append(
@@ -230,6 +231,7 @@ class FakeRepurpose:
                 "attempts": list(attempts),
                 "mode": mode,
                 "brief": brief,
+                "source_post_id": source_post_id,
             }
         )
         out = [

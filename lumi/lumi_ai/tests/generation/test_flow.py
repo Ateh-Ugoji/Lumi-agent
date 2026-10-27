@@ -141,7 +141,7 @@ async def test_all_attempts_are_saved_and_the_best_one_is_chosen_not_the_last() 
             {"preserves_meaning": 0.3},
         ],
     )
-    service, llm, store = rig([reply(GOOD)] * 3, judge)
+    service, _llm, store = rig([reply(GOOD)] * 3, judge)
     result = await service.run(brief(source_text=SRC), AIConfig())
     # first draft: yes 0.9 (>= 0.8, accepted) -> stops at once
     assert len(store.requests[0]["attempts"]) == 1 and result.outcome.chosen == 0
