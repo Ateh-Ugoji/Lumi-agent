@@ -75,6 +75,22 @@ Nota sobre la fila 18: `reach_series` y `saves_series` siguen recorriendo todas 
 - **INTELLIGENCE, foto de la fuente: cerrado** con la opción (b), gana la foto guardada, en `f8c50ea` con su prueba. CONTRATOS 11, fila 29.
 - **CONNECT, `POST /handles/select`: hecho** en `f843610` (fila 30). Solo `(platform, handle)`, origen `cache`, 400 si el handle no es válido. **Pendiente de CONNECT:** que el frontend mande `platform` y que el serializador lo exija (hoy asume `x`). `selected` queda solo para datos anteriores: se conserva en el CHECK y en el rango, no se migra.
 
+## Ronda 9: revisión de `5257760` y `3c57f88`, y handles elegidos del legado
+
+| Punto | Resultado |
+| --- | --- |
+| FK | `user` CASCADE y `handle` CASCADE se quedan. `social_handles` no se borra en ningún código (los importadores fusionan por `handle_normalized`) y las demás tablas derivadas del handle ya usan CASCADE. PROTECT haría imposible borrar un handle con elecciones sin ganar nada. |
+| Restricción única | `uq_user_saved_handle` está en la base (`sqlmigrate` y `pg_indexes`). |
+| Índices (EXPLAIN, 20 000 handles, 10 000 filas) | `saved` tarda menos de 1 ms. `ix_user_saved_recent` sí se usa, pero solo para filtrar por usuario; sin él y sin el índice automático de `user_id` el plan es el mismo con `uq_user_saved_handle`. Ninguna consulta ordena por `created_at`. Propuesta a CONNECT: quitar `ix_user_saved_recent` y poner `db_index=False` en `user`. |
+| Sin duplicados con `social_profiles` | Los perfiles propios se leen de `social_profiles` por `user_id`; la tabla nueva solo guarda elecciones. |
+| N+1 | `saved` hace 2 consultas con 5 y con 50 elegidos. |
+| Concurrencia | 12 hilos haciendo `select` del mismo handle: todos 200, una fila en `user_saved_handles`, un handle. |
+| Migración | `0008` hacia delante, `migrate connections 0007`, otra vez hacia delante sobre una copia con 20 000 handles y 10 000 filas: sin error. El retroceso borra la tabla (es lo esperable en `CreateModel`); `social_handles` queda intacto. `makemigrations --check`: sin cambios. |
+| `3c57f88` | Los códigos son `validation_error`; los mensajes están en español; `details.platform` en select y `details.platforms` en search y saved; sin token 401 `unauthenticated`. `test_error_codes` pasa. Diferencia sin documentar hasta hoy: `platform` de select distingue mayúsculas y espacios (`X`, `x ` dan 400), `platforms` no. Mensaje de select para valor no válido: `"X" no es una elección válida.` (el de DRF, sin la lista de redes). Sugerencia menor a CONNECT: normalizar `platform` igual que `platforms`. |
+| Texto de CONNECT (`/workspace/handles-contract.md`) | Dos errores corregidos al aplicarlo: (1) decía que `platform` no distingue mayúsculas, solo es cierto para `platforms`; (2) citaba un bloque "platform obligatorio" que no existe, ahora cita los cuatro tests por nombre. Tampoco existe una tabla de migraciones en §12 (es "Cómo se pide un cambio"): la migración queda en la fila 31 y en SCHEMA §8. El "(8)" de las pruebas es exacto. |
+| Legado | El `lumi.db` no tiene handles guardados ni elegidos (`legacy_schema.sql`): vivían en Chroma `handle_mappings`, global. Por eso `import_legacy` recibe `--handle-mappings PATH` (JSON de esa colección) y escribe `user_saved_handles` del `--user` con `ts` como `created_at`. `--verify` falla si falta alguno. Los perfiles propios del SQLite ya van a `social_profiles`. Sin el archivo no hay nada que importar. |
+| Demo | "Los handles existentes no tienen dueño" es aceptable para la demo: `saved` muestra los perfiles propios y se llena al elegir. Con datos del legado hace falta el export de Chroma. |
+
 ## Notas del esqueleto
 
 | Tema | Detalle |
