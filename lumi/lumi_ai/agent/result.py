@@ -54,4 +54,6 @@ class SSEEvent:
 
     def encode(self) -> str:
         """Return the wire format: ``data: <json>`` plus a blank line."""
-        return f"data: {json.dumps(self.as_dict(), ensure_ascii=False, default=str)}\n\n"
+        return (
+            f"data: {json.dumps(self.as_dict(), ensure_ascii=False, default=str)}\n\n"
+        )

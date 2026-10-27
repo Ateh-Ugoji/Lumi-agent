@@ -186,7 +186,11 @@ class BudgetExceeded(SocialDataError):
     """The per-run credit budget (``XPOZ_RUN_CREDIT_BUDGET``) is spent."""
 
     def __init__(
-        self, message: str = "", *, provider: str | None = None, spent: int | None = None,
+        self,
+        message: str = "",
+        *,
+        provider: str | None = None,
+        spent: int | None = None,
         budget: int | None = None,
     ) -> None:
         super().__init__(message, provider=provider)
@@ -202,7 +206,10 @@ class RateLimited(SocialDataError):
     """The provider answered 429 or the local limiter refused the call."""
 
     def __init__(
-        self, message: str = "", *, provider: str | None = None,
+        self,
+        message: str = "",
+        *,
+        provider: str | None = None,
         retry_after_seconds: float | None = None,
     ) -> None:
         super().__init__(message, provider=provider)
@@ -240,7 +247,9 @@ class SocialData(Protocol):
         """Return up to ``limit`` recent posts of ``handle`` published after ``since``, newest first."""
         ...
 
-    async def search_posts(self, platform: Platform, query: str, limit: int) -> list[PostIn]:
+    async def search_posts(
+        self, platform: Platform, query: str, limit: int
+    ) -> list[PostIn]:
         """Return up to ``limit`` public posts that match a keyword query."""
         ...
 
@@ -248,7 +257,9 @@ class SocialData(Protocol):
         """Return the public account for ``handle``, or ``None`` when it does not exist."""
         ...
 
-    async def search_users(self, platform: Platform, query: str, limit: int) -> list[UserInfo]:
+    async def search_users(
+        self, platform: Platform, query: str, limit: int
+    ) -> list[UserInfo]:
         """Return up to ``limit`` public accounts that match a query."""
         ...
 
@@ -401,7 +412,11 @@ class PostStore(Protocol):
         ...
 
     async def list_activity(
-        self, profile_id: int, *, kind: Literal["reply", "retweet"] | None = None, limit: int = 50
+        self,
+        profile_id: int,
+        *,
+        kind: Literal["reply", "retweet"] | None = None,
+        limit: int = 50,
     ) -> list[ActivityOut]:
         """Return the user's replies and retweets, newest first."""
         ...
@@ -587,7 +602,9 @@ class NicheReportOut:
 class ReportStore(Protocol):
     """Competitor analysis output: reports, frameworks and the blind-tagging cache."""
 
-    async def save_report(self, profile_id: int, report: NicheReportIn) -> NicheReportOut:
+    async def save_report(
+        self, profile_id: int, report: NicheReportIn
+    ) -> NicheReportOut:
         """Store a report and its frameworks atomically."""
         ...
 
@@ -599,11 +616,15 @@ class ReportStore(Protocol):
         """Return the frameworks with these ids (the texts behind ``framework:<id>`` vectors)."""
         ...
 
-    async def list_frameworks(self, profile_id: int, *, limit: int = 100) -> list[FrameworkOut]:
+    async def list_frameworks(
+        self, profile_id: int, *, limit: int = 100
+    ) -> list[FrameworkOut]:
         """Return the profile's frameworks, newest first."""
         ...
 
-    async def save_taggings(self, profile_id: int, taggings: Sequence[TaggingRecord]) -> int:
+    async def save_taggings(
+        self, profile_id: int, taggings: Sequence[TaggingRecord]
+    ) -> int:
         """Upsert by (post_ref, prompt_version) and return how many rows changed."""
         ...
 
@@ -627,7 +648,9 @@ class MemoryNoteOut:
 class MemoryStore(Protocol):
     """Durable facts about the user and a rolling summary. Replaces ``memory.md``."""
 
-    async def add_note(self, profile_id: int, text: str, kind: str = "fact") -> tuple[MemoryNoteOut, bool]:
+    async def add_note(
+        self, profile_id: int, text: str, kind: str = "fact"
+    ) -> tuple[MemoryNoteOut, bool]:
         """Store a note; return ``(note, created)``. An exact duplicate returns the old note and ``False``."""
         ...
 
@@ -635,11 +658,15 @@ class MemoryStore(Protocol):
         """Return the notes with these ids (the texts behind ``memory:<id>`` vectors)."""
         ...
 
-    async def list_notes(self, profile_id: int, *, limit: int = 100) -> list[MemoryNoteOut]:
+    async def list_notes(
+        self, profile_id: int, *, limit: int = 100
+    ) -> list[MemoryNoteOut]:
         """Return the newest notes."""
         ...
 
-    async def delete_notes_older_than(self, profile_id: int, cutoff: datetime) -> list[int]:
+    async def delete_notes_older_than(
+        self, profile_id: int, cutoff: datetime
+    ) -> list[int]:
         """Delete decayed notes and return their ids so the caller can drop their vectors."""
         ...
 
@@ -755,7 +782,10 @@ class RepurposeStore(Protocol):
     """Rewrite requests, their attempts and what the user did with them."""
 
     async def create_request_with_attempts(
-        self, profile_id: int, source_text: str, route_label: str | None,
+        self,
+        profile_id: int,
+        source_text: str,
+        route_label: str | None,
         attempts: Sequence[AttemptIn],
     ) -> tuple[int, list[AttemptOut]]:
         """Store a request and its attempts in ONE transaction; return ``(request_id, attempts)``.
@@ -765,7 +795,10 @@ class RepurposeStore(Protocol):
         ...
 
     async def record_user_action(
-        self, profile_id: int, attempt_id: int, action: Literal["accept", "edit", "reject"],
+        self,
+        profile_id: int,
+        attempt_id: int,
+        action: Literal["accept", "edit", "reject"],
         edited_text: str | None = None,
     ) -> None:
         """Record the user's decision on an attempt (the agent never publishes by itself)."""
@@ -791,7 +824,9 @@ class RequestStore(Protocol):
         """Append a request (re-requests add rows; ``already_requested`` is computed on read)."""
         ...
 
-    async def list_user_requests(self, profile_id: int, *, limit: int = 50) -> list[UserRequestOut]:
+    async def list_user_requests(
+        self, profile_id: int, *, limit: int = 50
+    ) -> list[UserRequestOut]:
         """Return the newest requests."""
         ...
 
@@ -859,7 +894,9 @@ class EvalStore(Protocol):
         """Store an evaluation and return its id."""
         ...
 
-    async def list_evaluations(self, profile_id: int, *, limit: int = 50) -> list[EvaluationRecord]:
+    async def list_evaluations(
+        self, profile_id: int, *, limit: int = 50
+    ) -> list[EvaluationRecord]:
         """Return the newest evaluations."""
         ...
 
@@ -905,14 +942,21 @@ class VectorStore(Protocol):
     """Vectors plus minimal filter metadata. It must never receive ``documents``."""
 
     def upsert(
-        self, collection: str, ids: Sequence[str], embeddings: Sequence[Vector],
+        self,
+        collection: str,
+        ids: Sequence[str],
+        embeddings: Sequence[Vector],
         metadatas: Sequence[VectorFilter],
     ) -> None:
         """Insert or replace vectors. Metadata is limited to ``profile_id``, ``platform``, ``kind``, ``niche_key``."""
         ...
 
     def query(
-        self, collection: str, embedding: Vector, k: int, where: VectorFilter | None = None
+        self,
+        collection: str,
+        embedding: Vector,
+        k: int,
+        where: VectorFilter | None = None,
     ) -> list[VectorHit]:
         """Return the ``k`` nearest ids, closest first."""
         ...
@@ -957,7 +1001,9 @@ class VideoUnavailable(Exception):
 class VideoAnalyzer(Protocol):
     """Analyses a video from a public URL. Never runs without ``VIDEO_PROVIDER`` and its key."""
 
-    async def analyze(self, media_url: str, *, context: str | None = None) -> VideoAnalysis:
+    async def analyze(
+        self, media_url: str, *, context: str | None = None
+    ) -> VideoAnalysis:
         """Return the structured analysis; raise :class:`VideoUnavailable` when it cannot run."""
         ...
 
@@ -989,7 +1035,9 @@ class ProbeResult:
 
     name: str
     status: ProbeStatus
-    detail: str = ""  # "OMITIDA (opcional, falta GROQ_API_KEY)", an exact provider error, ...
+    detail: str = (
+        ""  # "OMITIDA (opcional, falta GROQ_API_KEY)", an exact provider error, ...
+    )
     warnings: tuple[str, ...] = ()  # for example "configured model X no longer exists"
 
 

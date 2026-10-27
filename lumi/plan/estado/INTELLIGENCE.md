@@ -1,6 +1,6 @@
 # Estado de LUMI-INTELLIGENCE
 
-Rama: `lumi-orquestador`. Última actualización: 2026-10-27 ~06:40 UTC.
+Rama: `lumi-orquestador`. Última actualización: 2026-10-27 ~07:30 UTC.
 
 ## Línea base (T0)
 
@@ -12,8 +12,8 @@ Rama: `lumi-orquestador`. Última actualización: 2026-10-27 ~06:40 UTC.
 | --- | --- | --- |
 | T0 Arranque | hecha | Línea base de 418 tests; `estado/` creado. |
 | T1 Esqueleto y puertos | hecha | `lumi_ai/ports.py` v1.0, `lumi_ai/config.py`, `lumi_ai/json_utils.py`, `lumi_ai/agent/result.py`. `uv run pytest lumi_ai -q`: 25 pasan. |
-| T2 Proveedores | siguiente | |
-| T3 Loop y tools | pendiente | |
+| T2 Proveedores | hecha | `lumi_ai/providers/{chain,factory,audio,errors,urls}.py`, `lumi_ai/observability.py`, `lumi_ai/keys.py` (`build_probes(config)`: groq, openrouter, openlux, jev, neatlogs, video). `uv run pytest lumi_ai -q`: 64 pasan, 0 se omiten. Las sondas no se ejecutaron contra proveedores reales (sin keys). |
+| T3 Loop y tools | siguiente | |
 | T4 Pegamento Django | bloqueada por T4/T5 de ARCHITECT | |
 | T5-T12 | pendientes | |
 

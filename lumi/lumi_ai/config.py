@@ -48,7 +48,13 @@ class AIConfig:
     memory_worthy_threshold: float = 0.6
 
     # --- providers ---
-    provider_cooldown_seconds: float = 300.0  # after a 402/429 a candidate rests this long
+    provider_cooldown_seconds: float = (
+        300.0  # after a 401/402/403/429 a candidate rests this long
+    )
+    provider_cooldown_max_seconds: float = (
+        900.0  # ceiling when a provider sends Retry-After
+    )
+    llm_timeout_seconds: float = 60.0
 
     # --- turn classifier, stage 2 ---
     turn_class_jev_enabled: bool = False

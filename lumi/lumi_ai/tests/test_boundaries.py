@@ -6,12 +6,21 @@ import ast
 from pathlib import Path
 
 PACKAGE = Path(__file__).resolve().parents[1]
-FORBIDDEN_ROOTS = {"django", "rest_framework", "fastapi", "sqlmodel", "sqlalchemy", "app"}
+FORBIDDEN_ROOTS = {
+    "django",
+    "rest_framework",
+    "fastapi",
+    "sqlmodel",
+    "sqlalchemy",
+    "app",
+}
 FORBIDDEN_TEXT = ("AtehOfficial", "ateh_x_connect", "DEFAULT_NICHE_HANDLES")
 
 
 def _python_files() -> list[Path]:
-    return [p for p in PACKAGE.rglob("*.py") if "tests" not in p.relative_to(PACKAGE).parts]
+    return [
+        p for p in PACKAGE.rglob("*.py") if "tests" not in p.relative_to(PACKAGE).parts
+    ]
 
 
 def test_no_web_framework_imports() -> None:
@@ -24,7 +33,11 @@ def test_no_web_framework_imports() -> None:
                 roots = [a.name.split(".")[0] for a in node.names]
             elif isinstance(node, ast.ImportFrom) and node.module and node.level == 0:
                 roots = [node.module.split(".")[0]]
-            offenders += [f"{path.relative_to(PACKAGE)}: imports {r}" for r in roots if r in FORBIDDEN_ROOTS]
+            offenders += [
+                f"{path.relative_to(PACKAGE)}: imports {r}"
+                for r in roots
+                if r in FORBIDDEN_ROOTS
+            ]
     assert not offenders, offenders
 
 
