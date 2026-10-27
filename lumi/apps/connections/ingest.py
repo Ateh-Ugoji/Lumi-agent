@@ -12,10 +12,9 @@ Rules that every path follows:
   conversation id, so it stays in ``posts``.
 * A post without an id, text or a parsable date is dropped. A date is never invented.
 * Media is mapped only when the source states its kind (PFM items with a type or MIME). A kind
-  is never guessed from a URL. Xpoz sends bare URLs for X posts. Ports 1.9 allow
-  ``MediaRef.kind = None``, but ``post_media.kind`` is NOT NULL and ``upsert_posts`` would raise
-  ``IntegrityError`` for the whole batch, so X media stays unmapped until ``apps.profiles``
-  skips or stores unknown kinds. Thumbnails are not carried.
+  is never guessed from a URL. Xpoz sends bare URLs for X posts, so those become
+  ``MediaRef(kind=None)`` (ports 1.9, ``post_media.kind`` is nullable since ``profiles.0002``).
+  ``None`` means unknown, never "image". Thumbnails are not carried.
 * Provider payload fields that are not mapped here (tokens, raw ids of other users) are not
   carried over.
 """
@@ -242,6 +241,18 @@ def pfm_media(raw: Any) -> tuple[MediaRef, ...]:
     return tuple(out)
 
 
+def xpoz_media(raw: Any) -> tuple[MediaRef, ...]:
+    """X media from Xpoz ``mediaUrls``: bare URLs, so the kind stays unknown (``None``)."""
+    if not isinstance(raw, list):
+        return ()
+    seen: dict[str, None] = {}
+    for entry in raw:
+        url = _text(entry)
+        if url is not None and url.startswith(("https://", "http://")):
+            seen.setdefault(url)
+    return tuple(MediaRef(kind=None, url=url) for url in seen)
+
+
 def map_pfm_item(
     item: Mapping[str, Any], *, handle: str | None = None
 ) -> PostIn | None:
@@ -317,4 +328,5 @@ def map_xpoz_post(
         language=_text(item.get("lang")),
         source="xpoz",
         text_truncated=detect_truncation(text),
+        media=xpoz_media(item.get("mediaUrls")),
     )

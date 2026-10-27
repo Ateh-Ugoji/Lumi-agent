@@ -16,6 +16,7 @@ from apps.connections.ingest import (
     pfm_metrics,
     routes_to_activity,
 )
+from lumi_ai.ports import MediaRef
 
 from .fakes import fixture
 
@@ -243,7 +244,6 @@ def test_media_is_never_invented() -> None:
 
 
 def test_pfm_media_keeps_only_entries_with_a_stated_kind() -> None:
-    from lumi_ai.ports import MediaRef
 
     item = {
         **fixture("pfm_feed_x_page1.json")["data"][0],
@@ -265,13 +265,31 @@ def test_pfm_media_keeps_only_entries_with_a_stated_kind() -> None:
     assert map_pfm_item({**item, "media": "nope"}).media == ()
 
 
-def test_xpoz_x_media_is_not_mapped_until_persistence_accepts_unknown_kind() -> None:
+def test_xpoz_x_media_keeps_urls_with_an_unknown_kind() -> None:
     post = map_xpoz_post(
         {
             "id": 7,
             "text": "hi",
             "createdAt": "2026-10-20T10:00:00Z",
-            "mediaUrls": ["https://pbs.example/a.jpg"],
+            "mediaUrls": [
+                "https://pbs.example/a.jpg",
+                "https://pbs.example/a.jpg",
+                "javascript:alert(1)",
+                "",
+                None,
+                "https://video.example/b.mp4",
+            ],
         }
+    )
+    assert post.media == (
+        MediaRef(None, "https://pbs.example/a.jpg"),
+        MediaRef(None, "https://video.example/b.mp4"),
+    )
+
+
+@pytest.mark.parametrize("raw", [None, "https://pbs.example/a.jpg", {}, 5])
+def test_xpoz_x_media_ignores_anything_but_a_list(raw) -> None:
+    post = map_xpoz_post(
+        {"id": 7, "text": "hi", "createdAt": "2026-10-20T10:00:00Z", "mediaUrls": raw}
     )
     assert post.media == ()
