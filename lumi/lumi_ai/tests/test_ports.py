@@ -30,6 +30,7 @@ GATEWAYS = [
     ports.ConnectionLinks,
     ports.VideoAnalyzer,
     ports.SemanticJudge,
+    ports.OwnPostSync,
 ]
 
 

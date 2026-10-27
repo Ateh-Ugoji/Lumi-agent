@@ -38,7 +38,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Literal, Protocol, get_args, runtime_checkable
 
-PORTS_VERSION = "1.1"  # 1.1: SemanticJudge
+PORTS_VERSION = "1.2"  # 1.1: SemanticJudge, 1.2: OwnPostSync
 
 # ---------------------------------------------------------------------------
 # Shared vocabulary
@@ -801,7 +801,10 @@ class RepurposeStore(Protocol):
         action: Literal["accept", "edit", "reject"],
         edited_text: str | None = None,
     ) -> None:
-        """Record the user's decision on an attempt (the agent never publishes by itself)."""
+        """Record the user's decision on an attempt (the agent never publishes by itself).
+
+        Raises ``LookupError`` when the attempt does not exist or belongs to another profile.
+        """
         ...
 
 
@@ -1005,6 +1008,30 @@ class VideoAnalyzer(Protocol):
         self, media_url: str, *, context: str | None = None
     ) -> VideoAnalysis:
         """Return the structured analysis; raise :class:`VideoUnavailable` when it cannot run."""
+        ...
+
+
+# ---------------------------------------------------------------------------
+# Own-post synchronisation
+# ---------------------------------------------------------------------------
+
+
+@runtime_checkable
+class OwnPostSync(Protocol):
+    """Pulls the profile's OWN posts from its connected account into Postgres.
+
+    Implemented by LUMI-CONNECT / LUMI-ARCHITECT on top of the connected-account feed and
+    ``apps.profiles.services`` (ingest policy: NULL-preserving metrics, kind routing). The agent
+    tool ``backfill_posts`` only triggers it.
+    """
+
+    async def sync_own_posts(
+        self, profile_id: int, platform: Platform | None = None
+    ) -> dict[str, Any]:
+        """Fetch and store the posts; return a JSON summary (``stored``, ``platform``, ...).
+
+        Raises :class:`SocialDataError` subclasses on provider problems.
+        """
         ...
 
 
