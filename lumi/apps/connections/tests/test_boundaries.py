@@ -31,6 +31,7 @@ DJANGO_GLUE = {
     "models.py",
     "stores.py",
     "accounts.py",
+    "account_links.py",
     "handles_api.py",
     "publish_api.py",
     "mcp_gateway.py",
