@@ -25,6 +25,11 @@ pytestmark = pytest.mark.django_db
         ),
         ("connections-status", {"provider": "pfm"}, "/api/v1/connections/pfm/status"),
         ("connections-provider", {"provider": "x"}, "/api/v1/connections/x"),
+        (
+            "connections-status",
+            {"provider": "google"},
+            "/api/v1/connections/google/status",
+        ),
         ("handles-search", {}, "/api/v1/handles/search"),
         ("handles-saved", {}, "/api/v1/handles/saved"),
         ("handles-select", {}, "/api/v1/handles/select"),

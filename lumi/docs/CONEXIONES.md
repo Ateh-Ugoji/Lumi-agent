@@ -176,7 +176,7 @@ Estado al 2026-10-27. Todo vive en `lumi/apps/connections/`. El núcleo funciona
 | Pieza | Archivo | Qué hace |
 | --- | --- | --- |
 | Configuración | `config.py` | Lee las variables de entorno, valida formatos y excluye los secretos del `repr`. |
-| Cifrado | `apps/core/fields.py` (ARCHITECT) | `EncryptedTextField` con Fernet y rotación: `TOKEN_ENCRYPTION_KEY` cifra, `TOKEN_ENCRYPTION_KEY_PREVIOUS` solo descifra. Los tokens de `ConnectedAccount`, `OAuthState` y `McpAuthAccount` usan ese campo. `crypto.py` es código heredado sin uso en producción, pendiente de borrar junto con la prueba de interoperabilidad de `core`. |
+| Cifrado | `apps/core/fields.py` (ARCHITECT) | `EncryptedTextField` con Fernet y rotación: `TOKEN_ENCRYPTION_KEY` cifra, `TOKEN_ENCRYPTION_KEY_PREVIOUS` solo descifra. Los tokens de `ConnectedAccount`, `OAuthState` y `McpAuthAccount` usan ese campo. |
 | Modelos | `models.py`, `migrations/0001_initial.py` | `ConnectedAccount`, `OAuthState`, `PublishJob`, `McpAuthAccount`, `HandleSearchCache`, `HandleSearchCacheEntry`, `XpozCreditLedger`. Las reglas viven en la base: UNIQUE, CHECK y FK. |
 | Almacenes | `stores.py` | Implementaciones Django de los puertos puros. `OAuthState.consume` es un único `UPDATE ... RETURNING`. `PublishJob` es el libro de idempotencia. |
 | Cliente HTTP | `http.py` | Transporte inyectable, lista de hosts permitidos, sin redirecciones, errores tipados sin URL ni cuerpo. Escrituras sin reintento. |
@@ -194,7 +194,6 @@ Las respuestas de prueba (`tests/fixtures/*.json`) están **escritas a mano** a 
 - `publish_jobs.attempt_id` es un `bigint` nulo sin FK. La `0002` añade la FK cuando INTELLIGENCE publique `repurpose_attempts`. Es una desviación temporal de SCHEMA §8.
 - `stores.py` escribe `SocialHandle` con el ORM porque `apps.profiles.services` (`get_or_create_handle`, `upsert_posts`) aún no existe. Hay que cambiarlo cuando se publique.
 - `PublishJob.external_url` y `HandleSearchCacheEntry.rank` son columnas que añadí a SCHEMA §8 para poder repetir una respuesta y conservar el orden. Falta que ARCHITECT las refleje en `docs/SCHEMA.md`.
-- Borrar `crypto.py` exige que ARCHITECT quite `test_interoperates_with_the_connections_token_cipher` de `apps/core/tests/test_fields.py`.
 - Falta que ARCHITECT monte las rutas: `path("api/v1/", include("apps.connections.urls"))` en `config/urls.py`. Hasta entonces las vistas solo se prueban con un urlconf de pruebas.
 - `0002` añade `platform`, `display_name` y `handle` a `connected_accounts` (PFM necesita saber la red de cada cuenta) y `social_profile_id` a `oauth_states` (para enlazar la cuenta al perfil que se indicó en `connect`). Hay que reflejarlo en SCHEMA §8.
 
@@ -218,3 +217,13 @@ Decisiones:
 - La URL de retorno de PFM se configura en su panel (`PUBLIC_BASE_URL/api/v1/connections/pfm/callback`). `redirect_url_override` existe en la API pero no se usa. Sin verificar contra una cuenta real.
 - Renovación: `accounts.refresh_due()` (cola `connections.refresh_expiring` en `tasks.py` y comando `refresh_connections`). Renueva lo que vence en 7 días. Bloquea la fila durante la llamada porque X rota el refresh token. X apagado no envía nada. Falta que ARCHITECT programe la tarea en Celery beat.
 - Sin verificar: `DELETE /me/permissions` de Meta con un token de Página (se guarda el token de Página, no el de usuario).
+
+## Google (Drive y Docs por MCP) y límites de publicación
+
+Google no es un `SocialProvider`. `GoogleOAuth` cumple el protocolo `OAuthProvider` y reutiliza `OAuthFlow`. Hay un solo permiso por usuario, guardado en `McpAuthAccount(user, "google")` con tokens cifrados. La ruta `/connections/google/status` añade `details` (`scopes`, `expires_at`, `has_refresh_token`), un campo nuevo y opcional que ARCHITECT debe anotar en CONTRATOS. El campo `details` vale `{}` para los demás proveedores.
+
+`apps.connections.mcp_gateway.build_mcp_gateway()` devuelve el puerto `McpGateway`. INTELLIGENCE debe llamarlo y ejecutar `resolve_pending(profile_id, user_message)` antes de cada turno. Las escrituras (crear, editar, borrar) quedan aparcadas en `mcp_pending_writes` (migración 0004, una por perfil) y solo se ejecutan tras un sí corto y claro. Cualquier otro mensaje las cancela. Sin `GOOGLE_OAUTH_CLIENT_ID` y `GOOGLE_OAUTH_CLIENT_SECRET`, `connect` responde 503 con la lista de variables. La sonda `google` de `check_keys` envía un código inválido: `invalid_grant` significa que el cliente es válido.
+
+Sin verificar contra el servicio real: el servidor MCP de Google, el consentimiento y el refresco solo se probaron con servidores simulados en loopback.
+
+Los límites de longitud al publicar salen de `lumi_ai.generation.platforms` (`SocialProvider.validate_draft`), la misma fuente que usa el generador: X 280, LinkedIn 3000, Facebook 63.206 (no oficial), Instagram 2200 con máximo 5 hashtags, TikTok 2200 en unidades UTF-16. Ya no hay tabla local.
