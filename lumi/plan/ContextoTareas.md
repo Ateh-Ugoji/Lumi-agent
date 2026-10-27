@@ -335,3 +335,5 @@ Se retoma desde TRASPASO en Windows 11 (Node 22.13, Python 3.12 vía uv). Reglas
 - Docker Desktop está instalado pero apagado, así que `docker compose` sigue sin probarse.
 
 **Siguiente**: probar `docker compose` con Docker encendido, levantar Django y el frontend con placeholders, y afinar el mapa de paridad (270 de 364 tests mapeados a archivo entero).
+
+**Fase 2 (Windows, sin keys reales)**: `migrate` aplica limpio sobre Postgres de pgserver; `check_keys` da OK en base, secret y cifrado, FALLA en Groq (401, placeholder) y OMITIDA en el resto; uvicorn ASGI (`config.asgi:application`) responde `GET /health` con `{"status":"ok","checks":{"database":"ok","migrations":"ok"}}`; el registro por API devuelve token; el frontend en el puerto 3010 muestra el login, entra con una cuenta de prueba local y carga la pantalla de chat sin errores de consola; CORS permite `http://localhost:3010`. No se envió ningún mensaje de chat (necesita una key real de Groq) ni se probó Playwright.
