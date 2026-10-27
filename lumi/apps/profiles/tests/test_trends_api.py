@@ -206,5 +206,5 @@ def test_a_failed_scan_is_a_502_with_the_reason(api, profile, fake_scan):
     fake_scan({"error": "no accounts to check on x", "new_matches_found": 0})
     response = api.post(f"{BASE}/scan", {"profile_id": profile.pk}, format="json")
     assert response.status_code == 502
-    assert response.json()["error"]["code"] == "scan_failed"
+    assert response.json()["error"]["code"] == "profiles.scan_failed"
     assert response.json()["error"]["details"]["reason"] == "no accounts to check on x"

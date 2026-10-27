@@ -191,7 +191,7 @@ class ScanTrendsView(APIView):
         )
         if result.get("error"):
             raise ApiError(
-                "scan_failed",
+                "profiles.scan_failed",
                 "No se pudo completar el escaneo de tendencias.",
                 status_code=status.HTTP_502_BAD_GATEWAY,
                 details={"reason": str(result["error"])[:300]},

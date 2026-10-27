@@ -185,7 +185,7 @@ def test_without_a_runtime_the_agent_routes_answer_503(api, profile, settings):
             path, {"profile_id": profile.pk, "message": "hi"}, format="json"
         )
         assert response.status_code == 503
-        assert response.json()["error"]["code"] == "chat_unavailable"
+        assert response.json()["error"]["code"] == "chat.unavailable"
     # history does not need the agent
     assert api.get(f"{BASE}/history?profile_id={profile.pk}").status_code == 200
 

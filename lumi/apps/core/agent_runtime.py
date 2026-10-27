@@ -9,7 +9,7 @@ optional while it is being built). The runtime is a module or object with:
 * ``async scan_trends(profile_id, handles, min_likes) -> Mapping`` (the ``check_niche_trends`` tool result)
 
 It comes from ``set_runtime`` (tests, or INTELLIGENCE's ``ready()``) or else from the dotted path
-in ``settings.LUMI_CHAT_RUNTIME``. When neither works the routes answer 503 ``chat_unavailable``.
+in ``settings.LUMI_CHAT_RUNTIME``. When neither works the routes answer 503 ``chat.unavailable``.
 """
 
 from __future__ import annotations
@@ -58,14 +58,14 @@ def get_runtime() -> ChatRuntime:
     except ImportError:
         logger.warning("chat runtime %s is not importable", path)
         raise ApiError(
-            "chat_unavailable",
+            "chat.unavailable",
             "El asistente no está disponible por ahora.",
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
         ) from None
     if not (hasattr(module, "run_turn") and hasattr(module, "stream_turn")):
         logger.warning("chat runtime %s lacks run_turn/stream_turn", path)
         raise ApiError(
-            "chat_unavailable",
+            "chat.unavailable",
             "El asistente no está disponible por ahora.",
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
         )

@@ -32,7 +32,12 @@ Protocolo de aceptación: cada equipo responde con un commit que diga `CONTRATO 
 | CORS | `CORS_ALLOWED_ORIGINS` desde el entorno, sin `*`. Por defecto `http://localhost:3010,http://127.0.0.1:3010`. |
 | Idempotencia | Los `POST` que crean recursos externos (publicar) aceptan `Idempotency-Key`. |
 
-Catálogo de códigos de error. Los equipos pueden añadir códigos propios con prefijo de dominio (`connections.token_expired`).
+**Regla de códigos.** Hay dos niveles y ningún otro:
+
+1. Los códigos genéricos de la tabla siguiente, sin prefijo. Valen para cualquier ruta y el cliente los trata igual en todas.
+2. Todo código propio de un dominio lleva el prefijo `<dominio>.<motivo>`, en `snake_case` y con un solo punto (`publish.not_connected`, `chat.unavailable`). El dominio es la función, no la app: `connections`, `publish`, `chat`, `profiles`, `voice`, `job`. Un dominio nuevo se anota en esta lista.
+
+`apps/core/tests/test_error_codes.py` recorre el código y falla si un `ApiError` usa un código fuera de estos dos niveles.
 
 | `code` | HTTP | Cuándo |
 | --- | --- | --- |
@@ -46,6 +51,7 @@ Catálogo de códigos de error. Los equipos pueden añadir códigos propios con 
 | `not_configured` | 503 | Falta una variable opcional del servicio pedido. `details.env_vars` la nombra. |
 | `internal_error` | 500 | Error no previsto. El detalle va al log, no a la respuesta. |
 | `method_not_allowed` | 405 | Verbo no admitido en la ruta. |
+| `payload_too_large` | 413 | El cuerpo o el archivo supera el límite de la ruta (audio de `POST /voice/transcribe`). |
 
 El manejador `apps/core/errors.py` traduce las excepciones de DRF y de Django a este formato, también las rutas inexistentes (`404`) y los fallos del servidor (`500`). Para un error de dominio, un servicio lanza `ApiError(code, message, status_code=..., details=...)`. Los `message` están en español y son para mostrar; el cliente decide por `code`, que es estable y no cambia con el idioma del texto.
 
@@ -90,7 +96,7 @@ Un `profile_id` ya no tiene valor por defecto en ninguna ruta ni cuerpo. El lega
 | `DELETE /chat/history?profile_id=` | `204`. |
 | `POST /chat/title` | `{message}` a `{title}`. Sin estado. |
 
-`/chat` y `/chat/stream` llaman al módulo que nombra `LUMI_CHAT_RUNTIME` (por defecto `apps.intelligence.runtime`) a través de `apps/core/agent_runtime.py`. Si el módulo no existe responden `503 chat_unavailable`. El módulo expone `run_turn`, `stream_turn`, `generate_title(message)` y `scan_trends(...)`. `message` admite hasta 8000 caracteres. Las rutas de chat usan el límite `chat` de 30 por minuto y usuario. `DELETE /chat/history` responde `204` también si no había nada. `POST /trends/scan` responde `502 scan_failed` si el runtime falla.
+`/chat` y `/chat/stream` llaman al módulo que nombra `LUMI_CHAT_RUNTIME` (por defecto `apps.intelligence.runtime`) a través de `apps/core/agent_runtime.py`. Si el módulo no existe responden `503 chat.unavailable`. El módulo expone `run_turn`, `stream_turn`, `generate_title(message)` y `scan_trends(...)`. `message` admite hasta 8000 caracteres. Las rutas de chat usan el límite `chat` de 30 por minuto y usuario. `DELETE /chat/history` responde `204` también si no había nada. `POST /trends/scan` responde `502 profiles.scan_failed` si el runtime falla.
 
 ### 3.4 Eventos SSE de `/chat/stream`
 
@@ -121,12 +127,33 @@ ARCHITECT monta los `urls.py` de cada app vacíos. El equipo dueño llena el suy
 | `POST /connections/{provider}/connect` | CONNECT | Responde JSON `{authorize_url}` y **no** redirige: una navegación del navegador no puede enviar `Authorization`. El frontend hace el `fetch` y luego `window.location = authorize_url`. |
 | `GET /connections/{provider}/callback` (pública) | CONNECT | El proveedor redirige aquí. Identifica al usuario por la fila de `oauth_states`, no por cabecera. Responde `302` a `FRONTEND_URL`, nunca JSON. |
 | `GET /connections/{provider}/status`, `DELETE /connections/{provider}` | CONNECT | `provider` en `pfm`, `meta`, `linkedin`, `x`, `google`. El estado trae `provider`, `configured`, `connected`, `stale` y `accounts`, más `details` (objeto opcional con datos del proveedor que no son cuentas; vacío salvo en Google). En Google: `scopes` (lista), `expires_at` (fecha o `null`) y `has_refresh_token` (booleano). Nunca un token. Sin refresh token, la concesión caduca con el access token y el estado sale `stale`. |
+| `POST /connections/{provider}/link` (**nuevo**, aceptado) | CONNECT | Enlaza una cuenta ya conectada (una Página de Meta, por ejemplo) a un perfil. Contrato en 4.1. |
 | `GET /handles/search`, `GET /handles/saved`, `POST /handles/select`, `GET /handles/stats` | CONNECT | El modelo `SocialHandle` es de ARCHITECT. `stats` devuelve `live_budget` (tope por ejecución, `XPOZ_RUN_CREDIT_BUDGET`) y `live_budget_by_platform`: objeto `{red: tope}` solo para las redes con búsqueda de usuarios en vivo (hoy `x`, `instagram` y `tiktok`). Cada valor es `XPOZ_RUN_CREDIT_BUDGET_<RED>` si existe y, si no, `live_budget`. |
 | `POST /publish` | CONNECT | Cuerpo con `attempt_id` o texto, `platform`, `dry_run`. Cabecera `Idempotency-Key`. |
 | `POST /voice/transcribe` | INTELLIGENCE | |
 | `POST /repurpose` | INTELLIGENCE | |
 
 Las rutas de CONNECT usan el prefijo `/connections/` como fija `docs/CONEXIONES.md`. La ruta de Google del legado (`/mcp/google/*`) desaparece.
+
+### 4.1 `POST /connections/{provider}/link`
+
+Motivo: un login de Meta con varias Páginas guarda todas en `connected_accounts` y no enlaza ninguna al perfil. Sin enlace, `POST /publish` responde `publish.not_connected`. Esta ruta deja al usuario elegir la Página de cada perfil.
+
+| Punto | Decisión |
+| --- | --- |
+| Estado | **Aceptado** (ARCHITECT, a petición de CONNECT). CONNECT lo implementa. |
+| Autenticación | `Authorization: Token <clave>`, como toda ruta no pública. |
+| Cuerpo | `{"account_id": "<id>", "profile_id": <int>}`. Los dos son obligatorios. `account_id` es el campo `id` que devuelve `GET /connections/{provider}/status` en cada cuenta (el `external_account_id`, texto), no una clave interna. |
+| Proveedores | `pfm`, `meta`, `linkedin` y `x`. `google` no enlaza cuentas a perfiles: `400 connections.unsupported`. Un `provider` desconocido responde igual que las demás rutas de `/connections/`. |
+| Permisos | `IsProfileOwner` sobre `profile_id`. Esta clase deja pasar una petición sin `profile_id`, así que la vista debe exigirlo (`400 validation_error` con `details`). |
+| Propiedad de la cuenta | La cuenta se busca con `user = request.user`, `provider` y `external_account_id`. Si no existe o es de otro usuario: `404 not_found`, el mismo que un perfil ajeno. Nunca `403`. |
+| Efecto | En una sola transacción, con bloqueo de la fila de la cuenta (`select_for_update`): si el perfil ya tenía otra cuenta del mismo `provider`, esa pasa a `social_profile = NULL` (sigue conectada, sin enlace); luego `social_profile` de la cuenta elegida pasa a ser el perfil. El orden evita chocar con el único parcial (`social_profile`, `provider`). Si la cuenta estaba enlazada a otro perfil del usuario, se mueve: ese perfil queda sin cuenta de ese proveedor. |
+| Idempotencia | Repetir la misma petición no escribe nada y responde lo mismo (`200`). No hace falta `Idempotency-Key`: el estado final es el mismo con una repetición o con cien. |
+| Respuesta `200` | `{"provider": "meta", "profile_id": 7, "account": {...}, "replaced_account_id": null, "moved_from_profile_id": null}`. `account` es el mismo objeto que cada elemento de `accounts` en `status`. `replaced_account_id` es el `id` de la cuenta que dejó el perfil, o `null`. `moved_from_profile_id` es el perfil que perdió la cuenta, o `null`. En una repetición los dos son `null`. Nunca un token. |
+| Errores | `400 validation_error` (falta un campo o no es del tipo). `400 connections.unsupported` (proveedor sin enlaces). `404 not_found` (perfil o cuenta no existen o no son del usuario). `409 connections.account_unusable` (la cuenta está en `revoked` o `error`: hay que reconectar antes). `409 connections.platform_mismatch` (la cuenta tiene `platform` y no coincide con la red del perfil; una cuenta con `platform` vacío enlaza con cualquier perfil). `429 rate_limited` con el límite general. |
+| Desenlazar | No hay ruta. Enlazar otra cuenta reemplaza la anterior y `DELETE /connections/{provider}?account_id=` desconecta una. Si hace falta desenlazar sin desconectar, se pide como cambio (sección 12). |
+
+CONNECT confirma qué valor de `platform` guarda para una Página de Meta con Instagram: de eso depende cuándo salta `connections.platform_mismatch`. Las pruebas mínimas: enlace feliz, repetición, reemplazo, movimiento entre perfiles, cuenta ajena (404), perfil ajeno (404), `google` (400), cuenta revocada (409) y que `POST /publish` deje de responder `publish.not_connected` tras enlazar.
 
 ## 5. Capa de servicios
 
@@ -293,7 +320,9 @@ Pendiente de otros equipos, sin importador hoy (el `--verify` los marca `sin imp
 | 18 | Analytics | **Aceptado por el orquestador.** Los totales suman la lectura más reciente de cada post. El código legado sumaba todas las lecturas y contaba un post varias veces. Las series (`reach_series`, `saves_series`) siguen usando todas las lecturas. Está en la matriz de paridad (`plan/estado/ARCHITECT.md`) con test. | Orquestador |
 | 19 | Importador | **Aceptado**: todo en una transacción (un savepoint por importador) e ids conservados solo en perfiles, posts y chat (sección 10). **Rechazado** perder la lectura de métricas duplicada: cero pérdida verificable; `legacy_import_map` guarda `outcome` y el `payload` de cada fila fusionada u omitida (`SCHEMA.md` 10). | Orquestador |
 | 20 | `connected_accounts.external_account_id` de PFM | **Aceptado.** Va en texto plano, no cifrado. Es el identificador con el que se llama a PFM y la clave del único (`provider`, `external_account_id`), no una credencial: PFM guarda las credenciales. Cifrarlo impediría la restricción única y la búsqueda. Corrige cualquier texto anterior de ARCHITECT que dijera que se cifraba. Los tokens (`access_token`, `refresh_token`) siguen cifrados. | CONNECT |
-| 21 | `post_media.kind` | Obligatorio (`image`, `video`, `gif`) | Admite NULL = tipo desconocido (puertos 1.9, `MediaRef.kind` puede ser `None`). No se adivina por la URL. Un tipo inválido sigue rechazado por el CHECK. `lumi.db` no guarda medios, así que el importador no crea ninguno. | Aceptada (orquestador y Christian) | ARCHITECT, INTELLIGENCE |
+| 21 | `post_media.kind` | **Aceptada** (orquestador y Christian). Antes era obligatorio (`image`, `video`, `gif`). Ahora admite NULL = tipo desconocido (puertos 1.9, `MediaRef.kind` puede ser `None`). No se adivina por la URL. Un tipo inválido sigue rechazado por el CHECK. `lumi.db` no guarda medios, así que el importador no crea ninguno. | ARCHITECT, INTELLIGENCE |
+| 22 | Códigos de error | **Aceptada** (a petición de CONNECT). Dos niveles: los genéricos de la sección 2 sin prefijo y todo código de un dominio como `<dominio>.<motivo>`. Ya era la práctica de CONNECT (`connections.*`, `publish.*`) y de `job.*`; no hay cambio en sus rutas. Cambian `chat_unavailable` a `chat.unavailable` y `scan_failed` a `profiles.scan_failed` (ARCHITECT, hecho), y `transcription_failed` y `transcription_unavailable` a `voice.*` (INTELLIGENCE, pendiente; `test_error_codes.py` lo vigila). `payload_too_large` pasa al catálogo genérico (413). | ARCHITECT, CONNECT, INTELLIGENCE |
+| 23 | `POST /connections/{provider}/link` | **Aceptada** (a petición de CONNECT). Ruta nueva con contrato en 4.1. No cambia ninguna tabla: usa `connected_accounts.social_profile` y su único parcial. | CONNECT |
 
 ## 12. Cómo se pide un cambio
 

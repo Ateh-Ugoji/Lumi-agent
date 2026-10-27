@@ -146,7 +146,7 @@ Solo migraciones de Django. Cada tabla, restricción e índice nuevos se documen
 | `Falta la variable de entorno obligatoria DATABASE_URL` | No hay `.env` o la variable está vacía. Mira el paso 2 |
 | `connection refused` al migrar | Postgres no está levantado: `docker compose up -d db` |
 | Django dice que la clave de cifrado falta o no es válida | `TOKEN_ENCRYPTION_KEY` vacía o no es una clave Fernet. Genera una (paso 3) |
-| El chat responde `503 chat_unavailable` | El agente no está disponible, normalmente por una key que falta. Ejecuta `manage.py check_keys` |
+| El chat responde `503 chat.unavailable` | El agente no está disponible, normalmente por una key que falta. Ejecuta `manage.py check_keys` |
 | El chat no llega evento a evento | Estás sirviendo con WSGI (`runserver`). Usa uvicorn con `config.asgi:application` |
 | `Address already in use` en 8000 o 3010 | Otra copia está corriendo. Busca el proceso con `lsof -i :8000` y ciérralo |
 | El frontend no llega a la API | El backend no está arriba, o `VITE_API_BASE` apunta a otro sitio |
