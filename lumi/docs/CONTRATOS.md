@@ -12,10 +12,10 @@ Este documento fija lo que los otros dos equipos pueden usar sin preguntar: ruta
 | `core.models.TimestampedModel`, `core.choices`, `core.fields.EncryptedTextField` | publicada |
 | `accounts.0001_initial` (`User`, `AuthToken`), `AUTH_USER_MODEL = "accounts.User"` | publicada |
 | `profiles.0001_initial` (11 tablas de la sección 6.3 de `SCHEMA.md`) | publicada |
-| `core.0001_initial` (`BackgroundJob`, `LegacyImportMap`), `chat.0001_initial` (`ChatMessage`) | T3, pendiente |
-| Capa de servicios de `profiles` y `chat` | T5, pendiente |
-| Rutas de ARCHITECT (sección 3) | T6 y T7, pendiente |
-| Importador `import_legacy` | T8, pendiente |
+| `core.0001_initial` (`BackgroundJob`, `LegacyImportMap`), `chat.0001_initial` (`ChatMessage`) | publicada |
+| Capa de servicios de `profiles` y `chat` (sección 5), `core.jobs` | publicada |
+| Rutas de ARCHITECT (sección 3), SSE y tendencias | publicada |
+| Importador `import_legacy` (sección 10) | publicada para `profiles` y `chat`. INTELLIGENCE y CONNECT añaden sus tablas (sección 10). |
 
 Protocolo de aceptación: cada equipo responde con un commit que diga `CONTRATO ARCHITECT ACEPTADO <sha>` (el SHA de este archivo) en su `plan/estado/<EQUIPO>.md`, y anota ahí cada punto en que discrepa. Un cambio incompatible en este archivo sube la versión mayor y lo avisa el orquestador.
 
@@ -69,7 +69,7 @@ Los cuerpos coinciden con los de FastAPI salvo lo marcado como **cambio**.
 | Ruta | Respuesta |
 | --- | --- |
 | `GET /profiles` | `{profiles: [{id, name, platform, handle, has_voice_profile, listening_active, timezone, timezone_source}]}` solo los del usuario. `name` es `handle.display_name` o, si está vacío, el handle. |
-| `POST /profiles` (**nuevo**) | Cuerpo `{platform, handle}`. `201` con el resumen. Crea el handle si falta (`get_or_create_handle`) y el perfil. Lanza `profile.bootstrap` y responde también `job_id`. |
+| `POST /profiles` (**nuevo**) | Cuerpo `{platform, handle}`. `201` con el resumen si crea el perfil y `200` si el usuario ya lo tenía. Crea el handle si falta (`get_or_create_handle`) y el perfil. Lanza `profile.bootstrap` y responde también `job_id`. |
 | `POST /profiles/{id}/select` | `{profile_id, name, voice_profile_exists, post_count, listening_active}`. Sin estado en servidor: el cliente guarda la selección. |
 | `GET /profiles/{id}/analytics` | Solo lectura. Mismo cuerpo que hoy. **Cambio**: ya no actualiza datos al leerlo. |
 | `POST /profiles/{id}/refresh` (**nuevo**) | `202 {job_id}`. Lanza `profile.refresh` (sincroniza posts y métricas, recalcula el baseline). |
@@ -90,11 +90,11 @@ Un `profile_id` ya no tiene valor por defecto en ninguna ruta ni cuerpo. El lega
 | `DELETE /chat/history?profile_id=` | `204`. |
 | `POST /chat/title` | `{message}` a `{title}`. Sin estado. |
 
-`/chat` y `/chat/stream` llaman a `apps.intelligence.runtime` (`run_turn` y `stream_turn`). Hasta que exista, ARCHITECT usa un doble de pruebas que devuelve un turno fijo.
+`/chat` y `/chat/stream` llaman al módulo que nombra `LUMI_CHAT_RUNTIME` (por defecto `apps.intelligence.runtime`) a través de `apps/core/agent_runtime.py`. Si el módulo no existe responden `503 chat_unavailable`. El módulo expone `run_turn`, `stream_turn`, `generate_title(message)` y `scan_trends(...)`. `message` admite hasta 8000 caracteres. Las rutas de chat usan el límite `chat` de 30 por minuto y usuario. `DELETE /chat/history` responde `204` también si no había nada. `POST /trends/scan` responde `502 scan_failed` si el runtime falla.
 
 ### 3.4 Eventos SSE de `/chat/stream`
 
-`Content-Type: text/event-stream`. Cada evento es `data: <json>\n\n`. Cabeceras `Cache-Control: no-cache` y `X-Accel-Buffering: no`. Cada 15 segundos sin eventos se envía el comentario `: ping`. Si el cliente se desconecta, el turno se cancela.
+`Content-Type: text/event-stream`. Cada evento es `data: <json>\n\n`. Cabeceras `Cache-Control: no-cache` y `X-Accel-Buffering: no`. Cada 15 segundos sin eventos se envía el comentario `: ping`. Si el cliente se desconecta, el turno se cancela. El streaming exige un servidor ASGI (`uvicorn config.asgi:application`). Con WSGI la respuesta se acumula entera.
 
 | `type` | Campos |
 | --- | --- |
@@ -153,6 +153,10 @@ Todos los datos salen como los dataclass de `lumi_ai.ports` o como `TypedDict`, 
 | `claim_due_polls(limit=50) -> list[int]` | Un solo `UPDATE ... RETURNING profile_id` (ver `SCHEMA.md` 6.3). Dos workers no reclaman el mismo perfil. |
 
 `apps/chat/services.py`: `append_message(profile_id, message: ChatMessageIn) -> int`, `history(profile_id, limit) -> list[ChatMessageOut]` (cumple `ChatStore`), `clear_history(profile_id)`.
+
+`get_posts(post_ids, *, profile_id=None)`: `profile_id` decide la etiqueta de cada `PostOut`. Si el llamador lo pasa, esa es la etiqueta. Si no, se usa el perfil dueño del post con el id más bajo. Un post de un competidor, que ningún perfil posee, sale con `profile_id = 0`.
+
+`apps/core/jobs.py`: `BackgroundJob` y el despacho. `LUMI_JOB_DISPATCH=none` (por defecto) deja el trabajo en `queued` para un worker externo. `eager` lo ejecuta en la misma petición, solo para pruebas y desarrollo. Los tipos `profile.bootstrap` y `profile.refresh` todavía no tienen manejador: INTELLIGENCE o CONNECT registran el suyo con el decorador `@jobs.register(kind)` de `apps.core.jobs`. El manejador recibe un `JobContext` y devuelve un `dict` con el resultado o `None`.
 
 `MatchStore.record_listening_match(profile_id, post_id, score=None) -> bool` (puertos 1.6) lo implementa INTELLIGENCE sobre `profiles.services.record_listening_match`. El post ya tiene que estar guardado con `PeerPostStore.save_peer_posts`; la fila de `listening_matches` es solo el puente (perfil, post). Devuelve `False` si el vínculo ya existía, así que `scan_trends` cuenta solo las coincidencias nuevas.
 
@@ -239,17 +243,28 @@ Renueva los tokens que caducan en menos de 7 días e imprime solo recuentos, nun
 
 ## 10. Importador `import_legacy` (T8)
 
-`python manage.py import_legacy --sqlite PATH [--user EMAIL] [--dry-run] [--memory-md PATH]`
+`python manage.py import_legacy --sqlite PATH [--user EMAIL] [--dry-run] [--memory-md PATH] [--verify]`
 
 | Punto | Regla |
 | --- | --- |
-| Entrada | Un `lumi.db` de SQLite del sistema anterior. Es el único uso de SQLite que queda y es solo lectura (`sqlite3` con `mode=ro`). Si hay datos reales en `/workspace/lumi-data/lumi.db`, el ensayo se hace sobre una copia. |
-| Usuario | Todos los datos legados son de un solo usuario. `--user` lo crea con contraseña inutilizable si no existe. |
-| Repetible | Escribe `legacy_import_map`. Una segunda ejecución no duplica ni cambia nada. |
-| Orden | Handles, perfiles, posts, métricas, chat, inteligencia, conexiones. Cada tabla en una transacción. |
-| Reglas | Enums en minúsculas. `alerted_at` y `alert_dismissed` pasan a `alerts` (sección 10 de `SCHEMA.md`). Fechas desconocidas quedan `NULL`. Métricas ausentes quedan `NULL`, no 0. |
-| Verificación | `import_legacy --verify` compara conteos por tabla legada contra `legacy_import_map` y falla con la diferencia. Las 21 tablas tienen que estar cubiertas. |
-| Secretos | El importador no copia tokens en claro a logs. Los de `mcp_auth_accounts` y `profiles.pfm_account_id` se cifran con `EncryptedTextField` al escribirse. |
+| Entrada | Un `lumi.db` de SQLite del sistema anterior. Es el único uso de SQLite que queda. Se abre solo lectura (`mode=ro`) y el archivo no cambia. Una tabla que falta se trata como vacía. No había un `lumi.db` real en `/workspace/lumi-data/`: los tests usan una base sintética construida con los modelos legados (`apps/core/tests/legacy_db.py`). |
+| Usuario | Todos los datos legados son de un solo usuario. `--user` lo crea con contraseña inutilizable si no existe. Sin `--user` se usa `importado@lumi.invalid`. |
+| Transacción | **Una sola transacción para todo** (cambio respecto a "cada tabla en una transacción"), con un savepoint por importador. Un error deja la base como estaba. `--dry-run` corre todo y revierte al final. |
+| Repetible | Cada fila importada o descartada queda en `legacy_import_map`. Una segunda ejecución no duplica ni cambia nada y cuenta las filas como "ya importadas". Las filas descartadas llevan `target_table = "(omitida)"` y `target_pk = 0`. Las filas fusionadas apuntan a la fila que sobrevive. |
+| Ids | Se conservan solo en `social_profiles`, `posts` y `chat_messages`. El resto recibe ids nuevos y el mapa guarda la relación. Es una excepción a la regla general de `SCHEMA.md` 10. Tras insertar con id explícito se ajusta la secuencia. Si un id pedido ya lo usa una fila ajena, el comando falla con `ImportConflict` y no importa nada. |
+| Fusiones | Mismo handle normalizado en dos perfiles: sobrevive el de id más bajo y sus hijos pasan a él. Duplicados de `profile_snapshots` por (handle, `captured_at`) y de `metric_snapshots` por (post, `captured_at`): gana el id legado mayor. `user_activity` que repite un post: gana la fila de `posts`. `listening_matches` reutiliza el post existente y fusiona el par (perfil, post) repetido. |
+| Reglas | Enums en minúsculas. `alerted_at` y `alert_dismissed` pasan a `alerts` (`spike` en posts, `niche_match` en escucha) y `dismissed_at` queda `NULL`. Fechas sin zona se leen como UTC. Fechas ilegibles quedan `NULL`. Métricas ausentes o negativas quedan `NULL`, no 0. Un `kind` desconocido pasa a `original`. Plataformas o handles no válidos se descartan con aviso. |
+| Verificación | `--verify` compara, por cada tabla de `LEGACY_TABLES` (21), las filas del legado con las `source_pk` distintas del mapa. Estados `ok`, `difiere` y `sin importador`. Falla si alguna tabla con filas no cuadra. |
+| Secretos | Ni los tokens ni `pfm_account_id` salen en logs ni en el informe. |
+
+Cómo añade tablas otro equipo: crear `apps/<app>/legacy_import.py` y llamar a `register(Importer(name, tables, order, run))` (de `apps.core.legacy_import`). El comando descubre el módulo solo. Rangos de `order`: `profiles` 10 a 79, `chat` 80 a 99, INTELLIGENCE 100 a 199, CONNECT 200 a 299. `run(ctx)` recibe un `ImportContext` con `table(name)` (filas legadas), `mapped`, `is_done`, `remember`, `skip`, `warn`, `flush` y `cache`. `ctx.memory_md` trae el texto de `--memory-md`. `apps.profiles.legacy_import.profile_targets(ctx)` da, por id legado de perfil, el par `(social_profile_id, handle_id)`.
+
+Pendiente de otros equipos, sin importador hoy (el `--verify` los marca `sin importador` si tienen filas):
+
+| Dueño | Tablas |
+| --- | --- |
+| INTELLIGENCE | `user_search_requests`, `turn_classifications`, `voice_profiles`, `style_answers`, `own_post_analysis`, `post_taggings`, `peer_frameworks`, `niche_framework_reports`, `repurpose_requests`, `repurpose_attempts`, `user_actions` y el texto de `--memory-md` |
+| CONNECT | `mcp_auth_accounts` y las `connected_accounts` de pfm. Lee `profiles.pfm_account_id` del legado por su cuenta, usa `profile_targets(ctx)` y cifra el valor con `EncryptedTextField`. Un id que empieza por `demo-` no crea cuenta. |
 
 ## 11. Desviaciones y choques con el plan o con otros equipos
 
@@ -272,6 +287,8 @@ Renueva los tokens que caducan en menos de 7 días e imprime solo recuentos, nun
 | 15 | Mensajes de error | **Aceptado.** Los `message` van en español; el cliente decide por `code`. | Orquestador |
 | 16 | Evaluaciones y transacción | **Pendiente de aceptación.** `GenerationFlow` llama primero a `create_request_with_attempts` y después a `EvalStore.save_evaluation` una vez por intento, cada llamada en su propia transacción. Es una desviación de la fila 2 de `SCHEMA.md` ("una transacción"): el puerto devuelve los `attempt_id` solo después de crear los intentos. Un fallo en el segundo paso deja intentos sin evaluación (el flujo lo registra en `warnings`, no en un error). No puede quedar una evaluación huérfana y `generation_evaluations.attempt_id` sigue siendo obligatoria. **Opción preferida (cambio de puerto, la decide INTELLIGENCE):** el glue de Django no puede envolver las dos llamadas en un `transaction.atomic()`, porque entre ellas hay un `await` en el flujo y Django no admite transacciones que cruzan `await` (cada `sync_to_async` abre y cierra la suya). Sí se puede dentro de una sola función síncrona: `create_request_with_attempts(..., evaluations=...)` recibe las evaluaciones ya calculadas por `attempt_no`, inserta los intentos con `INSERT ... RETURNING id` y las evaluaciones con esos ids, todo en un `atomic()`. Con eso la fila 2 se cumple tal como está escrita. | INTELLIGENCE |
 | 17 | `niche_reports.origin` | **Aceptado.** `varchar(24)` en lugar de `varchar(20)`: `legacy_peer_frameworks` tiene 22 caracteres. `SCHEMA.md` queda corregido. | INTELLIGENCE |
+| 18 | Analytics | El puerto suma la lectura más reciente de cada post. El código legado sumaba todas las lecturas y contaba un post varias veces. | Frontend |
+| 19 | Importador | Todo en una transacción y ids conservados solo en perfiles, posts y chat (sección 10). | Orquestador |
 
 ## 12. Cómo se pide un cambio
 
