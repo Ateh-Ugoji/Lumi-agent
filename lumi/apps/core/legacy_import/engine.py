@@ -217,7 +217,17 @@ class ImportContext:
         if reason:
             self.warn(f"{source_table} {row['id']}: {reason}")
 
-    def skip(self, source_table: str, row: dict[str, Any], reason: str) -> None:
+    def skip(self, source_table: str, row: dict[str, Any] | Any, reason: str) -> None:
+        """Record a legacy row that cannot be imported, keeping the whole row.
+
+        A bare legacy id is accepted (the old signature): the row is read back so the
+        payload is never lost.
+        """
+        if not isinstance(row, dict):
+            found = self.legacy.get(source_table, row)
+            if found is None:
+                raise ValueError(f"{source_table} {row}: the legacy row does not exist")
+            row = found
         self.remember(
             source_table,
             row["id"],

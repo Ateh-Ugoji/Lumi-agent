@@ -419,3 +419,18 @@ def test_verify_flags_a_missing_payload(legacy):
         )
     with pytest.raises(CommandError, match="posts \\(difiere\\)"):
         run(legacy, "--verify")
+
+
+def test_skip_accepts_a_bare_legacy_id_and_still_keeps_the_row(legacy):
+    from apps.core.legacy_import import ImportContext, LegacyDb
+
+    db = LegacyDb(str(legacy))
+    try:
+        ctx = ImportContext(db, None)
+        ctx.skip("posts", 11, "motivo")
+        ctx.flush()
+    finally:
+        db.close()
+    entry = LegacyImportMap.objects.get(source_table="posts", source_pk="11")
+    assert entry.outcome == "skipped"
+    assert json.loads(entry.payload)["id"] == 11

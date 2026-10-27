@@ -39,6 +39,14 @@ class LegacyDb:
             return 0
         return self._conn.execute(f'SELECT COUNT(*) FROM "{table}"').fetchone()[0]
 
+    def get(self, table: str, pk: Any) -> dict[str, Any] | None:
+        if table not in self._tables:
+            return None
+        found = self._conn.execute(
+            f'SELECT * FROM "{table}" WHERE "id" = ?', (pk,)
+        ).fetchone()
+        return dict(found) if found else None
+
     def ids(self, table: str) -> set[str]:
         if table not in self._tables:
             return set()
