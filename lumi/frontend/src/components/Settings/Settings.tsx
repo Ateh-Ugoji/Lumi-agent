@@ -1,13 +1,21 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useLightMode } from "../../hooks/useLightMode";
 import { IconArrowBoxLeft, IconMoon, IconSun } from "../Sidebar/Icons";
-import { getProfiles, getConnectAuthUrl, type ProfileSummary } from "../../api/agent";
+import {
+  getProfiles,
+  getConnectAuthUrl,
+  getGoogleConnectorStatus,
+  openGoogleConsent,
+  type ProfileSummary,
+  type GoogleConnectorStatus,
+} from "../../api/agent";
 import styles from "./Settings.module.css";
 
 export type SettingsSection =
   | "profile"
   | "appearance"
   | "social"
+  | "connectors"
   | "invitations"
   | "workspace"
   | "plan";
@@ -16,10 +24,30 @@ const SECTIONS: { key: SettingsSection; label: string }[] = [
   { key: "profile", label: "Profile" },
   { key: "appearance", label: "Appearance" },
   { key: "social", label: "Connected Accounts" },
+  { key: "connectors", label: "Connectors" },
   { key: "invitations", label: "Invitations" },
   { key: "workspace", label: "Workspace" },
   { key: "plan", label: "Plan" },
 ];
+
+// Human labels for the Google scopes Lumi requests (space-separated string
+// comes straight from the OAuth token row — values never leave the DB).
+const GOOGLE_SCOPE_LABELS: Record<string, string> = {
+  "https://www.googleapis.com/auth/drive.readonly": "Read Drive files & metadata",
+  "https://www.googleapis.com/auth/drive.file": "Create & edit files this app makes",
+  "https://www.googleapis.com/auth/documents": "Create & edit Google Docs",
+};
+
+const googleScopeLabels = (scopes: string | null | undefined): string[] =>
+  (scopes || "")
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((scope) => GOOGLE_SCOPE_LABELS[scope] ?? scope);
+
+const formatExpiry = (iso: string): string => {
+  const date = new Date(iso);
+  return Number.isNaN(date.getTime()) ? iso : date.toLocaleString();
+};
 
 
 const SEAT_TOTAL = 10;
@@ -67,6 +95,27 @@ export default function Settings({
   }, []);
 
   const activeProfile = connectedProfiles.length > 0 ? connectedProfiles[0] : null;
+
+  // Google MCP connector status (Settings → Connectors).
+  const [google, setGoogle] = useState<GoogleConnectorStatus | null>(null);
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const [googleError, setGoogleError] = useState(false);
+
+  const refreshGoogleStatus = () => {
+    setGoogleLoading(true);
+    setGoogleError(false);
+    getGoogleConnectorStatus()
+      .then(setGoogle)
+      .catch(() => setGoogleError(true))
+      .finally(() => setGoogleLoading(false));
+  };
+
+  // Re-check every time the section is opened (fresh state after returning
+  // from the consent round-trip).
+  useEffect(() => {
+    if (section === "connectors") refreshGoogleStatus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [section]);
 
   const [invite, setInvite] = useState("");
   const [inviteError, setInviteError] = useState<string | null>(null);
@@ -311,6 +360,143 @@ export default function Settings({
                         </div>
                       </div>
                     ))}
+                </div>
+              </section>
+            )}
+
+            {section === "connectors" && (
+              <section className={styles.card}>
+                <div className={styles.cardTitle}>Connectors</div>
+                <p className={styles.cardHint}>
+                  External services the agent can reach through MCP connectors —
+                  Google Drive &amp; Docs first. Once connected, ask in chat
+                  (“make a doc about my week”) or type #doc in the composer.
+                </p>
+
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    marginTop: 8,
+                  }}
+                >
+                  <div>
+                    <div style={{ fontWeight: 600, fontSize: 14 }}>
+                      Google Drive &amp; Docs
+                    </div>
+                    <p
+                      className={styles.cardHint}
+                      style={{ marginBottom: 0 }}
+                    >
+                      One Google consent covers Drive reads, files this app
+                      creates, and Docs.
+                    </p>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    {googleLoading ? (
+                      <span style={{ color: "var(--text-muted)", fontSize: 12 }}>
+                        Checking…
+                      </span>
+                    ) : googleError ? (
+                      <span style={{ color: "var(--red)", fontSize: 12 }}>
+                        Backend unreachable
+                      </span>
+                    ) : google?.connected ? (
+                      <span
+                        style={{
+                          color: "#4ade80",
+                          fontSize: 12,
+                          fontWeight: 500,
+                        }}
+                      >
+                        ● Connected
+                      </span>
+                    ) : (
+                      <span style={{ color: "var(--text-muted)", fontSize: 12 }}>
+                        Not connected
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {!googleLoading &&
+                  !googleError &&
+                  google != null &&
+                  google.configured === false && (
+                    <p
+                      style={{
+                        color: "var(--text-muted)",
+                        fontSize: 13,
+                        marginTop: 12,
+                      }}
+                    >
+                      Google OAuth isn’t configured on this server yet — set
+                      GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET (see{" "}
+                      <code>docs/mcp-connectors.md</code>, §3), then restart the
+                      backend.
+                    </p>
+                  )}
+
+                {google?.connected && (
+                  <div
+                    style={{
+                      marginTop: 14,
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 6,
+                    }}
+                  >
+                    <div
+                      style={{ fontSize: 12.5, color: "var(--text-dim)" }}
+                    >
+                      Granted scopes
+                    </div>
+                    {googleScopeLabels(google.scopes).map((label) => (
+                      <div
+                        key={label}
+                        style={{ fontSize: 13, color: "var(--text)" }}
+                      >
+                        · {label}
+                      </div>
+                    ))}
+                    {google.expires_at && (
+                      <div
+                        style={{
+                          fontSize: 12,
+                          color: "var(--text-muted)",
+                          marginTop: 2,
+                        }}
+                      >
+                        Access token expires {formatExpiry(google.expires_at)} —
+                        refresh is automatic.
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <div className={styles.cardActions}>
+                  <button
+                    type="button"
+                    className={styles.btn}
+                    disabled={
+                      googleLoading ||
+                      googleError ||
+                      google?.configured === false
+                    }
+                    onClick={openGoogleConsent}
+                  >
+                    {google?.connected
+                      ? "Reconnect Google"
+                      : "Connect Google"}
+                  </button>
+                  <button
+                    type="button"
+                    className={styles.textBtn}
+                    onClick={refreshGoogleStatus}
+                  >
+                    Refresh
+                  </button>
                 </div>
               </section>
             )}

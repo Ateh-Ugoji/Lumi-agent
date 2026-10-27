@@ -20,6 +20,8 @@ export {
   searchHandles,
   getSavedHandles,
   selectHandle,
+  getGoogleConnectorStatus,
+  openGoogleConsent,
   type AgentResponse,
   type StreamEvent,
   type ProfileSummary,
@@ -28,6 +30,7 @@ export {
   type ToolExecution,
   type HandleRow,
   type HandleSearchResponse,
+  type GoogleConnectorStatus,
 } from "./client";
 
 

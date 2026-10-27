@@ -6,3 +6,5 @@ ts	phase	decision	why	evidence	result
 2026-10-27T06:08:16Z	T1	Declarar que Access Verification ya no se exige	La página oficial dice no longer required, research.md decía lo contrario	https://developers.facebook.com/docs/development/release/access-verification 2026-10-27	doc actualizado
 2026-10-27T06:08:16Z	T1	Marcar pasos de creación de app LinkedIn como sin verificar	La documentación oficial no detalla la consola; solo hay guías de terceros	búsqueda web, socialift.uz, docs.unified.to, inkling.host	marcado en API_KEYS.md
 2026-10-27T06:08:16Z	T1	Defaults propios: XPOZ_RUN_CREDIT_BUDGET=10, HANDLE_CACHE_TTL_MINUTES=60, LINKEDIN_API_VERSION=202609	El plan no fija valores; 202511 se retira 2026-11-16	CONEXIONES.md	documentado como decisión mía
+2026-10-27T06:10:55Z	T2	Base lumi/frontend, portar voz, reveal, stop y conector Google desde frontend/ raiz	lumi/ es mas nuevo (sin WorkingMark, edge gates, userProfile, analytics por mensaje); la raiz aporta voz, reveal, stop y Google	npm ci, typecheck, build y 17 pruebas node@22 pasan	ok
+2026-10-27T06:10:55Z	T2	Sin script lint	Ningun frontend tenia eslint; solo tsc	package.json	typecheck cuenta como verificacion estatica

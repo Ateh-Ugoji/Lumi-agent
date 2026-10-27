@@ -12,6 +12,9 @@ import {
   createShader,
   playSweep,
 } from "glimm";
+import { MicRecorder } from "../../voice/recorder";
+import { stopSpeaking } from "../../voice/speak";
+import { transcribeWav } from "../../api/voice";
 import styles from "./PromptBar.module.css";
 import {
   getSavedHandles,
@@ -215,8 +218,6 @@ const MODELS = [
   { key: "legacy-04", name: "Legacy 0.4", tag: "Stale" },
 ];
 
-const DICTATION = "Compare this week's reach to last week";
-
 const AUTO_STEPS: {
   draft: string;
   active?: number;
@@ -316,7 +317,7 @@ export default function PromptBar({
   demo?: boolean;
   tall?: boolean;
   placeholder?: string;
-  onSend?: (value: string) => void;
+  onSend?: (value: string, opts?: { voice?: boolean }) => void;
   text?: string;
   onTextChange?: (value: string) => void;
   busy?: boolean;
@@ -343,7 +344,13 @@ export default function PromptBar({
   const [attachments, setAttachments] = useState<string[]>([]);
   const [connected, setConnected] = useState<Record<string, boolean>>({});
   const [active, setActive] = useState(0);
-  const [listening, setListening] = useState(false);
+  // Voice state machine: idle → listening → transcribing → (auto-send) idle.
+  const [voiceState, setVoiceState] = useState<
+    "idle" | "listening" | "transcribing"
+  >("idle");
+  const [voiceError, setVoiceError] = useState<string | null>(null);
+  const recorderRef = useRef<MicRecorder | null>(null);
+  const listening = voiceState === "listening";
   const [auto, setAuto] = useState(demo);
   const [autoStep, setAutoStep] = useState(0);
   const [expanded, setExpanded] = useState(false);
@@ -606,20 +613,6 @@ export default function PromptBar({
     return () => clearTimeout(t);
   }, [auto, autoStep]);
 
-  useEffect(() => {
-    if (!listening) return;
-    const t = setTimeout(() => {
-      setDraft((current) =>
-        current
-          ? `${current.trimEnd()} ${DICTATION}`
-          : DICTATION,
-      );
-      setListening(false);
-      inputRef.current?.focus();
-    }, 2200);
-    return () => clearTimeout(t);
-  }, [listening]);
-
   useLayoutEffect(() => {
     const input = inputRef.current;
     const controls = controlsRef.current;
@@ -718,6 +711,66 @@ export default function PromptBar({
     setAttachments([]);
     closeMenus();
   };
+
+  // --- real voice capture ------------
+  const finishVoice = async (fromEndpointer?: Blob) => {
+    const recorder = recorderRef.current;
+    recorderRef.current = null;
+    setVoiceState("transcribing");
+    try {
+      // the endpointer already stopped the recorder and hands us the blob;
+      // when the user taps stop manually we stop it here.
+      const blob = fromEndpointer ?? (recorder ? await recorder.stop() : null);
+      const text = blob ? (await transcribeWav(blob)).trim() : "";
+      if (text) {
+        stopSpeaking(); // barge-in: silence any reply still speaking
+        onSend?.(text, { voice: true });
+      } else {
+        setVoiceError("Didn't catch that — no speech detected. Try again?");
+      }
+    } catch (err) {
+      setVoiceError(
+        `Voice input failed: ${err instanceof Error ? err.message : "unknown error"}`,
+      );
+    } finally {
+      setVoiceState("idle");
+      inputRef.current?.focus();
+    }
+  };
+
+  const toggleVoice = () => {
+    if (voiceState === "transcribing") return;
+    if (voiceState === "listening") {
+      void finishVoice(); // manual stop: recorder.stop() is called inside
+      return;
+    }
+    setVoiceError(null);
+    stopSpeaking(); // barge-in: silence any reply still speaking
+    const recorder = new MicRecorder();
+    recorderRef.current = recorder;
+    recorder
+      .start({
+        onEnd: (blob) => {
+          // silence endpointer already stopped the recorder — pass the blob through
+          if (recorderRef.current === recorder) void finishVoice(blob);
+        },
+      })
+      .then(() => setVoiceState("listening"))
+      .catch((err: unknown) => {
+        recorderRef.current = null;
+        setVoiceState("idle");
+        setVoiceError(
+          err instanceof Error && /denied|not allowed/i.test(err.message)
+            ? "Mic access denied — allow the microphone to talk to Lumi."
+            : "Could not start the microphone.",
+        );
+      });
+  };
+
+  // stop capture if the component unmounts mid-recording
+  useEffect(() => () => {
+    recorderRef.current?.stop().catch(() => {});
+  }, []);
 
   return (
     <div
@@ -1083,9 +1136,11 @@ export default function PromptBar({
                 }
               }}
               placeholder={
-                listening
-                  ? "Listening…"
-                  : (placeholder ?? "Write a message…")
+                voiceState === "listening"
+                  ? "Listening… tap to send"
+                  : voiceState === "transcribing"
+                    ? "Transcribing…"
+                    : (voiceError ?? (placeholder ?? "Write a message…"))
               }
               aria-label="Prompt"
               className={styles.input}
@@ -1113,12 +1168,15 @@ export default function PromptBar({
             <button
               type="button"
               aria-label={
-                listening ? "Stop dictation" : "Start dictation"
+                voiceState === "listening"
+                  ? "Stop recording and send"
+                  : voiceState === "transcribing"
+                    ? "Transcribing"
+                    : "Talk to Lumi"
               }
               aria-pressed={listening}
-              onClick={() =>
-                setListening((current) => !current)
-              }
+              disabled={voiceState === "transcribing"}
+              onClick={toggleVoice}
               className={`${styles.iconBtn} ${styles.micBtn} ${
                 listening ? styles.micActive : ""
               }`}

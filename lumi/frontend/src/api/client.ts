@@ -54,6 +54,7 @@ export async function streamChatMessage(
   profileId: number,
   message: string,
   onEvent: (event: StreamEvent) => void,
+  opts?: { signal?: AbortSignal },
 ): Promise<{ content: string; tool_executions: ToolExecution[] }> {
   const response = await fetch(`${API_BASE}/chat/stream`, {
     method: "POST",
@@ -62,6 +63,7 @@ export async function streamChatMessage(
       Accept: "text/event-stream",
     },
     body: JSON.stringify({ profile_id: profileId, message }),
+    signal: opts?.signal,
   });
 
   if (!response.ok || !response.body) {
@@ -313,4 +315,28 @@ export async function selectHandle(row: HandleRow): Promise<void> {
   } catch {
     // remembered-next-time is best-effort
   }
+}
+
+// --- Google MCP connector (Settings → Connectors) ----------------------------
+
+export type GoogleConnectorStatus = {
+  connected: boolean;
+  configured?: boolean; // OAuth client env vars present on the server
+  scopes?: string | null; // space-separated scope string from Google
+  expires_at?: string | null; // ISO timestamp of the access token
+  has_refresh_token?: boolean;
+  connect_path?: string;
+};
+
+export async function getGoogleConnectorStatus(): Promise<GoogleConnectorStatus> {
+  const res = await fetch(`${API_BASE}/mcp/google/status`);
+  if (!res.ok) throw new Error(`Connector status error (${res.status})`);
+  return res.json();
+}
+
+// Full-page navigation on purpose: the backend 302s straight to Google's
+// consent page (never fabricated client-side; an unconfigured server answers
+// an honest 503 instead).
+export function openGoogleConsent(): void {
+  window.location.href = `${API_BASE}/mcp/google/connect`;
 }
