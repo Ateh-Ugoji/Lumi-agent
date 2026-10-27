@@ -339,3 +339,17 @@ Se retoma desde TRASPASO en Windows 11 (Node 22.13, Python 3.12 vía uv). Reglas
 **Fase 2 (Windows, sin keys reales)**: `migrate` aplica limpio sobre Postgres de pgserver; `check_keys` da OK en base, secret y cifrado, FALLA en Groq (401, placeholder) y OMITIDA en el resto; uvicorn ASGI (`config.asgi:application`) responde `GET /health` con `{"status":"ok","checks":{"database":"ok","migrations":"ok"}}`; el registro por API devuelve token; el frontend en el puerto 3010 muestra el login, entra con una cuenta de prueba local y carga la pantalla de chat sin errores de consola; CORS permite `http://localhost:3010`. No se envió ningún mensaje de chat (necesita una key real de Groq) ni se probó Playwright.
 
 **Credenciales de la app: vuelven al entorno (27 oct, decisión del equipo).** Se probó guardarlas en la base (tablas `services` y `service_credentials`, API para personal) y se revirtió con `git revert`. Las claves de Meta, LinkedIn, X, Post for Me, Google y Xpoz viven solo en `lumi/.env` y en Railway. Documentado en `AGENTS.md` (regla de secretos), `docs/API_KEYS.md` y `docs/CONEXIONES.md`.
+
+## Plan de redes sociales: acciones de Meta y separación por proveedor (27 oct 2026)
+
+Plan completo en `lumi/plan/PLAN_REDES-SOCIALES.md`. Idea central: se separa por **proveedor** (meta, linkedin, x, google/YouTube, pfm) y por **capacidad** (publicar, programar, editar y borrar, comentarios, métricas). Hoy "qué proveedor sirve a qué red" está escrito en tres sitios (`publish_api.py`, `connect_links.py`, `ingest.py`); R2 lo deja con un solo dueño. Las herramientas del agente reciben `platform` y no conocen a Meta, así YouTube y LinkedIn entran sin tocar el agente.
+
+- [ ] **R0** ARCHITECT: decisiones con Christian (qué primero, Instagram, Messenger/anuncios/Threads/WhatsApp, YouTube, banderas) y contrato en `CONTRATOS.md`. Verificación: `CONTRATO REDES ACEPTADO <sha>` de CONNECT e INTELLIGENCE.
+- [ ] **R1** CONNECT: revalidar la API de Meta contra la documentación oficial (URL y fecha por dato). Verificación: ninguna fila del mapa de acciones queda sin verificar sin motivo.
+- [ ] **R2** CONNECT: `providers/routes.py` como única tabla de rutas, `providers/meta/` como paquete, `Capabilities` con banderas. Verificación: `pytest apps/connections` verde sin tocar tests existentes y test de matriz de capacidades.
+- [ ] **R3** CONNECT: leer posts y métricas de Facebook (hoy en el adaptador sin llamador) y métricas de la Página. Verificación: una cuenta conectada llena `posts` y `metric_snapshots`, con transporte simulado.
+- [ ] **R4** CONNECT: publicar fotos y videos, programar, editar y borrar, con `dry_run`, `confirm` e idempotencia y banderas apagadas por defecto.
+- [ ] **R5** CONNECT: comentarios (listar, responder, ocultar, borrar), escrituras con confirmación.
+- [ ] **R6** INTELLIGENCE: herramientas del agente por acción que reciben `platform`, respuesta tipada si la red no la soporta, casos en `golden`. Cuidar el presupuesto de tokens de Groq.
+- [ ] **R7** CONNECT: LinkedIn en paridad, YouTube como proveedor nuevo, Instagram según la decisión.
+- [ ] **R8** ARCHITECT: docs (`AGENTS.md`, `flow-map.*`, `API_KEYS.md`, `.env.example`) y revisión de seguridad de las rutas de escritura.
