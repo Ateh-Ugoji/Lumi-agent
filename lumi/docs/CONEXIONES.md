@@ -22,6 +22,8 @@ El orquestador debe copiarlas a `API_KEYS.md` y ARCHITECT a `.env.example`.
 | `FRONTEND_URL` | `http://localhost:3010` | Adónde vuelve el usuario tras conectar (`?connected=` o `?error=`) |
 | `X_LIVE_ENABLED` | `false` | Interruptor de toda llamada real a X |
 | `XPOZ_LIVE_ENABLED` | `false` | Interruptor de las llamadas reales a Xpoz (cada consulta gasta créditos) |
+| `XPOZ_DAILY_CREDIT_CAP_USER` | `60` | Créditos de Xpoz que un usuario puede gastar en 24 h. Se lee de `xpoz_credit_ledger`, así que aguanta reinicios y varios procesos. `0` bloquea el gasto |
+| `XPOZ_DAILY_CREDIT_CAP_GLOBAL` | `300` | Lo mismo para todos los usuarios juntos |
 | `XPOZ_RUN_CREDIT_BUDGET` | `12` | Tope de créditos de Xpoz por ejecución. Al llegar se lanza `BudgetExceeded`. 12 alcanza para una búsqueda de Instagram (12 créditos) |
 | `XPOZ_RUN_CREDIT_BUDGET_<RED>` | sin definir | Tope propio de una red (`X`, `INSTAGRAM`, `TIKTOK`, `REDDIT`). Una red con tope propio no gasta del compartido. `0` la deshabilita |
 | `HANDLE_CACHE_TTL_MINUTES` | `60` | Vigencia de la caché de búsqueda de handles (sustituye a `MVP_CACHE_TTL_MINUTES`) |
@@ -195,9 +197,16 @@ export DATABASE_URL=$(uv run python scripts/dev_postgres.py --test)   # Postgres
 cd e2e && npm install && npx playwright test
 ```
 
-Playwright abre el Chrome del equipo (`channel: "chrome"`), levanta `e2e/server.py` en el puerto 8000 y Vite en el 3010. El servidor e2e borra y recrea la base `lumi_e2e` en cada arranque y reconstruye el entorno desde cero, así que una clave de tu shell nunca llega a un proveedor. `e2e/sim.py` simula Meta y Post for Me con las respuestas grabadas de `tests/fixtures`, y las pantallas de consentimiento se contestan con redirecciones al callback real de Lumi. El agente del chat es un doble (`FakeRuntime`) que sí llama al flujo real de conexión.
+Playwright abre el Chrome del equipo (`channel: "chrome"`), levanta `e2e/server.py` en el puerto 8000 y Vite en el 3010. El servidor e2e borra y recrea la base `lumi_e2e` en cada arranque y reconstruye el entorno desde cero, así que una clave de tu shell nunca llega a un proveedor. `e2e/sim.py` simula Meta y Post for Me con las respuestas grabadas de `tests/fixtures`, y las pantallas de consentimiento se contestan con redirecciones al callback real de Lumi. Por defecto el chat usa el agente real (`E2E_AGENT=real`); con `E2E_AGENT=fake` vuelve el doble anterior (`FakeRuntime`).
 
-Los nueve pasos: registro, perfil, estado de los proveedores, conectar Facebook, conectar Post for Me, cancelar en el proveedor, un turno de chat con su tarjeta de conexión, publicar (previsualizar, confirmar) y desconectar con cierre y reingreso de sesión. El mismo recorrido sin navegador está en `apps/connections/tests/db/test_e2e_api.py` y corre con `pytest`.
+Qué es real y qué es un doble en el agente real, sin gastar nada:
+
+- Real: `apps.intelligence.runtime`, `get_wiring()`, el bucle del agente, el registro de herramientas, el cliente `openai` sobre un socket HTTP, `ToolExecution.as_dict` con su `result`, la herramienta `connect_account` sobre `DjangoConnectionLinks`, el embebedor ONNX (en caché local) y Chroma en un directorio temporal.
+- Doble: el modelo de lenguaje. `e2e/llm_double.py` es un servidor compatible con OpenAI en el puerto 8099 (`E2E_LLM_PORT`). `lumi_ai.providers.factory.GROQ_BASE_URL` apunta a él y `GROQ_API_KEY` es un valor falso que solo enciende el proveedor. Decide con una regla fija: si el último mensaje pide conectar, llama a `connect_account`; con el resultado de la herramienta responde con el enlace. `GET /_calls` lista lo que recibió.
+- Doble: Meta y Post for Me, como antes (`e2e/sim.py`).
+- Costura propia del e2e: `apps.intelligence.wiring` todavía no pasa `ToolDeps(links=...)`, así que `e2e/server.py` registra `connect_account` con el `DjangoConnectionLinks` real. Cuando INTELLIGENCE lo cablee, ese bloque sobra.
+
+Los nueve pasos: registro, perfil, estado de los proveedores, conectar Facebook, conectar Post for Me, cancelar en el proveedor, un turno de chat (con Facebook ya conectado la herramienta lo dice; tras desconectar entrega la tarjeta de conexión), publicar (previsualizar, confirmar) y desconectar con cierre y reingreso de sesión. El mismo recorrido sin navegador está en `apps/connections/tests/db/test_e2e_api.py` y corre con `pytest`.
 
 ### Qué hace Christian
 
@@ -305,3 +314,11 @@ Propuesta concreta para `PostIn.media`:
 5. Alternativa sin costo: que el usuario pegue el enlace del medio en el chat y que INTELLIGENCE lo use como `MediaRef` de esa petición.
 
 CONNECT puede implementar el punto 1 y, para X, el mapeo de `mediaUrls` en el siguiente cambio si ARCHITECT confirma que `MediaRef.kind` admite el valor de cada tipo.
+
+## Tope diario de Xpoz y límites de ritmo (revisión de seguridad, ALTO 3)
+
+`XPOZ_RUN_CREDIT_BUDGET` solo acota una ejecución: cada petición y cada turno de chat crean un cliente nuevo con el contador a cero. El tope real vive en `DjangoCreditLedger.ensure_room`, que suma `xpoz_credit_ledger` de las últimas 24 horas antes de cada llamada de pago. Si pasa el tope del usuario o el global, lanza `BudgetExceeded` y no sale ninguna petición. La búsqueda de handles lo traduce a `reason=budget_exhausted` y sigue respondiendo con lo que hay en caché.
+
+Dos llamadas simultáneas pueden pasar la comprobación a la vez, así que el exceso máximo es una llamada por petición concurrente. Por eso `GET /handles/search` admite 30 por minuto y usuario, y `POST /publish` 10 por minuto y usuario (`apps/connections/throttles.py`).
+
+`GET /handles/stats` devuelve también `daily_cap_user` y `daily_cap_global`. Las dos variables nuevas hay que copiarlas a `.env.example` (no es de CONNECT).

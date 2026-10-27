@@ -38,3 +38,13 @@ def profile(user) -> SocialProfile:
 @pytest.fixture
 def now():
     return timezone.now()
+
+
+@pytest.fixture(autouse=True)
+def clear_throttle_cache():
+    """DRF throttles count in the cache. Without this a test inherits the last one's requests."""
+    from django.core.cache import cache
+
+    cache.clear()
+    yield
+    cache.clear()

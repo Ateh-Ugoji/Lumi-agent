@@ -117,8 +117,10 @@ class MetaProvider(SocialProvider):
             )
 
     async def _token_request(self, params: dict[str, str]) -> dict[str, Any]:
+        # The app secret and the exchanged token travel in the form body: a query string ends up
+        # in the httpx INFO log and in proxy logs.
         response = await self._http.request(
-            "GET", f"{self._graph}/oauth/access_token", params=params, retries=0
+            "POST", f"{self._graph}/oauth/access_token", data=params, retries=0
         )
         return json_object(response, self.name)
 
@@ -170,7 +172,7 @@ class MetaProvider(SocialProvider):
         response = await self._http.request(
             "DELETE",
             f"{self._graph}/me/permissions",
-            params={"access_token": tokens.access_token},
+            headers=_bearer(tokens.access_token),
             retries=0,
         )
         body = json_object(response, self.name)
@@ -180,7 +182,8 @@ class MetaProvider(SocialProvider):
         response = await self._http.request(
             "GET",
             f"{self._graph}/me",
-            params={"fields": "id,name", "access_token": tokens.access_token},
+            params={"fields": "id,name"},
+            headers=_bearer(tokens.access_token),
             retries=1,
         )
         body = json_object(response, self.name)
@@ -196,10 +199,8 @@ class MetaProvider(SocialProvider):
         response = await self._http.request(
             "GET",
             f"{self._graph}/me/accounts",
-            params={
-                "fields": "id,name,access_token,tasks",
-                "access_token": tokens.access_token,
-            },
+            params={"fields": "id,name,access_token,tasks"},
+            headers=_bearer(tokens.access_token),
             retries=1,
         )
         pages = json_object(response, self.name).get("data")
@@ -245,8 +246,8 @@ class MetaProvider(SocialProvider):
             params={
                 "fields": "id,message,created_time,permalink_url",
                 "limit": max(1, min(limit, 100)),
-                "access_token": self._page_token(account, tokens),
             },
+            headers=_bearer(self._page_token(account, tokens)),
             retries=1,
         )
         rows = json_object(response, self.name).get("data")
@@ -282,8 +283,8 @@ class MetaProvider(SocialProvider):
             f"{self._graph}/{post_id}/insights",
             params={
                 "metric": ",".join(POST_METRICS),
-                "access_token": self._page_token(account, tokens),
             },
+            headers=_bearer(self._page_token(account, tokens)),
             retries=1,
         )
         rows = json_object(response, self.name).get("data")
@@ -328,6 +329,11 @@ class MetaProvider(SocialProvider):
             url=f"https://www.facebook.com/{post_id}",
             dry_run=False,
         )
+
+
+def _bearer(token: str) -> dict[str, str]:
+    """Graph accepts ``Authorization: Bearer``, so the token never enters a URL."""
+    return {"Authorization": f"Bearer {token}"}
 
 
 def _parse_time(value: str) -> datetime:

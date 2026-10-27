@@ -47,7 +47,7 @@ async def test_meta_credential_check_uses_client_credentials() -> None:
     seen: dict = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
-        seen.update(request.url.params)
+        seen.update(httpx.QueryParams(request.content.decode()))
         seen["host"] = request.url.host
         return httpx.Response(
             200, json={"access_token": "app-token-FAKE", "token_type": "bearer"}

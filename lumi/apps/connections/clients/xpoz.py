@@ -38,7 +38,7 @@ from ..errors import (
 )
 from ..http import ProviderHttp, raise_for_provider
 from ..providers.base import utcnow
-from .credits import CreditEntry, CreditLedger, CreditMeter
+from .credits import CappedLedger, CreditEntry, CreditLedger, CreditMeter
 from .limiter import Sleep
 
 PROVIDER = "xpoz"
@@ -217,6 +217,9 @@ class XpozClient:
                 "every Xpoz key was rejected in this run", provider=PROVIDER
             )
         meter = self.meter_for(platform)
+        if isinstance(self._ledger, CappedLedger):
+            # The meter lives and dies with this client. The cap reads what was really spent.
+            await self._ledger.ensure_room(credits)
         meter.charge(credits)  # raises BudgetExceeded before any request is sent
         refusals: list[int] = []
         for slot in slots:

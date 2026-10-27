@@ -111,14 +111,33 @@ test("a chat turn answers, and a connect card opens the real authorize flow", as
   await nav("Home").click();
   await page.getByLabel("Prompt").fill("hola lumi");
   await page.getByLabel("Send").click();
-  await expect(page.getByText("Respuesta simulada a: hola lumi")).toBeVisible();
+  await expect(page.getByText(/Respuesta del modelo simulado a: .*hola lumi/)).toBeVisible();
 
+  // Facebook is connected at this point, so the real tool reports it instead of minting a link.
   await page.getByLabel("Prompt").fill("conecta mi cuenta");
+  await page.getByLabel("Send").click();
+  await expect(page.getByText("Esa cuenta ya está conectada.")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Connect facebook" })).toHaveCount(0);
+
+  // After a disconnect the same request yields a real authorize link.
+  await openSettings("Connected Accounts");
+  const meta = page.getByTestId("provider-meta");
+  while ((await page.getByTestId("status-meta").textContent()) !== "Sin conectar") {
+    await meta.getByRole("button", { name: "Desconectar" }).first().click();
+    await page.waitForTimeout(300);
+  }
+  await nav("Home").click();
+  await page.getByLabel("Prompt").fill("conecta mi cuenta otra vez");
   await page.getByLabel("Send").click();
   const link = page.getByRole("link", { name: "Connect facebook" });
   await expect(link).toBeVisible();
   await expect(link).toHaveAttribute("href", /facebook\.com\/v26\.0\/dialog\/oauth/);
   await expect(link).toHaveClass(/connectCard/); // marked by the tool result, not by its text
+
+  // The model double saw the real registry (connect_account offered) and the real tool result.
+  const calls: { tools: string[]; last_role: string }[] = await (await fetch("http://127.0.0.1:8099/_calls")).json();
+  expect(calls.some((c) => c.tools.includes("connect_account"))).toBe(true);
+  expect(calls.some((c) => c.last_role === "tool")).toBe(true);
 });
 
 test("publish: review without publishing, then really publish after confirming", async () => {

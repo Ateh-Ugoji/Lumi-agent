@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 import os
+import secrets
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -40,6 +41,7 @@ from .models import (
     ConnectedAccount,
     McpAuthAccount,
     McpPendingWrite,
+    PfmLink,
     Provider,
 )
 from .oauth import OAuthFlow, OAuthProvider
@@ -97,10 +99,32 @@ def make_pfm() -> PfmClient:
     return PfmClient(get_config())
 
 
-def pfm_external_id(user_id: int) -> str:
-    """The external id Lumi gives PFM. One per user, so PFM refuses an account that is
-    already tied to another Lumi user."""
+def legacy_pfm_external_id(user_id: int) -> str:
+    """The guessable id Lumi used before ``PfmLink``. Kept only for users that already have it."""
     return f"lumi-user-{user_id}"
+
+
+def pfm_external_id(user, *, create: bool = False) -> str | None:
+    """The external id Lumi gave PFM for ``user``. One per user, so PFM refuses an account that is
+    already tied to another Lumi user.
+
+    ``create`` mints a random one for a user who has none. Without it, a user with no link and no
+    PFM account gets ``None`` and nothing is asked of PFM. A user who already has PFM rows but no
+    link (created before the table) keeps the legacy id.
+    """
+    link = PfmLink.objects.filter(user=user).first()
+    if link is not None:
+        return link.external_id
+    legacy = ConnectedAccount.objects.filter(user=user, provider="pfm").exists()
+    if not (create or legacy):
+        return None
+    value = (
+        legacy_pfm_external_id(user.pk)
+        if legacy
+        else f"lumi-{secrets.token_urlsafe(18)}"
+    )
+    link, _ = PfmLink.objects.get_or_create(user=user, defaults={"external_id": value})
+    return link.external_id
 
 
 def missing_env(provider: str, config: ConnectionsConfig) -> list[str]:
@@ -192,7 +216,7 @@ def start_connect(
                     details={"platform": "required"},
                 )
             auth = async_to_sync(make_pfm().create_auth_url)(
-                platform, pfm_external_id(user.pk)
+                platform, pfm_external_id(user, create=True)
             )
             return auth.url
         flow = OAuthFlow(
@@ -426,11 +450,37 @@ def provider_status(user, provider: str) -> ProviderStatus:
     return ProviderStatus(provider, configured, connected, stale, accounts)
 
 
+PFM_PAGE_SIZE = 50
+PFM_MAX_PAGES = 20
+
+
+def _list_pfm_accounts(external_id: str) -> list:
+    """Every account PFM lists for ``external_id``, page by page. The filter is the remote's job,
+    so each row is checked again here. A row under another id is dropped."""
+    client = make_pfm()
+    found: list = []
+    for page in range(PFM_MAX_PAGES):
+        batch = async_to_sync(client.list_social_accounts)(
+            limit=PFM_PAGE_SIZE,
+            offset=page * PFM_PAGE_SIZE,
+            external_id=external_id,
+        )
+        found.extend(a for a in batch if a.external_id == external_id)
+        if len(batch) < PFM_PAGE_SIZE:
+            return found
+    raise ProviderUnavailable("PFM account list is too long", provider="pfm")
+
+
 def sync_pfm_accounts(user) -> int:
-    """Mirror the user's PFM accounts into ``connected_accounts``. PFM holds the tokens."""
-    remote = async_to_sync(make_pfm().list_social_accounts)(
-        external_id=pfm_external_id(user.pk)
-    )
+    """Mirror the user's PFM accounts into ``connected_accounts``. PFM holds the tokens.
+
+    Only accounts that PFM reports under the user's own ``external_id`` are attached, and a
+    partial list never revokes anything.
+    """
+    external_id = pfm_external_id(user)
+    if external_id is None:
+        return 0
+    remote = _list_pfm_accounts(external_id)
     seen: set[str] = set()
     with transaction.atomic():
         for acc in remote:

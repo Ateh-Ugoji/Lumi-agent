@@ -20,6 +20,7 @@ dependencies = [
     "fastapi>=0.143.0",
     "greenlet>=3.5.6",
     "httpx>=0.28.1",
+    "httpx2>=2.13.1",
     "mcp==2.3.0",
     "neatlogs>=1.4.26",
     "openai>=3.28.0",

@@ -115,9 +115,9 @@ async def test_complete_exchanges_the_code_and_state_is_single_use() -> None:
     store = MemoryStateStore()
     handler = routes(
         {
-            ("GET", "/v26.0/oauth/access_token"): lambda r: json_response(
+            ("POST", "/v26.0/oauth/access_token"): lambda r: json_response(
                 "meta_long_token.json"
-                if r.url.params.get("grant_type")
+                if httpx.QueryParams(r.content.decode()).get("grant_type")
                 else "meta_short_token.json"
             ),
         }

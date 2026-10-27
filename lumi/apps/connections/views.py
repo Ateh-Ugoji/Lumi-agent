@@ -27,6 +27,7 @@ from .serializers import (
     PublishResponseSerializer,
     StatusSerializer,
 )
+from .throttles import HandleSearchThrottle, PublishThrottle
 
 
 class ConnectView(APIView):
@@ -106,6 +107,8 @@ class ProviderView(APIView):
 
 
 class HandleSearchView(APIView):
+    throttle_classes = [HandleSearchThrottle]
+
     @extend_schema(
         parameters=[HandleSearchQuerySerializer],
         responses=HandleSearchResponseSerializer,
@@ -160,6 +163,8 @@ class HandleStatsView(APIView):
 
 
 class PublishView(APIView):
+    throttle_classes = [PublishThrottle]
+
     @extend_schema(
         request=PublishRequestSerializer,
         parameters=[OpenApiParameter("Idempotency-Key", str, OpenApiParameter.HEADER)],

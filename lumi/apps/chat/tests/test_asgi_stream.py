@@ -91,14 +91,17 @@ async def test_sse_arrives_event_by_event_not_buffered(owner, profile, gated, se
     _, key = await sync_to_async(AuthToken.issue)(owner, name="asgi")
     server, task, port = await serve()
     try:
-        async with httpx.AsyncClient(
-            base_url=f"http://127.0.0.1:{port}", timeout=10
-        ) as client, client.stream(
-            "POST",
-            "/api/v1/chat/stream",
-            json={"profile_id": profile.pk, "message": "hola"},
-            headers={"Authorization": f"Token {key}"},
-        ) as response:
+        async with (
+            httpx.AsyncClient(
+                base_url=f"http://127.0.0.1:{port}", timeout=10
+            ) as client,
+            client.stream(
+                "POST",
+                "/api/v1/chat/stream",
+                json={"profile_id": profile.pk, "message": "hola"},
+                headers={"Authorization": f"Token {key}"},
+            ) as response,
+        ):
             assert response.status_code == 200
             assert response.headers["content-type"].startswith("text/event-stream")
             lines = response.aiter_lines()

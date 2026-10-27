@@ -11,7 +11,7 @@ from django.db import connection
 from apps.accounts.models import User
 from apps.connections import accounts
 from apps.connections.clients.pfm import PfmClient
-from apps.connections.models import ConnectedAccount
+from apps.connections.models import ConnectedAccount, PfmLink
 from apps.connections.tests.fakes import Recorder, fixture
 
 pytestmark = pytest.mark.django_db(transaction=True)
@@ -21,6 +21,8 @@ def test_parallel_pfm_status_calls_create_one_row_and_no_error(monkeypatch) -> N
     monkeypatch.setenv("PFM_JWT_TOKEN", "pfm-FAKE-JWT")
     user = User.objects.create_user("race@example.com")
     body = fixture("pfm_accounts.json")
+    body["data"][0]["external_id"] = "lumi-race-1"
+    PfmLink.objects.create(user=user, external_id="lumi-race-1")
     monkeypatch.setattr(
         accounts,
         "make_pfm",
