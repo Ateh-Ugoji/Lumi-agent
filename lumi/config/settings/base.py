@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from corsheaders.defaults import default_headers
+
 from apps.core import env
 from lumi_ai.config import AIConfig
 
@@ -94,6 +96,10 @@ STATIC_ROOT = Path(env.get("STATIC_ROOT") or BASE_DIR / "staticfiles")
 CORS_ALLOWED_ORIGINS = env.get_list(
     "CORS_ALLOWED_ORIGINS", "http://localhost:3010,http://127.0.0.1:3010"
 )
+# The browser blocks a request whose headers the preflight did not allow. ``POST /publish`` sends
+# ``Idempotency-Key``; without it here the real publish dies in the browser as "failed to fetch"
+# while the dry run (which sends no such header) works.
+CORS_ALLOW_HEADERS = (*default_headers, "idempotency-key")
 CSRF_TRUSTED_ORIGINS = env.get_list("CSRF_TRUSTED_ORIGINS", "")
 
 REST_FRAMEWORK = {
