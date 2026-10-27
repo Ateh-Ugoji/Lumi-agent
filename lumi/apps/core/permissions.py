@@ -58,13 +58,3 @@ class IsStaffOrDebug(BasePermission):
         return bool(
             settings.DEBUG or (user and user.is_authenticated and user.is_staff)
         )
-
-
-class IsStaff(BasePermission):
-    """Active staff only. Unlike ``IsStaffOrDebug`` it never looks at ``DEBUG``: it guards secrets."""
-
-    def has_permission(self, request, view) -> bool:
-        user = request.user
-        return bool(
-            user and user.is_authenticated and user.is_active and user.is_staff
-        )

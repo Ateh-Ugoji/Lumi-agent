@@ -2,13 +2,10 @@
 
 from __future__ import annotations
 
-from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
 
-from apps.core.fields import TokenDecryptError
-
 from .handles.ranking import PLATFORMS
-from .models import ConnectedAccount, Service, ServiceCredential
+from .models import ConnectedAccount
 
 
 class ConnectRequestSerializer(serializers.Serializer):
@@ -249,112 +246,3 @@ class PublishResponseSerializer(serializers.Serializer):
     url = serializers.CharField(allow_null=True)
     estimated_cost_usd = serializers.FloatField(allow_null=True)
     warnings = serializers.ListField(child=serializers.CharField())
-
-
-class ServiceSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Service
-        fields = ["id", "code", "name", "kind", "auth_type", "is_active", "docs_url"]
-        read_only_fields = fields
-
-
-class ServiceCredentialSerializer(serializers.ModelSerializer):
-    """Never returns the secret. ``app_secret`` only comes in; the answer carries
-    ``secret_hint`` (last 4 characters of a long secret) and ``has_secret``."""
-
-    service = serializers.SlugRelatedField(
-        slug_field="code", queryset=Service.objects.all()
-    )
-    service_name = serializers.CharField(source="service.name", read_only=True)
-    app_id = serializers.CharField(
-        max_length=500, allow_blank=True, trim_whitespace=True, required=False
-    )
-    app_secret = serializers.CharField(
-        write_only=True,
-        min_length=1,
-        max_length=2000,
-        trim_whitespace=True,
-        style={"input_type": "password"},
-    )
-    label = serializers.CharField(
-        max_length=60, allow_blank=True, trim_whitespace=True, required=False
-    )
-    has_secret = serializers.SerializerMethodField()
-    updated_by = serializers.IntegerField(source="updated_by_id", read_only=True)
-
-    class Meta:
-        model = ServiceCredential
-        fields = [
-            "id",
-            "service",
-            "service_name",
-            "app_id",
-            "app_secret",
-            "label",
-            "environment",
-            "extra",
-            "secret_hint",
-            "has_secret",
-            "is_active",
-            "expires_at",
-            "last_checked_at",
-            "last_check_ok",
-            "last_error",
-            "updated_by",
-            "created_at",
-            "updated_at",
-        ]
-        read_only_fields = [
-            "id",
-            "secret_hint",
-            "last_checked_at",
-            "last_check_ok",
-            "last_error",
-            "created_at",
-            "updated_at",
-        ]
-        # DRF turns the conditional UniqueConstraint into a validator that makes every field in it
-        # required. The 409 for a second active credential is raised by the service layer instead.
-        validators = []
-        # The database fills these in; DRF would otherwise ask for them (``db_default``).
-        extra_kwargs = {
-            "environment": {"required": False},
-            "extra": {"required": False},
-            "is_active": {"required": False},
-            "expires_at": {"required": False},
-        }
-
-    def get_has_secret(self, obj: ServiceCredential) -> bool | None:
-        try:
-            return bool(obj.app_secret)
-        except TokenDecryptError:
-            return None  # stored under a key that is no longer configured
-
-    def validate_extra(self, value):
-        if not isinstance(value, dict):
-            raise serializers.ValidationError("extra debe ser un objeto JSON.")
-        try:
-            ServiceCredential(extra=value).clean()
-        except DjangoValidationError as exc:
-            raise serializers.ValidationError(exc.message_dict["extra"]) from None
-        return value
-
-    def validate(self, attrs):
-        changing_service = (
-            self.instance is not None
-            and "service" in attrs
-            and attrs["service"].pk != self.instance.service_id
-        )
-        if changing_service:
-            raise serializers.ValidationError(
-                {"service": "El servicio no se puede cambiar. Crea otra credencial."}
-            )
-        return attrs
-
-
-class ServiceCredentialQuerySerializer(serializers.Serializer):
-    service = serializers.CharField(required=False)
-    environment = serializers.ChoiceField(
-        choices=["development", "production"], required=False
-    )
-    active = serializers.BooleanField(required=False, allow_null=True, default=None)

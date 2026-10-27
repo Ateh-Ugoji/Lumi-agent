@@ -2,23 +2,15 @@
 
 from __future__ import annotations
 
-from django.utils.decorators import method_decorator
-from django.views.decorators.debug import sensitive_post_parameters
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import status as http_status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.core.errors import ApiError
-from apps.core.permissions import IsStaff, get_owned_profile
+from apps.core.permissions import get_owned_profile
 
-from . import (
-    account_links,
-    accounts,
-    handles_api,
-    publish_api,
-    service_credentials,
-)
+from . import account_links, accounts, handles_api, publish_api
 from .serializers import (
     CallbackRequestSerializer,
     CallbackResponseSerializer,
@@ -36,17 +28,9 @@ from .serializers import (
     LinkResponseSerializer,
     PublishRequestSerializer,
     PublishResponseSerializer,
-    ServiceCredentialQuerySerializer,
-    ServiceCredentialSerializer,
-    ServiceSerializer,
     StatusSerializer,
 )
-from .throttles import (
-    HandleSearchThrottle,
-    PfmSyncThrottle,
-    PublishThrottle,
-    ServiceCredentialThrottle,
-)
+from .throttles import HandleSearchThrottle, PfmSyncThrottle, PublishThrottle
 
 
 class ConnectView(APIView):
@@ -258,93 +242,3 @@ class PublishView(APIView):
             PublishResponseSerializer(result).data,
             status=http_status.HTTP_201_CREATED if created else http_status.HTTP_200_OK,
         )
-
-
-@method_decorator(sensitive_post_parameters("app_secret"), name="dispatch")
-class _StaffOnlyView(APIView):
-    """Base of the credential routes: active staff only, rate limited, never cached."""
-
-    permission_classes = [IsStaff]
-    throttle_classes = [ServiceCredentialThrottle]
-
-    def check_throttles(self, request):
-        """Only a method this view handles counts against the limit (a GET on a POST-only route
-        answers 405, not 429)."""
-        if hasattr(self, request.method.lower()):
-            super().check_throttles(request)
-
-    def finalize_response(self, request, response, *args, **kwargs):
-        response = super().finalize_response(request, response, *args, **kwargs)
-        response["Cache-Control"] = "no-store"
-        return response
-
-
-class ServiceListView(_StaffOnlyView):
-    @extend_schema(
-        responses=ServiceSerializer(many=True), summary="Catalog of services (staff only)"
-    )
-    def get(self, request):
-        rows = service_credentials.list_services()
-        return Response({"services": ServiceSerializer(rows, many=True).data})
-
-
-class ServiceCredentialListView(_StaffOnlyView):
-    @extend_schema(
-        parameters=[ServiceCredentialQuerySerializer],
-        responses=ServiceCredentialSerializer(many=True),
-        summary="List app credentials, never with the secret (staff only)",
-    )
-    def get(self, request):
-        query = ServiceCredentialQuerySerializer(data=request.query_params)
-        query.is_valid(raise_exception=True)
-        rows = service_credentials.list_credentials(
-            service=query.validated_data.get("service"),
-            environment=query.validated_data.get("environment"),
-            active=query.validated_data.get("active"),
-        )
-        return Response(
-            {"credentials": ServiceCredentialSerializer(rows, many=True).data}
-        )
-
-    @extend_schema(
-        request=ServiceCredentialSerializer,
-        responses={201: ServiceCredentialSerializer},
-        summary="Store an app credential. The secret is encrypted and never returned",
-    )
-    def post(self, request):
-        body = ServiceCredentialSerializer(data=request.data or {})
-        body.is_valid(raise_exception=True)
-        row = service_credentials.create_credential(request.user, body.validated_data)
-        return Response(
-            ServiceCredentialSerializer(row).data, status=http_status.HTTP_201_CREATED
-        )
-
-
-class ServiceCredentialDetailView(_StaffOnlyView):
-    @extend_schema(
-        responses=ServiceCredentialSerializer, summary="One app credential, no secret"
-    )
-    def get(self, request, pk: int):
-        row = service_credentials.get_credential(pk)
-        return Response(ServiceCredentialSerializer(row).data)
-
-    @extend_schema(
-        request=ServiceCredentialSerializer,
-        responses=ServiceCredentialSerializer,
-        summary="Change an app credential. Omit app_secret to keep the stored one",
-    )
-    def patch(self, request, pk: int):
-        row = service_credentials.get_credential(pk)
-        body = ServiceCredentialSerializer(row, data=request.data or {}, partial=True)
-        body.is_valid(raise_exception=True)
-        row = service_credentials.update_credential(
-            request.user, row, body.validated_data
-        )
-        return Response(ServiceCredentialSerializer(row).data)
-
-    @extend_schema(responses={204: None}, summary="Delete an app credential")
-    def delete(self, request, pk: int):
-        service_credentials.delete_credential(
-            request.user, service_credentials.get_credential(pk)
-        )
-        return Response(status=http_status.HTTP_204_NO_CONTENT)

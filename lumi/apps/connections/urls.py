@@ -11,17 +11,6 @@ from . import views
 
 urlpatterns = [
     path("publish", views.PublishView.as_view(), name="publish"),
-    path("services", views.ServiceListView.as_view(), name="services"),
-    path(
-        "service-credentials",
-        views.ServiceCredentialListView.as_view(),
-        name="service-credentials",
-    ),
-    path(
-        "service-credentials/<int:pk>",
-        views.ServiceCredentialDetailView.as_view(),
-        name="service-credential",
-    ),
     path("handles/search", views.HandleSearchView.as_view(), name="handles-search"),
     path("handles/saved", views.HandleSavedView.as_view(), name="handles-saved"),
     path("handles/select", views.HandleSelectView.as_view(), name="handles-select"),

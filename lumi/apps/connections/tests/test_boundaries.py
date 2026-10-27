@@ -37,7 +37,6 @@ DJANGO_GLUE = {
     "mcp_gateway.py",
     "connect_links.py",
     "own_post_sync.py",
-    "service_credentials.py",
     "legacy_import.py",
     "views.py",
     "serializers.py",

@@ -148,12 +148,12 @@ Con 500 créditos y 2 por consulta de X caben 250 consultas por key. El plan del
 
 ## Credenciales de la app (tablas `services` y `service_credentials`)
 
-Hoy las credenciales de la app (`META_APP_ID`, `PFM_JWT_TOKEN`, etc.) se leen del entorno (`REQUIRED_ENV` en `apps/connections/accounts.py`). Las tablas `services` y `service_credentials` (`connections.0010`, ver `SCHEMA.md` sección 8) existen para guardarlas en la base, cifradas. **Por ahora existen las tablas, el catálogo y la API para escribirlas. Nada las lee todavía para hablar con un proveedor: el lector llega en la fase 3, así que el entorno sigue siendo la única fuente que el código usa.**
+Hoy las credenciales de la app (`META_APP_ID`, `PFM_JWT_TOKEN`, etc.) se leen del entorno (`REQUIRED_ENV` en `apps/connections/accounts.py`). Las tablas `services` y `service_credentials` (`connections.0010`, ver `SCHEMA.md` sección 8) existen para guardarlas en la base, cifradas. **Por ahora solo existen las tablas y el catálogo: el lector llega en la fase 3, así que el entorno sigue siendo la única fuente que el código lee.**
 
 Contrato acordado para las fases siguientes:
 
 - **Precedencia (fase 3):** la credencial activa de la base va primero y el entorno es el respaldo. `check_keys` dirá de cuál salió (`db` o `env`).
-- **Quién escribe:** solo personal activo (`is_staff`), por la API. Rutas: `GET /services`, `GET` y `POST /service-credentials`, `GET`, `PATCH` y `DELETE /service-credentials/{id}` (contrato en `CONTRATOS.md` sección 4). El secreto es de solo escritura: ninguna respuesta lo devuelve, solo `secret_hint` y `has_secret`. El permiso es `IsStaff`, que **no** mira `DEBUG` (a diferencia de `IsStaffOrDebug`). La pantalla del admin de Django para estas tablas sigue pendiente (fase 4).
+- **Quién escribe (fase 4):** solo personal (`is_staff`) desde el admin de Django. El secreto es un campo de solo escritura; la pantalla muestra `secret_hint`, nunca el valor. **No hay endpoint REST** para credenciales.
 - **Qué no entra:** `DATABASE_URL`, `SECRET_KEY` y `TOKEN_ENCRYPTION_KEY` se quedan en el entorno, porque se necesitan para arrancar y para descifrar. Las claves de modelos de lenguaje (`kind=llm`) se quedan en el entorno hasta una fase posterior.
 - **Qué guarda cada campo:** un servicio `oauth2` tiene `app_id` (público, en claro) y `app_secret` (cifrado). Uno `api_key` o `bearer` (Post for Me, Xpoz) no tiene id de cliente: `app_id` queda vacío y `app_secret` guarda la clave.
 - **`extra`** guarda ajustes que no son secretos. Una clave cuyo nombre contenga `secret`, `token`, `password`, `api_key` o `private` se rechaza en `clean()`.
