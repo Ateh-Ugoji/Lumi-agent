@@ -855,6 +855,136 @@ def claim_due_polls(limit: int = 50) -> list[int]:
         return sorted(row[0] for row in cursor.fetchall())
 
 
+# --------------------------------------------------------------------------- analytics
+
+
+_EMPTY_ANALYTICS = {
+    "total_impressions": 0,
+    "total_likes": 0,
+    "total_comments": 0,
+    "total_shares": 0,
+    "reach_change_pct": 0.0,
+    "saves_change_pct": 0.0,
+    "reach_series": [],
+    "saves_series": [],
+    "allocation": [],
+    "top_posts": [],
+    "is_live_data": False,
+}
+
+
+def _delta_series(values: list[int]) -> list[float]:
+    if not values:
+        return []
+    base = values[0] or 1
+    return [round(((v - base) / base) * 100, 2) for v in values]
+
+
+def get_analytics(profile_id: int) -> dict[str, Any] | None:
+    """Read-only analytics body of ``GET /profiles/{id}/analytics`` (``None`` if no profile).
+
+    Deviation from the legacy code: totals add the **latest** snapshot of each post. The legacy
+    summed every snapshot, so a post read ten times counted ten times.
+    """
+    profile = (
+        SocialProfile.objects.select_related("handle").filter(pk=profile_id).first()
+    )
+    if profile is None:
+        return None
+    base = {
+        "profile_id": profile_id,
+        "handle": profile.handle.handle_normalized,
+        "name": _display_name(profile.handle),
+    }
+    posts = list(
+        Post.objects.filter(
+            author_id=profile.handle_id, kind=PostKind.ORIGINAL, is_stub=False
+        ).only("id", "caption")
+    )
+    if not posts:
+        return {**base, **_EMPTY_ANALYTICS, "summary": _no_data_summary(base["handle"])}
+    snapshots = list(
+        MetricSnapshot.objects.filter(post__in=[p.pk for p in posts])
+        .order_by("captured_at", "id")
+        .only("post_id", "views", "likes", "comments", "shares", "captured_at")
+    )
+    latest: dict[int, MetricSnapshot] = {}
+    for snap in snapshots:  # ordered, so the last one wins
+        latest[snap.post_id] = snap
+    total_views = sum(s.views or 0 for s in latest.values())
+    if total_views <= 0:
+        return {**base, **_EMPTY_ANALYTICS, "summary": _no_data_summary(base["handle"])}
+    paired = [(p, latest[p.pk]) for p in posts if p.pk in latest]
+    text_views = sum(s.views or 0 for p, s in paired if len(p.caption.split()) < 30)
+    image_views = sum(
+        s.views or 0 for p, s in paired if 30 <= len(p.caption.split()) < 80
+    )
+    other_views = max(0, total_views - text_views - image_views)
+    txt_pct = round(text_views / total_views * 100, 1)
+    img_pct = round(image_views / total_views * 100, 1)
+    reach = _delta_series([s.views or 0 for s in snapshots])
+    saves = _delta_series([s.likes or 0 for s in snapshots])
+    reach_change = reach[-1] if reach else 0.0
+    return {
+        **base,
+        "total_impressions": total_views,
+        "total_likes": sum(s.likes or 0 for s in latest.values()),
+        "total_comments": sum(s.comments or 0 for s in latest.values()),
+        "total_shares": sum(s.shares or 0 for s in latest.values()),
+        "reach_change_pct": reach_change,
+        "saves_change_pct": saves[-1] if saves else 0.0,
+        "reach_series": reach,
+        "saves_series": saves,
+        "allocation": [
+            {
+                "name": "TXT",
+                "label": "Text Posts",
+                "pct": txt_pct,
+                "amount": f"{text_views:,} views",
+                "color": "#1d9bf0",
+                "textColor": "var(--blue)",
+            },
+            {
+                "name": "IMG",
+                "label": "Image Cards",
+                "pct": img_pct,
+                "amount": f"{image_views:,} views",
+                "color": "#f68f3c",
+                "textColor": "var(--orange)",
+            },
+            {
+                "name": "VID",
+                "label": "Video / Rich",
+                "pct": round(100.0 - txt_pct - img_pct, 1),
+                "amount": f"{other_views:,} views",
+                "color": "rgba(255,255,255,0.28)",
+                "textColor": "var(--text-dim)",
+            },
+        ],
+        "top_posts": [
+            {
+                "caption": p.caption[:120],
+                "impressions": s.views or 0,
+                "likes": s.likes or 0,
+            }
+            for p, s in sorted(paired, key=lambda x: x[1].views or 0, reverse=True)[:3]
+        ],
+        "is_live_data": True,
+        "summary": (
+            f"Your account @{base['handle']} generated {total_views:,} total impressions "
+            f"({'+' if reach_change > 0 else ''}{reach_change}%). "
+            f"Text posts account for {txt_pct}% of total views."
+        ),
+    }
+
+
+def _no_data_summary(handle: str) -> str:
+    return (
+        f"No post analytics found for @{handle} yet. "
+        "Data appears here after your posts are backfilled from Post for Me or Xpoz."
+    )
+
+
 # --------------------------------------------------------------------------- async twins
 
 _ASYNC = (
@@ -882,6 +1012,7 @@ _ASYNC = (
     "get_listening",
     "set_listening",
     "claim_due_polls",
+    "get_analytics",
 )
 for _name in _ASYNC:
     globals()[f"a{_name}"] = sync_to_async(globals()[_name], thread_sensitive=True)

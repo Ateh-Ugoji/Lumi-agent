@@ -40,3 +40,4 @@ ts	phase	decision	why	evidence	result
 2026-10-27T06:52:18Z	T7	quitar test de interoperabilidad con TokenCipher	el cifrado vive solo en core.fields	test de formato Fernet directo	ok
 2026-10-27T06:52:35Z	T7	SCHEMA.md: columnas de 0002, external_url y rank	verificadas contra models y migraciones 0001/0002 de connections	diff leído; attempt_id sigue BigInteger (FK pendiente)	ok
 2026-10-27T06:52:45Z	T7	refresh de conexiones por cron, no beat	Celery no está configurado (T9)	comando refresh_connections existe en 9678bee	ok
+2026-10-27T06:54:07Z	T7	servicios de chat y analytics de solo lectura	CONTRATOS §5; analytics suma el último snapshot por post (corrige el legado)	tests chat y analytics, 1 query por historial	ok

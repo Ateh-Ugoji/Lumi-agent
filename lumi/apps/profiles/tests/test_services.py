@@ -592,3 +592,67 @@ async def test_async_twins_match_the_sync_functions(user):
         assert (await services.aclaim_due_polls()) == []
     finally:  # the worker thread of sync_to_async owns a connection; free it before teardown
         await sync_to_async(connections.close_all, thread_sensitive=True)()
+
+
+# ------------------------------------------------------------------ analytics
+
+
+def test_analytics_without_posts_is_empty_not_invented(profile_id):
+    body = services.get_analytics(profile_id)
+    assert body["is_live_data"] is False
+    assert (body["total_impressions"], body["top_posts"], body["reach_series"]) == (
+        0,
+        [],
+        [],
+    )
+    assert "ateh" in body["summary"]
+    assert services.get_analytics(424242) is None
+
+
+def test_analytics_counts_the_latest_snapshot_of_each_post_once(profile_id, handle_id):
+    short = "word " * 5
+    medium = "word " * 40
+    services.upsert_posts(
+        handle_id,
+        [
+            post_in(
+                "1",
+                text=short,
+                metrics=PostMetrics(views=100, likes=10, comments=2, shares=1),
+            ),
+            post_in("2", text=medium, metrics=PostMetrics(views=300, likes=30)),
+        ],
+    )
+    services.upsert_posts(
+        handle_id, [post_in("1", text=short, metrics=PostMetrics(views=200, likes=15))]
+    )
+    body = services.get_analytics(profile_id)
+    assert body["is_live_data"] is True
+    assert body["total_impressions"] == 500  # 200 + 300, not 100 + 200 + 300
+    assert (body["total_likes"], body["total_comments"]) == (45, 2)
+    assert [a["pct"] for a in body["allocation"]] == [40.0, 60.0, 0.0]
+    assert [p["impressions"] for p in body["top_posts"]] == [300, 200]
+    assert len(body["reach_series"]) == 3
+    assert body["reach_series"][0] == 0.0
+
+
+def test_analytics_ignores_replies_and_other_authors(profile_id, handle_id):
+    other = services.get_or_create_handle("x", "peer")
+    services.upsert_posts(
+        handle_id, [post_in("1", kind="reply", metrics=PostMetrics(views=999))]
+    )
+    services.upsert_posts(other, [post_in("2", metrics=PostMetrics(views=999))])
+    assert services.get_analytics(profile_id)["is_live_data"] is False
+
+
+def test_analytics_query_count_is_constant(profile_id, handle_id):
+    services.upsert_posts(handle_id, [post_in("a", metrics=PostMetrics(views=5))])
+    with CaptureQueriesContext(connection) as small:
+        services.get_analytics(profile_id)
+    services.upsert_posts(
+        handle_id,
+        [post_in(str(i), metrics=PostMetrics(views=i + 1)) for i in range(40)],
+    )
+    with CaptureQueriesContext(connection) as big:
+        services.get_analytics(profile_id)
+    assert len(big) == len(small)
