@@ -31,6 +31,7 @@ INSTALLED_APPS = [
     "apps.core",
     "apps.accounts",
     "apps.profiles",
+    "apps.chat",
     "apps.connections",
 ]
 
