@@ -10,6 +10,7 @@ urlpatterns = [
     path("health", health, name="health"),
     path("api/v1/auth/", include("apps.accounts.urls")),
     path("api/v1/", include("apps.profiles.urls")),
+    path("api/v1/", include("apps.chat.urls")),
     path("api/v1/jobs/<uuid:job_id>", JobView.as_view(), name="job"),
     path("api/v1/", include("apps.connections.urls")),
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),

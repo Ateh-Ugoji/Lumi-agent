@@ -106,7 +106,7 @@ REST_FRAMEWORK = {
     "DEFAULT_PARSER_CLASSES": ["rest_framework.parsers.JSONParser"],
     "EXCEPTION_HANDLER": "apps.core.errors.exception_handler",
     "UNAUTHENTICATED_USER": None,
-    "DEFAULT_THROTTLE_RATES": {"auth": "10/min"},
+    "DEFAULT_THROTTLE_RATES": {"auth": "10/min", "chat": "30/min"},
 }
 
 AUTH_PASSWORD_VALIDATORS = [
