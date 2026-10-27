@@ -274,3 +274,10 @@ El orquestador eligió (c) mientras Christian decide. Entretanto, ARCHITECT comp
 - **INTELLIGENCE** (último `f4a660c`, 08:08): lleva ~2 h sin commits. Espera las keys y las 4 decisiones de Christian, y T10 sigue sin fuente de URLs de medios. Hay trabajo que no depende de Christian: según el estado de CONNECT, INTELLIGENCE aún no llama a `build_mcp_gateway()` ni a `resolve_pending`, y CONNECT pidió que sus escrituras usen `@aio`. Se pide al padre que se lo indique.
 - Con el alto 1 en la rama, la primera conexión social real ya la puede decidir Christian (necesita sus keys de proveedores).
 - Sigue sin aparecer `/workspace/lumi-data/lumi.db` ni un dump.
+
+## Revisión horaria, 27 oct 2026, 11:01 UTC
+- `main` no avanzó desde `632217e`. Rama al día en `cc789ce`.
+- **INTELLIGENCE** volvió a trabajar (último `e28371e`, 10:18): T4 (pegamento Django) hecha salvo `OwnPostSync`; `wiring.get_wiring()` crea la pasarela MCP y el bucle llama a `resolve_pending` antes de cada turno (`0c07e2e`); `connect_account` cableada y escrituras MCP bajo `@aio`/`CancelToken` (`d7543e0`); avatares de autor solo si la fuente los trae (`af4e1d5`, puertos 1.11). Bloqueos sin cambio: T10 vídeo sin fuente de URLs de medios, e Instagram cuesta 12 créditos de Xpoz con `XPOZ_RUN_CREDIT_BUDGET`=10.
+- **CONNECT** (último `cc789ce`, 11:01): T11 frontend hecha (Playwright 11/11, node 58/58, tsc limpio); pasadas de ingest con paridad (`bea2d97`); runtime con `connect_account` y la pasarela MCP (`6c4717f`); `DjangoOwnPostSync` con escrituras bajo `@aio` (`fc9271e`), que desbloquea `backfill_posts` de INTELLIGENCE; el stream del chat pide solo `text/event-stream` (`2404169`). Pendiente: T12, T14, huecos restantes de `handle_db`, `refresh_expiring` en Celery beat.
+- **ARCHITECT** (último `9fd5c17`, 09:37, ~1 h 25 min): sin commits nuevos. Pendiente: T4 a T12 (`services.py` de perfiles y chat y rutas), copiar las variables nuevas de CONNECT a `.env.example`, y `how-to-setup.md` al final. Si a las 12:00 sigue sin commits, se le escribe.
+- Sigue sin aparecer `/workspace/lumi-data/lumi.db` ni un dump. Nadie fue avisado en esta revisión.
