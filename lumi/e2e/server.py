@@ -45,23 +45,17 @@ def _use_real_agent() -> None:
 
     ``lumi_ai.providers.factory`` reads the Groq base URL from a module constant, so pointing it at
     the local server makes the real ``openai`` client talk to it over HTTP. The fake key only
-    switches the provider on. ``ConnectionLinks`` is not wired by ``apps.intelligence.wiring`` yet,
-    so the real ``connect_account`` tool is registered here over the real ``DjangoConnectionLinks``.
+    switches the provider on. ``connect_account`` comes from ``apps.intelligence.wiring``.
     """
-    from apps.connections.connect_links import DjangoConnectionLinks
     from apps.intelligence.wiring import get_wiring
     from e2e import llm_double
     from lumi_ai.providers import factory
-    from lumi_ai.tools import account
 
     port = int(os.environ["E2E_LLM_PORT"])
     llm_double.start(port)
     factory.GROQ_BASE_URL = f"http://127.0.0.1:{port}/v1"
-    wiring = get_wiring()
-    if wiring.registry.get("connect_account") is None:
-        wiring.registry.register(
-            account.build_connect(DjangoConnectionLinks(), wiring.loop.deps.profiles)
-        )
+    if get_wiring().registry.get("connect_account") is None:
+        raise RuntimeError("apps.intelligence.wiring must register connect_account")
 
 
 def main() -> None:

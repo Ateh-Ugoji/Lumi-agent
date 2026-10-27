@@ -16,7 +16,7 @@ Rama `lumi-orquestador`. Se actualiza en cada reporte.
 | T8 importador | hecha | `apps/connections/legacy_import.py`: `mcp_auth_accounts` y cuentas pfm |
 | T9 Google MCP | hecha (sin servidor real) | Solo servidores simulados en loopback |
 | T10 `check_keys` | hecha | Sondas `pfm`, `xpoz`, `google` y las de cada red |
-| T11 frontend | pendiente | Siguiente en la cola |
+| T11 frontend | hecho | Playwright 11/11, node 58/58, tsc limpio |
 | T12, T14 | pendientes | |
 | T13 MUSE.md | hecha | Fuentes de dev.meta.ai con fecha 2026-10-27 |
 
@@ -41,7 +41,7 @@ Bloqueos reales a 2026-10-27:
 - El token de PFM está caducado y a Xpoz le quedan pocos créditos. No hay llamadas en vivo. `X_LIVE_ENABLED=false` y `XPOZ_LIVE_ENABLED=false`.
 - `PostIn.media` no se puede rellenar con lo que devuelven PFM y Xpoz hoy (investigación en `docs/CONEXIONES.md`).
 - Falta programar `connections.refresh_expiring` en Celery beat (ARCHITECT lo documentó como cron en CONTRATOS §8).
-- INTELLIGENCE aún no llama a `apps.connections.mcp_gateway.build_mcp_gateway()` ni a `resolve_pending`.
+- INTELLIGENCE ya usa `build_mcp_gateway()` y `resolve_pending` (0c07e2e) y registró `connect_account` en `wiring.py` (d7543e0).
 - `.env.example` (de ARCHITECT) conserva `XPOZ_RUN_CREDIT_BUDGET=10`. El defecto real es 12.
 
 Resueltos: `CONTRATOS.md` v1.0 y las migraciones de `accounts` y `profiles` existen. Las rutas están montadas. La FK `publish_jobs.attempt_id` está aplicada en `0003` sin choque con `intelligence.0001`.
