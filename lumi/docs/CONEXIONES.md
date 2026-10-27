@@ -254,10 +254,10 @@ Costo. Los campos son parte de la misma consulta (`fields=`): Xpoz cobra por con
 
 Propuesta concreta para `PostIn.media`:
 
-1. Posts propios (PFM): pedir `expand=metrics` ya se hace. Leer `media` del feed sin gasto extra. Mapear solo cuando el elemento trae `url` y un tipo reconocible. Si el contenido real resulta un arreglo anidado, se deja vacío y se avisa.
-2. Posts de pares en Instagram y TikTok (Xpoz): añadir `imageUrl`, `videoUrl`, `mediaType` (Instagram) y `videoThumbnail`, `videoUrl` (TikTok) a los campos de la consulta que ya se hace para leer sus posts. Costo extra: 0 créditos. El tipo sale de `mediaType` en Instagram. En TikTok todo es vídeo.
+1. Posts propios (PFM): el cliente ya lee el feed (con `expand=metrics` opcional). Leer `media` de cada elemento no añade ninguna llamada. Mapear solo cuando el elemento trae `url` y un tipo reconocible. Si el contenido real resulta un arreglo anidado, se deja vacío y se avisa.
+2. Posts de pares en Instagram y TikTok (Xpoz): hoy el cliente solo lee posts de X (`user_posts_page`). Cuando se añada la lectura de Instagram y TikTok, pedir `imageUrl`, `videoUrl`, `mediaType` (Instagram) y `videoThumbnail`, `videoUrl` (TikTok) en la misma consulta. Costo extra por los campos: 0 créditos. El tipo sale de `mediaType` en Instagram. En TikTok todo es vídeo.
 3. X: `mediaUrls` llega sin tipo. Deducir el tipo por la extensión de la URL es una suposición. Propuesta: `kind=None` o descartar.
 4. Si INTELLIGENCE necesita el medio de un post concreto que no llegó, una segunda llamada por post (`/posts/{id}/live`) cuesta lo mismo que una consulta (2 créditos en X, 12 en Instagram, 5 en TikTok). No se recomienda como ruta normal.
 5. Alternativa sin costo: que el usuario pegue el enlace del medio en el chat y que INTELLIGENCE lo use como `MediaRef` de esa petición.
 
-CONNECT puede implementar los puntos 1 y 2 en el siguiente cambio si ARCHITECT confirma que `MediaRef.kind` admite el valor de cada tipo.
+CONNECT puede implementar el punto 1 y, para X, el mapeo de `mediaUrls` en el siguiente cambio si ARCHITECT confirma que `MediaRef.kind` admite el valor de cada tipo.
