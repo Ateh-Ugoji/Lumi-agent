@@ -232,9 +232,13 @@ class TestTranscribe:
             (
                 AudioNotConfigured("GROQ_API_KEY is not set"),
                 503,
-                "transcription_unavailable",
+                "voice.transcription_unavailable",
             ),
-            (AudioError("transcription failed: APIError"), 502, "transcription_failed"),
+            (
+                AudioError("transcription failed: APIError"),
+                502,
+                "voice.transcription_failed",
+            ),
         ],
     )
     def test_each_failure_has_its_status_and_code(

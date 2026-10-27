@@ -8,6 +8,7 @@ from pydantic import ValidationError
 from lumi_ai.competitors.schemas.peer import (
     BodyAnalysis,
     HookAnalysis,
+    NicheFrameworkReport,
     PASDetail,
     PeerConfig,
     PostStats,
@@ -129,3 +130,19 @@ def test_config_carries_report_floor():
     assert PeerConfig.MIN_WINNERS_FOR_REPORT == 8
     assert PeerConfig.MIN_OUTLIER_FOR_WINNER == 1.5
     assert PeerConfig.MAX_WINNERS_PER_ACCOUNT <= PeerConfig.TOP_N_WINNERS
+
+
+def test_failed_report_constructs_without_fabricated_frameworks():
+    """Ported from legacy test_niche_schemas (failed NicheProfile): a failure invents nothing."""
+    report = NicheFrameworkReport(
+        niche="ai:global",
+        generated_at=datetime(2026, 10, 17, 12, 0, tzinfo=UTC),
+        status="failed",
+        accounts=[],
+        winner_post_ids=[],
+        posts_analyzed=0,
+        lift_table=[],
+    )
+    assert report.status == "failed"
+    assert report.synthesis is None and report.trend_delta is None
+    assert report.winner_post_ids == [] and report.lift_table == []

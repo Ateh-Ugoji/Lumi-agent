@@ -227,14 +227,14 @@ class TranscribeView(APIView):
             ) from None
         except AudioNotConfigured:
             raise ApiError(
-                "transcription_unavailable",
+                "voice.transcription_unavailable",
                 "La transcripción no está configurada.",
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             ) from None
         except AudioError as exc:
             log.warning("transcription failed: %s", exc)
             raise ApiError(
-                "transcription_failed",
+                "voice.transcription_failed",
                 "No se pudo transcribir el audio.",
                 status_code=status.HTTP_502_BAD_GATEWAY,
             ) from None

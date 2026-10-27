@@ -104,3 +104,26 @@ async def test_env_cooldown_seconds_set_how_long_a_failed_model_rests():
     assert chain.is_resting("groq", cfg.groq_model_large)
     clock.t += 2
     assert not chain.is_resting("groq", cfg.groq_model_large)
+
+
+def test_video_timeout_seconds_is_read_from_the_environment():
+    assert (
+        AIConfig.from_env({"VIDEO_TIMEOUT_SECONDS": "45"}).video_timeout_seconds == 45.0
+    )
+
+
+def test_an_empty_video_timeout_means_the_default():
+    default = AIConfig().video_timeout_seconds
+    assert (
+        AIConfig.from_env({"VIDEO_TIMEOUT_SECONDS": ""}).video_timeout_seconds
+        == default
+    )
+    assert (
+        AIConfig.from_env({"VIDEO_TIMEOUT_SECONDS": "  "}).video_timeout_seconds
+        == default
+    )
+
+
+def test_a_malformed_video_timeout_names_the_variable():
+    with pytest.raises(ValueError, match="video_timeout_seconds|VIDEO_TIMEOUT_SECONDS"):
+        AIConfig.from_env({"VIDEO_TIMEOUT_SECONDS": "soon"})

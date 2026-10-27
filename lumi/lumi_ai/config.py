@@ -36,6 +36,7 @@ ENV_FIELDS: tuple[str, ...] = (
     "video_model",
     "video_max_mb",
     "video_max_per_run",
+    "video_timeout_seconds",
     "provider_cooldown_seconds",
     "provider_cooldown_max_seconds",
     "llm_timeout_seconds",
