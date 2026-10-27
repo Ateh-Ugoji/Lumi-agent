@@ -1,5 +1,6 @@
 """Import of the legacy SQLite ``lumi.db`` (T8). See docs/CONTRATOS.md section 10."""
 
+from apps.core.legacy_import import handle_mappings  # noqa: F401  (registers its importer)
 from apps.core.legacy_import.engine import (
     LEGACY_TABLES,
     SKIPPED,

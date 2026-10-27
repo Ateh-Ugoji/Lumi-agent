@@ -1,7 +1,8 @@
 """Import the legacy SQLite ``lumi.db`` into PostgreSQL.
 
     python manage.py import_legacy --sqlite PATH [--user EMAIL] [--dry-run] [--memory-md PATH]
-    python manage.py import_legacy --sqlite PATH --verify
+        [--handle-mappings PATH]
+    python manage.py import_legacy --sqlite PATH --verify [--user EMAIL] [--handle-mappings PATH]
 
 The SQLite file is opened read-only. The output carries counts and ids, never values.
 """
@@ -12,6 +13,7 @@ from django.core.exceptions import ImproperlyConfigured
 from django.core.management.base import BaseCommand, CommandError
 
 from apps.core.legacy_import import ImportConflict, run_import, verify_import
+from apps.core.legacy_import.handle_mappings import HandleMappingsError
 
 
 class Command(BaseCommand):
@@ -33,6 +35,14 @@ class Command(BaseCommand):
             "--memory-md", default=None, help="ruta del memory.md legado"
         )
         parser.add_argument(
+            "--handle-mappings",
+            default=None,
+            help=(
+                "JSON exportado de la colección handle_mappings de Chroma: los handles "
+                "elegidos (origin=selected) pasan a user_saved_handles del --user"
+            ),
+        )
+        parser.add_argument(
             "--verify",
             action="store_true",
             help="no importa: compara las filas del origen con lo registrado",
@@ -42,17 +52,18 @@ class Command(BaseCommand):
         path = options["sqlite"]
         try:
             if options["verify"]:
-                return self._verify(path)
+                return self._verify(path, options)
             report = run_import(
                 path,
                 user_email=options["user"],
                 dry_run=options["dry_run"],
                 memory_md=options["memory_md"],
+                handle_mappings=options["handle_mappings"],
             )
         except ImproperlyConfigured as exc:
             # Discarded rows keep an encrypted copy, so the import needs TOKEN_ENCRYPTION_KEY.
             raise CommandError(str(exc)) from exc
-        except FileNotFoundError as exc:
+        except (FileNotFoundError, HandleMappingsError) as exc:
             raise CommandError(str(exc)) from exc
         except ImportConflict as exc:
             raise CommandError(
@@ -65,8 +76,9 @@ class Command(BaseCommand):
         else:
             self.stdout.write(self.style.SUCCESS("Importación terminada."))
 
-    def _verify(self, path: str) -> None:
-        rows = verify_import(path)
+    def _verify(self, path: str, options) -> None:
+        mappings = options["handle_mappings"]
+        rows = verify_import(path, user_email=options["user"], handle_mappings=mappings)
         for row in rows:
             self.stdout.write(
                 f"{row.table}: origen {row.legacy}, registradas {row.accounted} "
@@ -82,6 +94,7 @@ class Command(BaseCommand):
         if bad:
             names = ", ".join(f"{r.table} ({r.status})" for r in bad)
             raise CommandError(f"La verificación falló en: {names}")
+        extra = " y los handles elegidos" if mappings else ""
         self.stdout.write(
-            self.style.SUCCESS("Verificación correcta: las 21 tablas cuadran.")
+            self.style.SUCCESS(f"Verificación correcta: las 21 tablas{extra} cuadran.")
         )

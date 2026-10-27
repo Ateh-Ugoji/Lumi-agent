@@ -131,10 +131,12 @@ class ImportContext:
         user: Any,
         *,
         memory_md: str | None = None,
+        handle_mappings: str | None = None,
     ) -> None:
         self.legacy = legacy
         self.user = user
         self.memory_md = memory_md
+        self.handle_mappings = handle_mappings
         self.report = Report()
         self.cache: dict[str, Any] = {}
         self._maps: dict[tuple[str, str], dict[str, int]] = {}
@@ -295,6 +297,7 @@ def run_import(
     user_email: str | None = None,
     dry_run: bool = False,
     memory_md: str | None = None,
+    handle_mappings: str | None = None,
 ) -> Report:
     """Import ``path`` in one transaction (one savepoint per importer).
 
@@ -305,7 +308,12 @@ def run_import(
     legacy = LegacyDb(path)
     try:
         with transaction.atomic():
-            ctx = ImportContext(legacy, _ensure_user(user_email), memory_md=memory_md)
+            ctx = ImportContext(
+                legacy,
+                _ensure_user(user_email),
+                memory_md=memory_md,
+                handle_mappings=handle_mappings,
+            )
             for importer in chosen:
                 with transaction.atomic():
                     importer.run(ctx)
@@ -336,12 +344,20 @@ class VerifyRow:
         return self.status == "ok"
 
 
-def verify_import(path: str) -> list[VerifyRow]:
+def verify_import(
+    path: str,
+    *,
+    user_email: str | None = None,
+    handle_mappings: str | None = None,
+) -> list[VerifyRow]:
     """Prove that every legacy row is imported, merged or skipped, with its payload kept.
 
     A table is ``ok`` when the distinct legacy ids in the map equal the legacy row count and no
     merged or skipped row lacks its payload. ``merged`` and ``skipped`` rows count as accounted
     for: their content is in ``legacy_import_map.payload``.
+
+    With ``handle_mappings`` (the legacy picks file) one more row is added for
+    ``user_saved_handles``: it is ``difiere`` when a usable pick is missing for ``user_email``.
     """
     covered = {t for imp in importers() for t in imp.tables}
     legacy = LegacyDb(path)
@@ -400,4 +416,8 @@ def verify_import(path: str) -> list[VerifyRow]:
                 lost_content=lost[table],
             )
         )
+    if handle_mappings:
+        from apps.core.legacy_import.handle_mappings import verify_saved_handles
+
+        rows.append(verify_saved_handles(handle_mappings, user_email))
     return rows

@@ -85,7 +85,7 @@ Los posts de otros usuarios (competidores) son compartidos: dos perfiles que sig
 | `profiles` | ARCHITECT | `social_handles`, `handle_snapshots`, `social_profiles`, `profile_baselines`, `poll_configs`, `listening_keywords`, `posts`, `post_media`, `metric_snapshots`, `alerts`, `listening_matches` |
 | `chat` | ARCHITECT | `chat_messages` |
 | `intelligence` | INTELLIGENCE (columnas finales); ARCHITECT fija nombres, FK y únicos | `voice_profiles`, `voice_profile_examples`, `style_answers`, `niche_preferences`, `niche_preference_keywords`, `niche_preference_handles`, `post_taggings`, `niche_reports`, `niche_report_peers`, `frameworks`, `framework_evidence`, `repurpose_requests`, `repurpose_attempts`, `generation_evaluations`, `user_actions`, `turn_classifications`, `user_search_requests`, `memory_notes`, `profile_memory_summaries`, `video_analysis_records` |
-| `connections` | CONNECT (columnas finales); ARCHITECT fija nombres, FK y únicos | `connected_accounts`, `oauth_states`, `pfm_links`, `publish_jobs`, `mcp_auth_accounts`, `mcp_pending_writes`, `handle_search_cache`, `handle_search_cache_entries`, `xpoz_credit_ledger`, `ingest_passes` |
+| `connections` | CONNECT (columnas finales); ARCHITECT fija nombres, FK y únicos | `connected_accounts`, `oauth_states`, `pfm_links`, `publish_jobs`, `mcp_auth_accounts`, `mcp_pending_writes`, `handle_search_cache`, `handle_search_cache_entries`, `xpoz_credit_ledger`, `ingest_passes`, `user_saved_handles` |
 
 Los nombres de modelo de INTELLIGENCE y CONNECT son los de sus planes (`RepurposeRequest`, `UserAction`, `PublishJob`, `VideoAnalysisRecord`, `GenerationEvaluation`, `NichePreference`). No se renombran.
 
@@ -97,6 +97,8 @@ erDiagram
     users ||--o{ social_profiles : posee
     users ||--o{ connected_accounts : conecta
     users ||--o| pfm_links : "id externo en PFM"
+    users ||--o{ user_saved_handles : guarda
+    social_handles ||--o{ user_saved_handles : "elegido en"
     social_handles ||--o{ social_profiles : "es el handle de"
     social_handles ||--o{ handle_snapshots : registra
     social_handles ||--o{ posts : escribe
@@ -215,7 +217,7 @@ Desviación del plan, que propone `rest_framework.authtoken`: la tabla de DRF gu
 | `external_id` | varchar(64) NN | Defecto `''`. Id numérico de la plataforma si se conoce. |
 | `follower_count` | bigint | Nulo o mayor o igual a 0. Último valor conocido (copia desnormalizada de `handle_snapshots`, se escribe en la misma transacción). |
 | `follower_count_at` | timestamptz | Nulo. Fecha de ese valor. |
-| `origin` | varchar(12) NN | `profile`, `live`, `cache`, `selected`, `niche`, `import`. Defecto `live`. Equivale al campo `origin` de Chroma. `selected` es **solo de datos anteriores**: desde `f843610` ningún código lo escribe (`POST /handles/select` guarda `cache`) y `import_legacy` no lo produce (usa `profile`, `niche` e `import`). Se conserva en el CHECK `ck_social_handles_origin` y en el rango de `get_or_create_handle`, para que una fila `selected` existente no baje de rango. |
+| `origin` | varchar(12) NN | `profile`, `live`, `cache`, `selected`, `niche`, `import`. Defecto `live`. Equivale al campo `origin` de Chroma. `selected` es **solo de datos anteriores**: desde `f843610` la API no lo escribe (`POST /handles/select` guarda `cache`). `import_legacy` lo escribe solo para los handles elegidos que trae `--handle-mappings` (10.7); el resto del import usa `profile`, `niche` e `import`. Se conserva en el CHECK `ck_social_handles_origin` y en el rango de `get_or_create_handle`, para que una fila `selected` existente no baje de rango. |
 | `last_seen_at` | timestamptz NN | Defecto ahora. |
 | `created_at`, `updated_at` | timestamptz NN | |
 
@@ -444,6 +446,7 @@ CONNECT implementa estos modelos. Fijos: nombres de tabla, FK, únicos, y que to
 | `mcp_pending_writes` (`McpPendingWrite`, `0004`) | `user_id` FK `CASCADE`, `social_profile_id` FK `social_profiles` `CASCADE` (uno a uno), `tool` varchar(200), `server_tool` varchar(200), `arguments` jsonb (por defecto `{}`), `summary` text (vacío por defecto), `created_at`, `expires_at` | Único (`social_profile`): una escritura pendiente por perfil, y una petición nueva reemplaza a la anterior. Se reclama con un `DELETE` atómico. Índice `ix_mcp_pending_expiry` sobre `expires_at`. Es la escritura que el modelo pidió y el usuario aún no confirmó; vive aquí y no en memoria para sobrevivir a varios workers y reinicios. |
 | `xpoz_credit_ledger` (`XpozCreditLedger`) | Una fila por llamada de pago a Xpoz. CONNECT eligió tabla. `user_id` FK `CASCADE` nulo (una llamada del sistema no tiene usuario), `provider` varchar(12) (`xpoz` por defecto), `route` varchar(60), `credits` entero positivo, `key_slot` (1 o 2; la clave se identifica por posición, nunca por valor), `run_id` varchar(64) vacío por defecto, `created_at` | `CHECK` `key_slot` en (1, 2) (`ck_xpoz_ledger_slot`). Índice `ix_xpoz_ledger_recent` (`created_at` descendente). |
 | `ingest_passes` (`IngestPass`, `0007`) | Una fila por pasada de ingesta de un handle, completa o no. Es la marca que decide si un post desapareció: se marca borrado sospechoso solo tras dos pasadas COMPLETAS seguidas sin verlo. `id` bigint (identidad), `handle_id` FK `social_handles` `CASCADE`, `started_at`, `source` (valores de `IngestSource`), `complete` bool, `created_at` | Único (`handle_id`, `started_at`). `CHECK` de `source` (`ck_ingest_passes_source`). Índice parcial en las completas. |
+| `user_saved_handles` (`UserSavedHandle`, `connections.0008`) | Los handles que un usuario eligió en la búsqueda (`POST /handles/select`). `social_handles` es caché pública compartida, así que quién guardó qué vive aquí. `id` bigint (identidad), `user_id` FK `users` `CASCADE`, `handle_id` FK `social_handles` `CASCADE`, `created_at` (por defecto la hora de la sentencia, `db_default`) | Único (`user_id`, `handle_id`) `uq_user_saved_handle`. Índice `ix_user_saved_recent` (`user_id`, `created_at` DESC) más los automáticos de las FK. Los perfiles propios no se copian aquí: `GET /handles/saved` los lee de `social_profiles`. Los handles que ya existían no tienen dueño. |
 
 ## 9. Reglas de ChromaDB
 
@@ -531,6 +534,21 @@ El importador usa este mapa (`MIGRACION_LEGADA.md` lo detalla en T8). En todas l
 | --- | --- | --- |
 | `mcp_auth_accounts` (`account`, `access_token`, `refresh_token`, `token_type`, `scopes`, `expires_at`, `updated_at`) | `mcp_auth_accounts` | `user` = usuario importado. Los tokens se cifran con Fernet al importar y no aparecen en ningún log. `scopes` (texto separado por espacios) pasa a `text[]`. |
 
+### 10.7 Handles elegidos (Chroma `handle_mappings`, opcional)
+
+El `lumi.db` no tiene ninguna tabla de handles guardados o elegidos: el sistema anterior los guardaba en la colección Chroma `handle_mappings` (global, un solo usuario). Por eso no cuentan en las 21 tablas ni en la verificación por filas. Con `import_legacy --handle-mappings PATH` entran así:
+
+| Legado (metadatos de Chroma) | Nuevo | Transformación |
+| --- | --- | --- |
+| Entrada con `origin = selected` (`handle`, `platform`) | `user_saved_handles` (`user_id` = `--user`, `handle_id`) | `get_or_create` por `(user, handle)`: repetible. Red o handle no válidos: se omite con aviso. Repetidas del mismo handle se fusionan; manda la fecha más antigua y los campos vacíos se rellenan con la otra. |
+| `handle`, `platform` | `social_handles` | Se crea con `origin = selected` si no existía; si existía no baja de rango. |
+| `ts` (segundos) | `user_saved_handles.created_at` | Se conserva. Si la fila ya existía con una fecha posterior, se rebaja a `ts`. Sin `ts`, la hora de la importación. |
+| `display_name`, `avatar_url` | `social_handles.display_name`, `avatar_url` | Solo si estaban vacíos; la foto debe ser una URL http(s) válida. |
+| `followers` (`-1` = desconocido) | `handle_snapshots.followers` | Una lectura con fecha `ts`, solo si `followers >= 0`. No cambia el seguidor actual si hay una lectura más nueva. |
+| `origin = live` o `cache`, `selected_query` | (se ignoran) | Son búsquedas hechas, no elecciones. |
+
+`--verify --handle-mappings PATH [--user EMAIL]` falla si algún handle elegido válido no está en `user_saved_handles` de ese usuario. Los perfiles propios del `profiles` del SQLite no se copian aquí: `saved` los lee de `social_profiles`. Una elección legada puede faltar en el export si una búsqueda posterior del mismo handle sobrescribió su `origin`; eso no se puede recuperar del archivo.
+
 ### 10.6 Cobertura
 
 Las 21 tablas legadas están mapeadas: `profiles`, `profile_snapshots`, `profile_baseline`, `posts`, `metric_snapshots`, `user_activity`, `listening_matches`, `poll_config`, `user_search_requests`, `chat_messages`, `turn_classifications`, `voice_profiles`, `style_answers`, `own_post_analysis`, `post_taggings`, `peer_frameworks`, `niche_framework_reports`, `repurpose_requests`, `repurpose_attempts`, `user_actions`, `mcp_auth_accounts`.
@@ -569,14 +587,14 @@ Las 21 tablas legadas están mapeadas: `profiles`, `profile_snapshots`, `profile
 | 6 | ¿Hace falta una tabla de seguimiento de vectores? | INTELLIGENCE | No: `upsert` es idempotente y `content_hash` evita recalcular. |
 | 7 | `voice_profiles.platform` con `general` en lugar de nulo | INTELLIGENCE | `general` (aceptado por INTELLIGENCE). |
 | 8 | `publish_jobs.idempotency_key` único por perfil | CONNECT | Sí. |
-| 9 | Importar el texto de Chroma o la `memory.md` si llegan junto al `lumi.db` | Orquestador | No por defecto. Opción `--memory-md PATH` en T8 si el archivo existe. |
+| 9 | Importar el texto de Chroma o la `memory.md` si llegan junto al `lumi.db` | Orquestador | No por defecto. Opción `--memory-md PATH` en T8 si el archivo existe. Los handles elegidos (`handle_mappings`) entran con `--handle-mappings PATH` si se exporta la colección a JSON (10.7). |
 | 10 | Tras borrar un usuario, ¿se conservan los posts compartidos de competidores? | Orquestador | Sí; los barre `prune_orphans` tras 30 días sin referencias. |
 
 ## 13. Qué no se migra
 
 | Dato | Motivo |
 | --- | --- |
-| Colecciones de Chroma | No están en `lumi.db`. Se regeneran con `reindex_vectors` a partir de Postgres, salvo el texto de `handle_mappings` (nombres, avatares, seguidores), que se vuelve a obtener al buscar. |
+| Colecciones de Chroma | No están en `lumi.db`. Se regeneran con `reindex_vectors` a partir de Postgres, salvo el texto de `handle_mappings` (nombres, avatares, seguidores), que se vuelve a obtener al buscar, y los handles elegidos de ese export, que entran con `--handle-mappings` (10.7). |
 | `memory.md` | Está ignorado por git y no viaja con `lumi.db`. Ver pregunta 9. |
 | `metric_snapshots.age_hours` | Derivable. |
 | `alembic_version` | Django lleva su propia tabla de migraciones. |

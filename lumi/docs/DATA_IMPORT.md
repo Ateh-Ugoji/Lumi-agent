@@ -16,7 +16,7 @@ Anota en `lumi/plan/estado/ARCHITECT.md` las tablas y el número de filas de cad
 ## 3. Importarlo al esquema Django en Postgres
 Comando de CONTRATOS §10 (T8):
 
-`python manage.py import_legacy --sqlite PATH [--user EMAIL] [--dry-run] [--memory-md PATH]`
+`python manage.py import_legacy --sqlite PATH [--user EMAIL] [--dry-run] [--memory-md PATH] [--handle-mappings PATH]`
 
 El origen es solo un `lumi.db` de SQLite, que se abre en solo lectura (`mode=ro`). Ensaya siempre sobre una copia.
 
@@ -49,3 +49,13 @@ uv run python manage.py reindex_vectors   # regenera los vectores de Chroma desd
 - `--user EMAIL`: asigna los datos a ese usuario. Si no se indica, crea un usuario "importado".
 - Hoy importa profiles y chat; los importadores de INTELLIGENCE y CONNECT se suman después.
 - `LUMI_JOB_DISPATCH`: con `none` (el valor por defecto), los trabajos que crea la importación quedan en `queued` hasta que un worker los procese. Con `eager` se ejecutan en el momento; úsalo solo en desarrollo.
+
+## Handles elegidos del sistema anterior (`--handle-mappings`)
+- El `lumi.db` no guarda los handles que el usuario eligió: vivían en la colección Chroma `handle_mappings`. Si quieres conservarlos, expórtala a JSON (`collection.get(include=["metadatas"])` volcado con `json.dump`) y pásala con `--handle-mappings`.
+- Cada entrada con `origin = selected` pasa a `user_saved_handles` del `--user`, con su fecha original (`ts`). Las de origen `live` o `cache` son búsquedas, no elecciones, y se ignoran. Repetible: una segunda ejecución no cambia nada.
+- Verifica con el mismo archivo y el mismo usuario; sale con código distinto de 0 si falta algún handle elegido:
+```bash
+uv run python manage.py import_legacy --sqlite /tmp/lumi-copia.db --user TU_CORREO --handle-mappings /tmp/handle_mappings.json
+uv run python manage.py import_legacy --sqlite /tmp/lumi-copia.db --user TU_CORREO --handle-mappings /tmp/handle_mappings.json --verify
+```
+- Sin el archivo no se escribe nada en `user_saved_handles`. Tras importar sin él, `GET /handles/saved` solo muestra los perfiles propios del usuario hasta que elija handles de nuevo.
