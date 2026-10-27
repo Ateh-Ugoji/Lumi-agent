@@ -1,0 +1,14 @@
+ts	phase	decision	why	evidence	result
+2026-10-27T06:02:58Z	start	Sesión nueva de LUMI-ARCHITECT: fase 1 (T0 + contrato T2), sin modelos ni endpoints	El orquestador pidió publicar SCHEMA.md y CONTRATOS.md antes de implementar	lumi/plan/PLAN_LUMI-ARCHITECT.md sección 7	en curso
+2026-10-27T06:02:58Z	T0	Corrí los 418 tests legados con las 5 variables ficticias y sin ellas	Fijar la línea base antes de portar	pytest en lumi/: 418 passed (7.7 s); sin variables 17 failed, 398 passed, 3 errors	línea base confirmada
+2026-10-27T06:02:58Z	alcance	No hago T1 (esqueleto Django) en esta corrida	Esta corrida pidió solo setup, T0 y contrato	mensaje del orquestador, alcance de la corrida	T1 queda pendiente
+2026-10-27T06:02:58Z	revisión	Hago la revisión adversarial a mano, sin subagentes	No tengo herramienta Task y está prohibido lanzar agentes en la nube; arena prohibida	instrucciones de la corrida	se registra el resultado más abajo
+2026-10-27T06:13:49Z	diseño	Unificar posts propios y de pares en una tabla posts con author FK a social_handles	El plan lo pide (secciones 8.2 y 8.3); evita tablas gemelas own/peer y deja los posts de competidores en Postgres para video y etiquetado	alternativa descartada: tablas own_posts y peer_posts; ver SCHEMA.md 6.3	adoptado
+2026-10-27T06:13:49Z	diseño	Token propio con hash (auth_tokens) en lugar de rest_framework.authtoken	authtoken guarda la clave en claro, un token por usuario y sin caducidad; el contrato HTTP no cambia	SCHEMA.md 6.1; pregunta abierta 3	adoptado, a revisión
+2026-10-27T06:13:49Z	diseño	alerts con único parcial (profile,post,kind) donde status=active en vez de único total	El legado vuelve a avisar tras descartar; el único total lo impediría; ON CONFLICT DO NOTHING da atomicidad	SCHEMA.md 6.3; pregunta abierta 1	adoptado, a revisión
+2026-10-27T06:13:49Z	diseño	posts.published_at nulo y is_stub	El legado de listening_matches y post_taggings no tiene fecha; inventarla falsea las métricas	SCHEMA.md 6.3, 10.2	adoptado
+2026-10-27T06:13:49Z	diseño	handle_snapshots reemplaza profile_snapshots	Los seguidores de competidores también necesitan historial	SCHEMA.md 6.3	adoptado
+2026-10-27T06:13:49Z	diseño	legacy_import_map en core	Importador idempotente y verificación de tablas fusionadas	SCHEMA.md 6.2	adoptado
+2026-10-27T06:13:49Z	diseño	Nombres de modelos de INTELLIGENCE y CONNECT se mantienen como en sus planes	Evita renombrar; ARCHITECT solo fija FK, únicos y checks	SCHEMA.md 7 y 8	adoptado
+2026-10-27T06:13:49Z	diseño	voice_profiles.platform usa 'general' en vez de nulo	El único (profile,platform,version) con nulos permite duplicados	SCHEMA.md 7	propuesto a INTELLIGENCE
+2026-10-27T06:13:49Z	alcance	El orquestador pide esqueleto manage.py y variables nuevas en .env.example antes de CONTRATOS	CONNECT bloqueado (HEAD fdaeb53); push por piezas	mensaje del padre	se publica SCHEMA, luego esqueleto, luego CONTRATOS
