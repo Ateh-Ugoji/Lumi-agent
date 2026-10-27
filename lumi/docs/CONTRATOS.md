@@ -210,6 +210,16 @@ Variables que **no** estaban en la documentación de claves y ya están en `.env
 
 Cambios que el orquestador debe copiar a sus documentos (ARCHITECT no los edita): en `API_KEYS.md` y `AGENT_KEYS_SETUP.md`, la lista de las diez variables anteriores; la regla "PostgreSQL es el único motor, `DATABASE_URL` es obligatoria"; y que `GOOGLE_OAUTH_REDIRECT_URI` es `{PUBLIC_BASE_URL}/api/v1/connections/google/callback`. En `DATA_IMPORT.md`, el comando `import_legacy` de la sección 10.
 
+### Tareas programadas hasta que exista Celery (T9)
+
+Celery todavía no está configurado (no hay `config/celery.py`, ni broker en los ajustes). Hasta T9, la renovación de tokens de `connections` se programa con **cron** y el comando de gestión de CONNECT, que hace lo mismo que la tarea `connections.refresh_expiring`:
+
+```
+*/30 * * * * cd /ruta/a/lumi && uv run python manage.py refresh_connections
+```
+
+Renueva los tokens que caducan en menos de 7 días e imprime solo recuentos, nunca tokens. Es idempotente, así que ejecutarlo más a menudo no hace daño. En T9, ARCHITECT añadirá `config/celery.py` con la entrada de beat para `connections.refresh_expiring` y se quitará la línea de cron; el comando queda como respaldo manual.
+
 ## 9. Tests
 
 | Tema | Regla |
