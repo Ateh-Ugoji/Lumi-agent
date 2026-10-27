@@ -73,7 +73,7 @@ Nota sobre la fila 18: `reach_series` y `saves_series` siguen recorriendo todas 
 - **INTELLIGENCE, 4 huecos de `test_handle_db`: cerrados** en `4971a13` (HandleBook, PORTS 1.12). Paridad: 364 cubiertos, 45 reemplazados, 3 desviaciones, 10 retirados, 0 huecos (422).
 - **INTELLIGENCE, códigos de error de trabajos: hecho** en `b92761e`. `profiles.sync_failed` y `voice.learn_failed`; `PENDING_RENAME` quedó vacío y CONTRATOS 3.2 lo refleja.
 - **INTELLIGENCE, foto de la fuente: cerrado** con la opción (b), gana la foto guardada, en `f8c50ea` con su prueba. CONTRATOS 11, fila 29.
-- **CONNECT, `POST /handles/select` (abierto, fila 30)**: el cuerpo del cliente rellena la foto vacía de un handle público y reemplaza `display_name` y `followers` de uno ya conocido. Propuesta: que `select` no pase esos tres campos a `get_or_create_handle`, y que marque la fila `cache`, no `live`.
+- **CONNECT, `POST /handles/select`: hecho** en `f843610` (fila 30). Solo `(platform, handle)`, origen `cache`, 400 si el handle no es válido. **Pendiente de CONNECT:** que el frontend mande `platform` y que el serializador lo exija (hoy asume `x`). `selected` queda solo para datos anteriores: se conserva en el CHECK y en el rango, no se migra.
 
 ## Notas del esqueleto
 

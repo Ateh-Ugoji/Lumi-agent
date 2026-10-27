@@ -215,13 +215,13 @@ Desviación del plan, que propone `rest_framework.authtoken`: la tabla de DRF gu
 | `external_id` | varchar(64) NN | Defecto `''`. Id numérico de la plataforma si se conoce. |
 | `follower_count` | bigint | Nulo o mayor o igual a 0. Último valor conocido (copia desnormalizada de `handle_snapshots`, se escribe en la misma transacción). |
 | `follower_count_at` | timestamptz | Nulo. Fecha de ese valor. |
-| `origin` | varchar(12) NN | `profile`, `live`, `cache`, `selected`, `niche`, `import`. Defecto `live`. Equivale al campo `origin` de Chroma. |
+| `origin` | varchar(12) NN | `profile`, `live`, `cache`, `selected`, `niche`, `import`. Defecto `live`. Equivale al campo `origin` de Chroma. `selected` es **solo de datos anteriores**: desde `f843610` ningún código lo escribe (`POST /handles/select` guarda `cache`) y `import_legacy` no lo produce (usa `profile`, `niche` e `import`). Se conserva en el CHECK `ck_social_handles_origin` y en el rango de `get_or_create_handle`, para que una fila `selected` existente no baje de rango. |
 | `last_seen_at` | timestamptz NN | Defecto ahora. |
 | `created_at`, `updated_at` | timestamptz NN | |
 
 Único `uq_social_handles_platform_handle` (`platform`, `handle_normalized`). Índice de prefijo para `GET /handles/search`: `Index(fields=["platform","handle_normalized"], opclasses=["varchar_pattern_ops","varchar_pattern_ops"], name="ix_social_handles_prefix")`. Índice (`-last_seen_at`).
 
-Regla de escritura heredada de Chroma (`add-if-absent`): una fila existente no cambia su `origin` por una escritura de menor rango (`selected` > `live` > `cache` > `niche`). La implementa `get_or_create_handle`, no la base.
+Regla de escritura heredada de Chroma (`add-if-absent`): una fila existente no cambia su `origin` por una escritura de menor rango (`profile` > `selected` > `live` > `cache` > `niche` > `import`). La implementa `get_or_create_handle`, no la base.
 
 **`handle_snapshots`** (`profiles.HandleSnapshot`). Historial de seguidores de cualquier handle. Sustituye a `profile_snapshots` (que solo servía a handles propios).
 
