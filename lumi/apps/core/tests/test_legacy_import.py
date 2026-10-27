@@ -548,7 +548,9 @@ def test_the_match_author_picture_lands_on_the_handle(legacy):
     )
 
 
-def test_an_existing_handle_picture_wins_and_the_legacy_one_stays_in_the_payload(legacy):
+def test_an_existing_handle_picture_wins_and_the_legacy_one_stays_in_the_payload(
+    legacy,
+):
     add_avatars(legacy, r1="https://img.example/old.png")
     from apps.profiles import services
 
@@ -561,7 +563,9 @@ def test_an_existing_handle_picture_wins_and_the_legacy_one_stays_in_the_payload
         == "https://img.example/live.png"
     )
     kept = LegacyImportMap.objects.get(source_table="listening_matches", source_pk="1")
-    assert json.loads(kept.payload)["author_avatar_url"] == "https://img.example/old.png"
+    assert (
+        json.loads(kept.payload)["author_avatar_url"] == "https://img.example/old.png"
+    )
     assert "Verificación correcta" in run(legacy, "--verify")
 
 
