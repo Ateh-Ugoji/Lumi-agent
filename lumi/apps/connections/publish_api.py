@@ -93,6 +93,9 @@ def fresh_row(row: ConnectedAccount) -> ConnectedAccount:
     )
     if soon:
         outcome = accounts.refresh_account(row.pk)
+        if outcome == "save_failed":
+            # The provider already retired the old tokens and the new ones did not reach the DB.
+            raise _reconnect(row.provider)
         if outcome not in ("refreshed",):
             if row.expires_at <= datetime.now(UTC):
                 raise _reconnect(row.provider)

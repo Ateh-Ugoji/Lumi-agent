@@ -19,7 +19,7 @@ from typing import Any
 from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit, urlunsplit
 
 from asgiref.sync import async_to_sync
-from django.db import IntegrityError, connection, transaction
+from django.db import DatabaseError, IntegrityError, connection, transaction
 
 from apps.core.errors import ApiError
 from apps.core.fields import TokenDecryptError, decrypt_value
@@ -406,6 +406,7 @@ def _upsert(
 #: a token reads the row without them, and one bad row never takes a whole request down.
 TOKEN_COLUMNS = ("access_token", "refresh_token")
 UNREADABLE = "TokenDecryptError"
+REFRESH_NOT_SAVED = "RefreshNotSaved"
 _LIVE_STATUSES = (AccountStatus.ACTIVE, AccountStatus.LIMITED)
 
 
@@ -723,8 +724,47 @@ def refresh_account(
         row.expires_at = fresh.expires_at
         row.last_refreshed_at = datetime.now(UTC)
         row.last_error = ""
-        row.save()
-        return "refreshed"
+        return _save_rotated(row)
+
+
+_TOKEN_SAVE_FIELDS = [
+    "access_token",
+    "refresh_token",
+    "expires_at",
+    "last_refreshed_at",
+    "last_error",
+    "updated_at",
+]
+
+
+def _save_rotated(row: ConnectedAccount) -> str:
+    """Store the tokens the provider just handed over, whatever else goes wrong.
+
+    X invalidates the old refresh token the moment it issues a new one, so the new one exists
+    only in memory here. Each attempt runs in its own savepoint, so a failed write does not
+    poison the surrounding transaction and the second attempt can still commit. Only the
+    token columns are written, so nothing unrelated can make the save fail. If both attempts
+    fail, the account is marked for reconnect, because its stored tokens are now dead.
+    """
+    for attempt in (1, 2):
+        try:
+            with transaction.atomic():
+                row.save(update_fields=_TOKEN_SAVE_FIELDS)
+            return "refreshed"
+        except DatabaseError:
+            logger.warning(
+                "saving refreshed tokens failed for account %s (attempt %s)",
+                row.pk,
+                attempt,
+            )
+    try:
+        with transaction.atomic():
+            row.status = AccountStatus.ERROR
+            row.last_error = REFRESH_NOT_SAVED
+            row.save(update_fields=["status", "last_error", "updated_at"])
+    except DatabaseError:
+        logger.error("account %s could not be marked for reconnect", row.pk)
+    return "save_failed"
 
 
 def _reason(exc: Exception) -> str:
