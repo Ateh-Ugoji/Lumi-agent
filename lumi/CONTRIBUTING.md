@@ -37,19 +37,19 @@ Next steps to get this from "runs locally" to an actual live product. Open items
 These are blocked on access to external dashboards, not on code. Handed off to a teammate; the code side is already in place for all of them.
 
 - [ ] **Register the Post for Me callback URL.** The OAuth connect flow is implemented (`connect_account` → `GET /pfm/callback`), but Post for Me redirects to whatever URL is configured in *their* project dashboard — it can't be set via the API with system credentials. Someone with PFM dashboard access needs to point it at `https://lumi-api-production-6260.up.railway.app/pfm/callback`.
-- [ ] **Replace placeholder seed data with real accounts.** `app/seed.py`'s three demo profiles have fake `pfm_account_id` values (`demo-pfm-creator`, etc.) and zero posts. Once the callback is registered, run `connect_account` for three real X accounts through the chat — keep one deliberately low-post-count to exercise the style-question fallback — then run `backfill_posts` for each. Until this is done, the poller logs a PFM error for the seed profiles every tick, and calling `backfill_posts` on one returns an error to the agent.
+- [ ] **Replace placeholder seed data with real accounts.** `legacy/app/seed.py`'s three demo profiles have fake `pfm_account_id` values (`demo-pfm-creator`, etc.) and zero posts. Once the callback is registered, run `connect_account` for three real X accounts through the chat — keep one deliberately low-post-count to exercise the style-question fallback — then run `backfill_posts` for each. Until this is done, the poller logs a PFM error for the seed profiles every tick, and calling `backfill_posts` on one returns an error to the agent.
   - **Possible shortcut, untested:** PFM may create the social account on its side even if the redirect lands somewhere wrong. If any X accounts are already connected in our PFM project, their real IDs could be copied straight into `seed.py` without waiting on the callback.
 - [ ] **Get real keys into the Railway dashboard** (`lumi-api` service). `GROQ_API_KEY`/`OPENROUTER_API_KEY` were placeholders on the live deploy, which is why `POST /chat` 500s there. Also confirm `TYPESAFE_API_KEY` (Jev), `NEATLOGS_API_KEY` (traces actually land), `PFM_JWT_TOKEN`, and `XPOZ_API_KEY` are set.
 
 ### Open
 
-- [ ] **Finish wiring Xpoz social listening into the background flow.** Built so far: `XpozClient` (`app/services/xpoz.py`), and the on-demand `check_niche_trends` tool, which fetches tweets for a list of handles and writes the ones above `min_likes` into `listening_matches` (deduped by `platform_post_id`). Still missing:
+- [ ] **Finish wiring Xpoz social listening into the background flow.** Built so far: `XpozClient` (`legacy/app/services/xpoz.py`), and the on-demand `check_niche_trends` tool, which fetches tweets for a list of handles and writes the ones above `min_likes` into `listening_matches` (deduped by `platform_post_id`). Still missing:
   - somewhere to store which handles a profile listens to (handles are currently passed in on every call)
   - a poller step that runs it on a schedule, like `check_trending` does for `posts`
   - `GET /profiles/{id}/alerts/unread` surfacing `listening_matches` — nothing sets their `alerted_at` yet
   - note: `discover_and_extract_niche_frameworks` uses Xpoz keyword search (`search_live_posts`), which `.agents/external-services.md` originally chose to skip — update that spec or the tool so they agree
 - [ ] **Retry one tier up when the judge rejects a rewrite.** `.agents/external-services.md` specs retrying a rejected or low-confidence rewrite on the large model. `repurpose_caption` currently makes exactly one attempt (`attempt_no` is always 1).
-- [ ] **Route the judge fallback through `app/agent/providers.py`.** `_judge_llm_fallback` in `app/services/enforcement.py` builds its own `AsyncOpenAI` client, so that LLM call isn't traced by neatlogs and doesn't fall back to OpenRouter (see `docs/agent.md`). `chat_completion_with_provider(..., model=TIER_MODELS["small"])` already does both.
+- [ ] **Route the judge fallback through `legacy/app/agent/providers.py`.** `_judge_llm_fallback` in `legacy/app/services/enforcement.py` builds its own `AsyncOpenAI` client, so that LLM call isn't traced by neatlogs and doesn't fall back to OpenRouter (see `docs/agent.md`). `chat_completion_with_provider(..., model=TIER_MODELS["small"])` already does both.
 - [ ] **Add tests for the DB-dependent foundations — needs a real Postgres, so held back from the first pass:**
   - the `voice_profiles` version-flip (old row → `is_current=False` + flush, before the new current row is inserted) — the partial unique index means getting the order wrong fails loudly, but it's still worth locking down
   - the `posts` alert-once behavior (`check_trending` re-alerting only after dismissal, not every tick)
@@ -59,8 +59,8 @@ These are blocked on access to external dashboards, not on code. Handed off to a
 
 ### Done
 
-- [x] ~~Populate the tools that still stubbed their logic.~~ `extract_voice_profile` calls the LLM (`app/services/voice.py`) and `repurpose_caption` produces real platform-specific rewrites (`app/services/repurpose.py`).
-- [x] ~~Build the backfill/polling pipeline on top of `get_account_feed`.~~ `backfill_profile_posts` in `app/services/pfm.py` pages through the feed, upserts `posts` (deduped by `platform_post_id`, skipping retweets and replies), and appends a fresh `MetricSnapshot` per post on every run. Called from the `backfill_posts` tool, from `extract_voice_profile` when a profile has too few posts, and by the poller before every spike check. A PFM 429 stops the run and it picks up next tick.
+- [x] ~~Populate the tools that still stubbed their logic.~~ `extract_voice_profile` calls the LLM (`legacy/app/services/voice.py`) and `repurpose_caption` produces real platform-specific rewrites (`legacy/app/services/repurpose.py`).
+- [x] ~~Build the backfill/polling pipeline on top of `get_account_feed`.~~ `backfill_profile_posts` in `legacy/app/services/pfm.py` pages through the feed, upserts `posts` (deduped by `platform_post_id`, skipping retweets and replies), and appends a fresh `MetricSnapshot` per post on every run. Called from the `backfill_posts` tool, from `extract_voice_profile` when a profile has too few posts, and by the poller before every spike check. A PFM 429 stops the run and it picks up next tick.
 - [x] ~~Revisit the alerting logic.~~ `detect_spike` is now relative: a post spikes when its current likes/hour is at least 3× its own baseline, with a floor of 5 likes/hour so near-zero posts don't trigger. Repurposing an alerted post auto-dismisses its alert.
 - [x] ~~Add the Jev-unavailable fallback.~~ The judge degrades Jev → small model on Groq (`gpt-oss-20b`) → deterministic checks only, with the caption flagged for manual review. `EnforcementResult.judge_source` records which one answered.
 - [x] ~~Set `repurpose_requests.route_label`.~~ Jev classifies each request easy/standard/hard (rule-based fallback if Jev errors). The label picks the rewrite model: easy → `gpt-oss-20b`, standard/hard → `gpt-oss-120b`. Attempts now record `tier`, `model`, `provider`, and `platform`.
@@ -71,31 +71,31 @@ These are blocked on access to external dashboards, not on code. Handed off to a
 
 ## Where things live
 
-- **New agent tool** → add a function in `app/tools/`, decorate it with `@tool(name=..., description=..., parameters=<JSON schema>)` from `app/tools/registry.py`, and import the module from `app/tools/__init__.py`. Keep the function itself thin — push any real logic into `app/services/` so routers could reuse it too.
-- **New DB table/column** → edit the SQLModel class in `app/models/`, then see "Database changes" below.
+- **New agent tool** → add a function in `legacy/app/tools/`, decorate it with `@tool(name=..., description=..., parameters=<JSON schema>)` from `legacy/app/tools/registry.py`, and import the module from `legacy/app/tools/__init__.py`. Keep the function itself thin — push any real logic into `legacy/app/services/` so routers could reuse it too.
+- **New DB table/column** → edit the SQLModel class in `legacy/app/models/`, then see "Database changes" below.
 - **New HTTP endpoint** → only add one if the frontend needs it directly outside the chat flow. Check `.agents/api-endpoints.md` first — most functionality should be an agent tool, not a route.
-- **Shared business logic** (not agent- or HTTP-specific) → `app/services/`.
+- **Shared business logic** (not agent- or HTTP-specific) → `legacy/app/services/`.
 
 ## Database changes
 
 Schema is Alembic-managed. Never add ad-hoc `create_all()` calls or hand-edit the production DB.
 
-1. Edit the SQLModel class(es) in `app/models/`.
+1. Edit the SQLModel class(es) in `legacy/app/models/`.
 2. Generate the migration against a real (can be empty) Postgres instance — autogenerate needs a live DB to diff against:
    ```
    uv run alembic revision --autogenerate -m "describe the change"
    ```
-3. **Read the generated file in `alembic/versions/` before running it.** Alembic autogenerate has a known gap with SQLModel: it sometimes renders `sqlmodel.sql.sqltypes.*` types without importing `sqlmodel` — our `script.py.mako` template now always includes `import sqlmodel`, but double-check anything unusual (partial indexes, enum changes, column renames autogenerate reads as drop+add).
+3. **Read the generated file in `legacy/alembic/versions/` before running it.** Alembic autogenerate has a known gap with SQLModel: it sometimes renders `sqlmodel.sql.sqltypes.*` types without importing `sqlmodel` — our `script.py.mako` template now always includes `import sqlmodel`, but double-check anything unusual (partial indexes, enum changes, column renames autogenerate reads as drop+add).
 4. Apply it locally and confirm it works: `uv run alembic upgrade head`.
 5. Commit the model change and the migration file together in the same commit/PR — a model change without its migration (or vice versa) breaks the next person's `alembic upgrade head`.
 
 ## Conventions
 
 - Lint before you commit: `uv run ruff check .`. CI (if/when we add it) will enforce this; don't make a teammate find your lint errors.
-- Everything in `app/` is async — routes, tools, services, DB sessions. Use `session_scope()` from `app/database.py` for DB access outside of FastAPI's request lifecycle (tools, background jobs); use the `get_session` dependency inside routers.
+- Everything in `app/` is async — routes, tools, services, DB sessions. Use `session_scope()` from `legacy/app/database.py` for DB access outside of FastAPI's request lifecycle (tools, background jobs); use the `get_session` dependency inside routers.
 - No comments explaining *what* code does — names should carry that. A short comment is fine for a non-obvious *why* (a workaround, a constraint from an external API, a TODO pointing at unfinished integration work).
 - Don't add abstractions, config flags, or error handling for cases that can't happen yet. Match the existing MVP scope (X/Twitter only, 3 demo profiles, no auth) rather than building ahead of it.
-- If you leave something intentionally unfinished (a stub, a placeholder value), mark it `# TODO: ...` with enough context for someone else to pick up — see `app/seed.py` for an example already in the codebase.
+- If you leave something intentionally unfinished (a stub, a placeholder value), mark it `# TODO: ...` with enough context for someone else to pick up — see `legacy/app/seed.py` for an example already in the codebase.
 
 ## Git workflow
 

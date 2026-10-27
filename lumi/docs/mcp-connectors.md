@@ -15,13 +15,13 @@ composer trigger; Google consent blocked on the manual GCP setup below (checklis
 
 | Piece | File | Role |
 |---|---|---|
-| Connector registry | `app/services/mcp_connectors.py` | **Config**: name, server URL, auth method, scopes, tool allowlist, write-confirmation flag. Adding a connector = one entry here. |
-| MCP client | `app/services/mcp.py` | `tools/list` discovery (cached `MCP_TOOLS_TTL` 300s), OpenAI-spec conversion, `tools/call` dispatch, Google token refresh, **write-confirmation gate**. |
-| OAuth routes | `app/routers/mcp_google.py` | `GET /mcp/google/connect` → Google consent (offline + forced consent); `GET /mcp/google/callback` → code→token exchange into DB; `GET /mcp/google/status`. |
-| Token store | `app/models/mcp_auth_account.py` (table `mcp_auth_accounts`) | One row per auth account (`google`), access + refresh tokens, expiry, granted scopes. Migration `e4f1a2b3c5d6`. |
-| Toolset merge | `app/tools/registry.py` | `list_tool_specs()` appends cached `mcp__<connector>__<tool>` specs; `call_tool()` routes `mcp__*` names to the MCP client. |
-| Turn wiring | `app/agent/loop.py` | Per turn: TTL-gated discovery refresh (best-effort, never raises) → before the model speaks, resolves a pending write from the previous turn (execute on a clear yes, cancel otherwise) and injects the **real outcome** as a system note. |
-| Prompt | `app/agent/prompts.py` rule 16 | Plain-language routing ("make a doc" → connector tools) + the confirmation protocol + "say Google isn't connected" when `mcp__*` tools are absent. |
+| Connector registry | `legacy/app/services/mcp_connectors.py` | **Config**: name, server URL, auth method, scopes, tool allowlist, write-confirmation flag. Adding a connector = one entry here. |
+| MCP client | `legacy/app/services/mcp.py` | `tools/list` discovery (cached `MCP_TOOLS_TTL` 300s), OpenAI-spec conversion, `tools/call` dispatch, Google token refresh, **write-confirmation gate**. |
+| OAuth routes | `legacy/app/routers/mcp_google.py` | `GET /mcp/google/connect` → Google consent (offline + forced consent); `GET /mcp/google/callback` → code→token exchange into DB; `GET /mcp/google/status`. |
+| Token store | `legacy/app/models/mcp_auth_account.py` (table `mcp_auth_accounts`) | One row per auth account (`google`), access + refresh tokens, expiry, granted scopes. Migration `e4f1a2b3c5d6`. |
+| Toolset merge | `legacy/app/tools/registry.py` | `list_tool_specs()` appends cached `mcp__<connector>__<tool>` specs; `call_tool()` routes `mcp__*` names to the MCP client. |
+| Turn wiring | `legacy/app/agent/loop.py` | Per turn: TTL-gated discovery refresh (best-effort, never raises) → before the model speaks, resolves a pending write from the previous turn (execute on a clear yes, cancel otherwise) and injects the **real outcome** as a system note. |
+| Prompt | `legacy/app/agent/prompts.py` rule 16 | Plain-language routing ("make a doc" → connector tools) + the confirmation protocol + "say Google isn't connected" when `mcp__*` tools are absent. |
 | Composer | `frontend/.../PromptBar.tsx` | `#` menu: `#doc` / `#drive` prefills an editable prompt (never auto-sends). |
 
 Flow per connector:
@@ -33,7 +33,7 @@ Flow per connector:
    No token / unreachable / disabled → the connector simply contributes no tools this turn;
    the model then honestly says Google isn't connected (gate-covered).
 2. **Dispatch** — the loop's existing `registry.call_tool` path routes `mcp__*` to
-   `app/services/mcp.py`, under its own `MCP_CALL_TIMEOUT_SECONDS` (60s) inside the loop's
+   `legacy/app/services/mcp.py`, under its own `MCP_CALL_TIMEOUT_SECONDS` (60s) inside the loop's
    120s per-tool cap. Results are `{tool, content}` or `{error}` — failures are honest
    error payloads, never raised out of the turn.
 3. **Write gate** — a tool whose name contains a write verb (`create/update/delete/...`,
@@ -110,7 +110,7 @@ model reports it. `no` / `yes, but later` → cancelled, nothing runs.
 
 ## 5. Adding another connector (config, not code)
 
-1. Add one entry to `CONNECTORS` in `app/services/mcp_connectors.py`:
+1. Add one entry to `CONNECTORS` in `legacy/app/services/mcp_connectors.py`:
 
 ```python
 MCPConnector(
@@ -126,7 +126,7 @@ MCPConnector(
 ```
 
 2. Put the credential in `.env` (for `bearer_env`) — **or** implement another auth method in
-   `app/services/mcp.py:_auth_headers` / `_auth_ready` if the server needs something new.
+   `legacy/app/services/mcp.py:_auth_headers` / `_auth_ready` if the server needs something new.
 3. Restart. No router, no loop, no prompt changes: discovery, spec merge, dispatch, timeouts
    and the write-confirmation gate all key off the config.
 
@@ -148,12 +148,12 @@ allowlist filters at discovery time, `confirm_writes=False` only for read-only s
 
 ## 7. Tests
 
-- `tests/test_mcp.py` — spec conversion/allowlist, caching + master switch, read dispatch,
+- `legacy/tests/test_mcp.py` — spec conversion/allowlist, caching + master switch, read dispatch,
   confirmation gate (require → yes / no / defer / failure), registry routing, discovery
   against a faked MCP session, Google refresh/persistence. Every network seam patched.
-- `tests/test_mcp_google_router.py` — three routes, 503 not-configured, consent URL
+- `legacy/tests/test_mcp_google_router.py` — three routes, 503 not-configured, consent URL
   components (offline + consent + scope union + state), callback exchange/state/denial.
-- `tests/test_agent_claim_gate.py` — doc-flow gate regressions + the confirmed/declined
+- `legacy/tests/test_agent_claim_gate.py` — doc-flow gate regressions + the confirmed/declined
   turn tests (real outcome note, TOOL row, `tool_calls_made`).
 
 No test opens a real socket: `_open_session`, `_execute_remote`, `_post_token_exchange`

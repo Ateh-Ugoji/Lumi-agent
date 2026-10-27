@@ -44,7 +44,7 @@ Bloqueos reales a 2026-10-27:
 - INTELLIGENCE ya usa `build_mcp_gateway()` y `resolve_pending` (0c07e2e) y registró `connect_account` en `wiring.py` (d7543e0).
 - `DjangoOwnPostSync` (`own_post_sync.py`) está cableada: `backfill_posts`, `profile.bootstrap` y `profile.refresh` (0377f2d). `scan_trends` y `search_frameworks` alimentan `HandleDirectory` (4971a13): la paridad queda en 0 huecos.
 - Las fotos se refrescan con `update_handle_avatar` (búsqueda en vivo y filas vivas del directorio) y `update_profile_avatar` (cuenta PFM activa y enlazada, con `username` igual al handle).
-- `.env.example` (de ARCHITECT) conserva `XPOZ_RUN_CREDIT_BUDGET=10`. El defecto real es 12.
+- `XPOZ_RUN_CREDIT_BUDGET` vale 12 tanto en el código como en `.env.example` (antes decía 10 aquí; corregido).
 
 Resueltos: `CONTRATOS.md` v1.0 y las migraciones de `accounts` y `profiles` existen. Las rutas están montadas. La FK `publish_jobs.attempt_id` está aplicada en `0003` sin choque con `intelligence.0001`.
 

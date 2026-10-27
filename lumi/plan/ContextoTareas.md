@@ -2,7 +2,7 @@
 
 Registro de tareas del orquestador (Grok Bot). Cualquier agente que retome este trabajo debe leer este archivo completo y su PLAN antes de actuar, y actualizar lo que le toca al terminar cada tarea.
 
-Última actualización: 2026-10-27 09:10 UTC.
+Última actualización: 2026-10-27 (ver la sección TRASPASO al final; el cuerpo de arriba llega hasta las 09:10 UTC).
 
 Ubicación: `lumi/plan/` en la rama `lumi-orquestador` (copia de trabajo en `/workspace/lumi-plan/`). Planes por bot en esa misma carpeta: [PLAN_LUMI-ARCHITECT.md](PLAN_LUMI-ARCHITECT.md), [PLAN_LUMI-INTELLIGENCE.md](PLAN_LUMI-INTELLIGENCE.md), [PLAN_LUMI-CONNECT.md](PLAN_LUMI-CONNECT.md). Guías de keys en `lumi/docs/API_KEYS.md` y `lumi/docs/AGENT_KEYS_SETUP.md`.
 
@@ -261,7 +261,7 @@ El orquestador eligió (c) mientras Christian decide. Entretanto, ARCHITECT comp
 - Sigue sin aparecer `/workspace/lumi-data/lumi.db` ni un dump.
 
 ## 09:20 UTC
-- **ARCHITECT** aprobó el arreglo de OAuth de CONNECT (rama `alto1v2`, `456873b`; CONNECT dice que pasan 1702 pytest, 55 tests de frontend y 10 e2e). CONNECT lo sube después de rebasar sobre `b0c7051`. Las redirect URIs salen ahora de `{FRONTEND_URL}/connections/<provider>/callback` y `PUBLIC_BASE_URL` es obsoleta (`242791e`). El orquestador ya actualizó `API_KEYS.md` (con una tabla por proveedor), `AGENT_KEYS_SETUP.md` y este archivo. Contrato: se añade `POST /connections/pfm/sync` con throttle, y `GET /pfm/status` ya no escribe (fila 26, `b0c7051`).
+- **ARCHITECT** aprobó el arreglo de OAuth de CONNECT (rama `alto1v2`, que se rebasó antes de subir; los commits que entraron son `a2ba0b5`..`3e67db4`; CONNECT dice que pasan 1702 pytest, 55 tests de frontend y 10 e2e). CONNECT lo sube después de rebasar sobre `b0c7051`. Las redirect URIs salen ahora de `{FRONTEND_URL}/connections/<provider>/callback` y `PUBLIC_BASE_URL` es obsoleta (`242791e`). El orquestador ya actualizó `API_KEYS.md` (con una tabla por proveedor), `AGENT_KEYS_SETUP.md` y este archivo. Contrato: se añade `POST /connections/pfm/sync` con throttle, y `GET /pfm/status` ya no escribe (fila 26, `b0c7051`).
 - **ARCHITECT**: `posts.last_checked_at` (`660bd1e`). Paridad con los 422 tests legados (main sumó 4): 350 cubiertos, 45 reemplazados, 3 desvíos, 10 retirados y 14 huecos, todos de CONNECT. El pytest por defecto pasa sin keys desde `17b7280`. Fixture de `claim_due_polls` con CTE materializado (`ca41934`).
 - **Primera conexión social real**: la decide Christian, y solo cuando el arreglo esté en la rama.
 - **Pendiente de portar los avatares de main `632217e`**: `listening_matches.author_avatar_url` y trends le tocan a ARCHITECT; `handle_db` le toca a CONNECT.
@@ -270,7 +270,7 @@ El orquestador eligió (c) mientras Christian decide. Entretanto, ARCHITECT comp
 ## Revisión horaria, 27 oct 2026, 10:10 UTC
 - `main` no avanzó desde `632217e`. Rama al día en `d1aa288`.
 - **CONNECT** (último `d1aa288`, 10:07): **el alto 1 de OAuth ya está en la rama** (`a2ba0b5`, `c5bf3e0`, `25d3eb6`, `d6dcc30`, `3e67db4`): el callback público no intercambia el código, la página del frontend hace `POST /complete` con el Token del dueño del `state`, `user_id` obligatorio al consumir, `state_expired` alcanzable, y test con un mutante que acepta un `state` ajeno. Después: guardia autouse que deja los tests de connections sin red (`9db3bba`), conserva el refresh token rotado de X si falla el guardado (`fa4d9d2`), `POST /connections/{provider}/link` con selector de Página (`d544c76`), e2e que desconecta todas las Páginas de Facebook (`509432b`), y `HandleDirectory` reemplaza `handle_db` con avatares por `get_or_create_handle` (solo rellena): 6 de 10 huecos de `handle_db` cubiertos (`d1aa288`). Pendiente: T11 frontend, T12, T14, 4 huecos de `handle_db`, `refresh_expiring` en Celery beat.
-- **ARCHITECT** (último `9fd5c17`, 09:37): `author_avatar_url` se lee de `social_handles.avatar_url`, sin columna ni migración (decisión R3); quitado `PUBLIC_BASE_URL` de los settings; tests sin keys con `conftest.py` raíz. Pendiente: T4 a T12 (`services.py` de perfiles y chat y sus rutas) y `how-to-setup.md` al final.
+- **ARCHITECT** (último `9fd5c17`, 09:37; el commit del avatar es `67ad108`): `author_avatar_url` se lee de `social_handles.avatar_url`, sin columna ni migración (decisión R3); quitado `PUBLIC_BASE_URL` de los settings; tests sin keys con `conftest.py` raíz. Pendiente: T4 a T12 (`services.py` de perfiles y chat y sus rutas) y `how-to-setup.md` al final.
 - **INTELLIGENCE** (último `f4a660c`, 08:08): lleva ~2 h sin commits. Espera las keys y las 4 decisiones de Christian, y T10 sigue sin fuente de URLs de medios. Hay trabajo que no depende de Christian: según el estado de CONNECT, INTELLIGENCE aún no llama a `build_mcp_gateway()` ni a `resolve_pending`, y CONNECT pidió que sus escrituras usen `@aio`. Se pide al padre que se lo indique.
 - Con el alto 1 en la rama, la primera conexión social real ya la puede decidir Christian (necesita sus keys de proveedores).
 - Sigue sin aparecer `/workspace/lumi-data/lumi.db` ni un dump.
@@ -314,7 +314,24 @@ Christian pidió apagar todo para que otro agente siga. Los 3 bots (ARCHITECT, I
   - El 409 del registro.
 - **Técnico:**
   - Actualizar las rutas viejas en `CLAUDE.md`, `CONTRIBUTING.md`, `.agents/*.md`, `docs/flow-map.*`, `docs/blueprint-fix.md`, `docs/mcp-connectors.md`, `docs/xpoz_optimization.md` y `docs/tools.md`.
-  - `how-to-setup.md` pide Node 20+, pero hace falta Node 22.6+.
-  - Corregir los SHA mal citados en este archivo: OAuth `456873b` → `a2ba0b5`..`3e67db4`; avatar `9fd5c17` → `67ad108`.
+  - ~~`how-to-setup.md` pide Node 20+~~ (hecho: ahora dice 22.18+).
+  - ~~Corregir los SHA mal citados en este archivo~~ (hecho).
   - Revisión de seguridad externa antes de tener usuarios reales.
   - Nunca se corrieron docker compose ni la importación con datos reales.
+
+
+## Continuación por Claude Code, 27 oct 2026, 14:25 UTC
+Se retoma desde TRASPASO en Windows 11 (Node 22.13, Python 3.12 vía uv). Reglas de rama sin cambios.
+
+**Hecho**
+- Rutas viejas repuntadas a `legacy/` en `CLAUDE.md`, `CONTRIBUTING.md`, `.agents/*.md`, `docs/flow-map.*`, `blueprint-fix.md`, `mcp-connectors.md`, `xpoz_optimization.md` y `tools.md` (123 líneas). `CLAUDE.md` lleva ahora un aviso de que describe el backend anterior.
+- `how-to-setup.md`: Node 22.18+. SHA corregidos en este archivo. `CONNECT.md`: presupuesto Xpoz 12.
+
+**Línea base en Windows (medida, sin keys, Postgres de pgserver)**
+- pytest: 1462 pasan, 3 se saltan, 9 fallan (el traspaso decía 1471 pasan). Los 9 son del entorno Windows, no de lógica: 8 de `test_startup_e2e.py` y `test_collectstatic.py` lanzan `manage.py` con un entorno vacío sin `SYSTEMROOT` (asyncio no carga) y con salida en cp1252 sin decodificar; `test_sse.py::test_a_quiet_turn_gets_pings` usa un ping de 10 ms y el reloj de Windows no llega a esa resolución. No se corrigieron; en Linux deberían pasar.
+- `pgserver` en Windows no trae la carpeta `timezone/` y Postgres rechaza `TimeZone=UTC`. Arreglo local: copiar `.venv/Lib/site-packages/tzdata/zoneinfo` a `.venv/Lib/site-packages/pgserver/pginstall/share/postgresql/timezone`. El puerto de pgserver cambia en cada arranque, hay que actualizar `DATABASE_URL`.
+- Un `.env` copiado del `.env.example` viejo trae `GOOGLE_OAUTH_REDIRECT_URI` obsoleto y rompe `test_google_api`; hay que partir del `.env.example` de esta rama.
+- Frontend: `npm test` falla en Node 22.13 (sin type stripping por defecto); con `node --experimental-strip-types --test` hace falta repetir la corrida.
+- Docker Desktop está instalado pero apagado, así que `docker compose` sigue sin probarse.
+
+**Siguiente**: probar `docker compose` con Docker encendido, levantar Django y el frontend con placeholders, y afinar el mapa de paridad (270 de 364 tests mapeados a archivo entero).

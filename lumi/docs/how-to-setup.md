@@ -11,7 +11,7 @@ El backend es Django 5.2 con Django REST framework sobre **PostgreSQL**. No hay 
 | [uv](https://docs.astral.sh/uv/) | la última | Dependencias de Python y entorno virtual (`.python-version` fija **3.12**; uv la instala) |
 | PostgreSQL | 16 | Base de datos. Con Docker Compose o con `scripts/dev_postgres.py` (sin Docker) |
 | Docker | cualquiera | Solo si usas `docker compose` para Postgres |
-| Node.js | 20+ | Frontend (Vite / React) |
+| Node.js | 22.18+ | Frontend (Vite / React). Los tests corren `.ts` con el type stripping de Node, activo por defecto desde 22.18; en 22.6 a 22.17 hay que pasar `--experimental-strip-types`, y en Node 20 fallan |
 | git | cualquiera | Clonar |
 
 ## 1. Clonar
