@@ -15,8 +15,6 @@ PostgreSQL es el único motor y `DATABASE_URL` es obligatoria. No hay SQLite (sa
 
 > **Aviso (27 oct 2026):** el token de Post for Me (`PFM_JWT_TOKEN`) está vencido (401) y hay que renovarlo. Xpoz casi no tiene créditos: no actives `XPOZ_LIVE_ENABLED` sin recargar o usar `XPOZ_API_KEY_2`.
 
-> **Dónde viven estas claves.** Hoy el código las lee **solo del entorno** (`lumi/.env` en local, el panel de Railway en producción). La tabla `service_credentials` ya existe para guardar las de la app cifradas, pero todavía no se lee: eso llega en una fase posterior (base primero, entorno de respaldo). Ver `docs/CONEXIONES.md`, sección "Credenciales de la app".
-
 ## Obligatorias (sin ellas no arranca)
 
 | Variable | Estado | Para qué sirve | Dónde se obtiene |
