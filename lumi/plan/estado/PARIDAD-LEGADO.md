@@ -11,11 +11,11 @@ la misma conducta, no que sea equivalente línea a línea.
 
 | Estado | Tests legados | Parte |
 | --- | ---: | ---: |
-| covered | 350 | 82.9 % |
+| covered | 356 | 84.4 % |
 | replaced | 45 | 10.7 % |
 | deviation | 3 | 0.7 % |
 | retired | 10 | 2.4 % |
-| gap | 14 | 3.3 % |
+| gap | 8 | 1.9 % |
 | **Total** | **422** | 100 % |
 
 ## Por archivo legado
@@ -29,7 +29,7 @@ la misma conducta, no que sea equivalente línea a línea.
 | `test_coverage_gate` | 12 | 12 | 0 | 0 | 0 | 0 |
 | `test_enforcement` | 7 | 7 | 0 | 0 | 0 | 0 |
 | `test_framework_corpus` | 8 | 0 | 8 | 0 | 0 | 0 |
-| `test_handle_db` | 16 | 5 | 1 | 0 | 0 | 10 |
+| `test_handle_db` | 16 | 11 | 1 | 0 | 0 | 4 |
 | `test_handle_search_mvp` | 29 | 29 | 0 | 0 | 0 | 0 |
 | `test_handle_search_platforms` | 14 | 12 | 2 | 0 | 0 | 0 |
 | `test_handles_router` | 7 | 0 | 7 | 0 | 0 | 0 |
@@ -65,22 +65,19 @@ la misma conducta, no que sea equivalente línea a línea.
 
 ## Huecos
 
-### CONNECT: 14 tests
+### CONNECT: 4 tests
 
-- `test_handle_db::test_check_niche_trends_persists_every_user_it_searches`: Guardar en la tabla de handles los autores que descubre un escaneo de nicho (tendencias, frameworks, enriquecimiento con tope) no tiene test ni uso en el código nuevo.
-- `test_handle_db::test_check_niche_trends_stores_the_picture_it_knows`: Avatares de autores en los escaneos de nicho (main 632217e): el modelo nuevo y el almacén de handles aún no los guardan. Pendientes de portar a Django por decisión del orquestador (a9f5c75).
-- `test_handle_db::test_check_niche_trends_survives_handle_db_failure`: Guardar en la tabla de handles los autores que descubre un escaneo de nicho (tendencias, frameworks, enriquecimiento con tope) no tiene test ni uso en el código nuevo.
-- `test_handle_db::test_frameworks_search_persists_every_author`: Guardar en la tabla de handles los autores que descubre un escaneo de nicho (tendencias, frameworks, enriquecimiento con tope) no tiene test ni uso en el código nuevo.
-- `test_handle_db::test_lookup_never_raises_when_the_store_is_down`: Avatares de autores en los escaneos de nicho (main 632217e): el modelo nuevo y el almacén de handles aún no los guardan. Pendientes de portar a Django por decisión del orquestador (a9f5c75).
-- `test_handle_db::test_lookup_returns_only_rows_that_carry_a_picture`: Avatares de autores en los escaneos de nicho (main 632217e): el modelo nuevo y el almacén de handles aún no los guardan. Pendientes de portar a Django por decisión del orquestador (a9f5c75).
-- `test_handle_db::test_scan_leaves_rows_null_when_the_store_does_not_know_the_face`: Avatares de autores en los escaneos de nicho (main 632217e): el modelo nuevo y el almacén de handles aún no los guardan. Pendientes de portar a Django por decisión del orquestador (a9f5c75).
-- `test_handle_db::test_scanned_handles_enrich_only_unknown_within_cap`: Guardar en la tabla de handles los autores que descubre un escaneo de nicho (tendencias, frameworks, enriquecimiento con tope) no tiene test ni uso en el código nuevo.
-- `test_handle_db::test_scanned_handles_no_enrichment_when_store_is_down`: Guardar en la tabla de handles los autores que descubre un escaneo de nicho (tendencias, frameworks, enriquecimiento con tope) no tiene test ni uso en el código nuevo.
-- `test_handle_db::test_scanned_handles_zero_limit_saves_handles_only`: Guardar en la tabla de handles los autores que descubre un escaneo de nicho (tendencias, frameworks, enriquecimiento con tope) no tiene test ni uso en el código nuevo.
 - `test_profile_extract_fixes::test_finalize_ingest_pass_two_miss_flow`: Lógica de la pasada (second_miss, pass_reached_window, finalize_ingest_pass): depende de profile.refresh, aún pendiente en CONNECT. Se portan las partes puras cuando exista.
 - `test_profile_extract_fixes::test_pass_reached_window`: Lógica de la pasada (second_miss, pass_reached_window, finalize_ingest_pass): depende de profile.refresh, aún pendiente en CONNECT. Se portan las partes puras cuando exista.
 - `test_profile_extract_fixes::test_second_miss_bracket_and_window_guards`: Lógica de la pasada (second_miss, pass_reached_window, finalize_ingest_pass): depende de profile.refresh, aún pendiente en CONNECT. Se portan las partes puras cuando exista.
 - `test_profile_extract_fixes::test_second_miss_requires_two_complete_misses`: Lógica de la pasada (second_miss, pass_reached_window, finalize_ingest_pass): depende de profile.refresh, aún pendiente en CONNECT. Se portan las partes puras cuando exista.
+
+### INTELLIGENCE: 4 tests
+
+- `test_handle_db::test_check_niche_trends_persists_every_user_it_searches`: Pruebas de llamada de scan_trends y search_frameworks (lumi_ai/**, no es de CONNECT). CONNECT entrega HandleDirectory (remember_scanned, remember, pictures) con las mismas reglas probadas aparte; falta que el escaneo la llame y que su prueba compruebe que persiste a cada autor, usa la foto conocida, deja NULL lo que no conoce y sobrevive a una caída de la tabla.
+- `test_handle_db::test_check_niche_trends_stores_the_picture_it_knows`: Pruebas de llamada de scan_trends y search_frameworks (lumi_ai/**, no es de CONNECT). CONNECT entrega HandleDirectory (remember_scanned, remember, pictures) con las mismas reglas probadas aparte; falta que el escaneo la llame y que su prueba compruebe que persiste a cada autor, usa la foto conocida, deja NULL lo que no conoce y sobrevive a una caída de la tabla.
+- `test_handle_db::test_check_niche_trends_survives_handle_db_failure`: Pruebas de llamada de scan_trends y search_frameworks (lumi_ai/**, no es de CONNECT). CONNECT entrega HandleDirectory (remember_scanned, remember, pictures) con las mismas reglas probadas aparte; falta que el escaneo la llame y que su prueba compruebe que persiste a cada autor, usa la foto conocida, deja NULL lo que no conoce y sobrevive a una caída de la tabla.
+- `test_handle_db::test_frameworks_search_persists_every_author`: Pruebas de llamada de scan_trends y search_frameworks (lumi_ai/**, no es de CONNECT). CONNECT entrega HandleDirectory (remember_scanned, remember, pictures) con las mismas reglas probadas aparte; falta que el escaneo la llame y que su prueba compruebe que persiste a cada autor, usa la foto conocida, deja NULL lo que no conoce y sobrevive a una caída de la tabla.
 
 
 ## Retirados

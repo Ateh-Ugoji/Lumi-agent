@@ -26,11 +26,12 @@ El orquestador debe copiarlas a `API_KEYS.md` y ARCHITECT a `.env.example`.
 | `XPOZ_RUN_CREDIT_BUDGET` | `12` | Tope de créditos de Xpoz por ejecución. Al llegar se lanza `BudgetExceeded`. 12 alcanza para una búsqueda de Instagram (12 créditos) |
 | `XPOZ_RUN_CREDIT_BUDGET_<RED>` | sin definir | Tope propio de una red (`X`, `INSTAGRAM`, `TIKTOK`, `REDDIT`). Una red con tope propio no gasta del compartido. `0` la deshabilita |
 | `HANDLE_CACHE_TTL_MINUTES` | `60` | Vigencia de la caché de búsqueda de handles (sustituye a `MVP_CACHE_TTL_MINUTES`) |
+| `HANDLE_DB_ENRICH_LIMIT` | `6` | Handles nuevos que un escaneo completa con una búsqueda de pago (2 créditos cada uno) por llamada. `0` guarda solo los handles |
 | `TOKEN_ENCRYPTION_KEY_PREVIOUS` | vacío | Clave Fernet anterior, solo mientras se rota |
 | `LINKEDIN_API_VERSION` | `202609` | Valor de la cabecera `Linkedin-Version` (formato AAAAMM) |
 | `META_GRAPH_VERSION` | `v26.0` | Versión de Graph API |
 
-Los valores por defecto de `XPOZ_RUN_CREDIT_BUDGET`, `HANDLE_CACHE_TTL_MINUTES` y `LINKEDIN_API_VERSION` son decisión mía y no vienen de una fuente oficial.
+Los valores por defecto de `XPOZ_RUN_CREDIT_BUDGET`, `HANDLE_CACHE_TTL_MINUTES`, `HANDLE_DB_ENRICH_LIMIT` y `LINKEDIN_API_VERSION` son decisión mía y no vienen de una fuente oficial.
 
 ## Redirect URIs exactas
 
@@ -343,3 +344,13 @@ El usuario ve la herramienta y todos los argumentos completos, sin recortar. Una
 Cada escritura aparcada lleva un `confirmation_id` (hash de perfil, herramienta y argumentos). Mientras haya una escritura viva esperando, otra distinta se rechaza con "NOT parked" y el modelo recibe el id de la que espera. Así el "sí" del usuario solo puede referirse a la escritura que el modelo acaba de describir, y una segunda petición del mismo turno no puede sustituirla. La misma escritura repetida se acepta, y una caducada se reemplaza. El resultado tras confirmar cita el `confirmation_id` que se ejecutó.
 
 Límite que sigue en pie: el "sí" lo interpreta el servidor sobre el siguiente mensaje del usuario, y qué describió el modelo no se puede comprobar. Atar la confirmación a un botón de la interfaz con el id requeriría cambiar el puerto `resolve_pending` (INTELLIGENCE, `lumi_ai/ports.py`).
+
+## Directorio de handles (sustituye a `handle_db`)
+
+`apps/connections/handles/directory.py` (`HandleDirectory`) recoge lo que un escaneo aprende y deja una foto reutilizable. No hay tabla nueva: todo va a `social_handles` por `apps.profiles.services.get_or_create_handle`.
+
+- `remember_scanned(handles, origin="niche")`: guarda las cuentas que un escaneo escuchó. Completa con una búsqueda de pago (solo coincidencia EXACTA de usuario) los handles que la tabla no conoce, hasta `HANDLE_DB_ENRICH_LIMIT` por llamada. Si la tabla no se puede leer no guarda ni gasta créditos.
+- `remember(handles, origin="niche")`: guarda a los autores que el escaneo se encontró, sin gastar créditos. Devuelve cuántos eran nuevos.
+- `pictures(handles)`: `{handle en minúsculas: Picture}` solo para quien tiene foto. Nunca lanza.
+- Regla de ARCHITECT: `get_or_create_handle` solo rellena lo que está vacío y no baja el origen. Una foto ya guardada **no se sustituye** (ni por el camino en vivo de `/handles/search`, que antes sí la pisaba). Refrescar una foto vieja necesita un servicio de actualización en `apps.profiles` (pendiente de ARCHITECT).
+- Quien llama (`scan_trends`, `search_frameworks` de INTELLIGENCE) debe usar `remember_scanned`, `remember` y `pictures`; `lumi_ai/**` no es mío.

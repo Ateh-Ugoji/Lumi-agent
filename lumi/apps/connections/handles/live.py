@@ -39,3 +39,19 @@ class XpozHandleLive:
         page = await self._client.search_users(platform, query)
         rows = (row_from_user(platform, spec, dict(u)) for u in page.results)
         return [r for r in rows if r is not None]
+
+
+class XpozExactUser:
+    """``ExactUserLookup``: one paid user search, kept only if the username matches exactly."""
+
+    def __init__(self, live: XpozHandleLive) -> None:
+        self._live = live
+
+    async def exact(self, platform: str, handle: str) -> HandleRow | None:
+        if not self._live.supports(platform):
+            return None
+        target = handle.strip().lstrip("@").lower()
+        for row in await self._live.search(platform, handle):
+            if row.handle.lower() == target:
+                return row
+        return None  # the top hit of a fuzzy search is another person

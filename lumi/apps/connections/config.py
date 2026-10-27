@@ -20,6 +20,9 @@ DEFAULT_XPOZ_RUN_CREDIT_BUDGET = 12  # one Instagram user search costs 12
 DEFAULT_XPOZ_DAILY_CAP_USER = 60  # credits per user in a rolling 24 h
 DEFAULT_XPOZ_DAILY_CAP_GLOBAL = 300  # credits for every user together in a rolling 24 h
 DEFAULT_HANDLE_CACHE_TTL_MINUTES = 60
+DEFAULT_HANDLE_DB_ENRICH_LIMIT = (
+    6  # new scanned handles completed per call (2 credits each)
+)
 DEFAULT_MCP_TOOLS_TTL_SECONDS = 300
 DEFAULT_MCP_CALL_TIMEOUT_SECONDS = 60
 DEFAULT_MCP_REFRESH_TIMEOUT_SECONDS = 8
@@ -84,6 +87,9 @@ class ConnectionsConfig:
     # listed here has its own meter; the others share ``xpoz_run_credit_budget``.
     xpoz_platform_budgets: Mapping[str, int] = field(default_factory=dict)
     handle_cache_ttl_minutes: int = DEFAULT_HANDLE_CACHE_TTL_MINUTES
+    # Handles a scan has never seen that may be completed with a paid user search per call.
+    # 0 saves handles only.
+    handle_db_enrich_limit: int = DEFAULT_HANDLE_DB_ENRICH_LIMIT
 
     @classmethod
     def from_env(cls, env: Mapping[str, str]) -> ConnectionsConfig:
@@ -159,6 +165,11 @@ class ConnectionsConfig:
                 env.get("HANDLE_CACHE_TTL_MINUTES"),
                 name="HANDLE_CACHE_TTL_MINUTES",
                 default=DEFAULT_HANDLE_CACHE_TTL_MINUTES,
+            ),
+            handle_db_enrich_limit=parse_non_negative_int(
+                env.get("HANDLE_DB_ENRICH_LIMIT"),
+                name="HANDLE_DB_ENRICH_LIMIT",
+                default=DEFAULT_HANDLE_DB_ENRICH_LIMIT,
             ),
         )
 

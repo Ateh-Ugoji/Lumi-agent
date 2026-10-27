@@ -6,8 +6,8 @@
 * ``DjangoHandleStore``: ``handle_search_cache`` plus ``social_handles``.
 
 Each async method runs its blocking ORM work with ``sync_to_async(thread_sensitive=True)``.
-The ORM writes to ``social_handles`` directly because ``apps.profiles.services`` is not
-published yet. Switch to ``get_or_create_handle`` when it is (docs/CONTRATOS.md section 5).
+Handles are written through ``apps.profiles.services.get_or_create_handle`` (docs/CONTRATOS.md
+section 5). That service only fills empty fields, which is also the rule for the picture.
 """
 
 from __future__ import annotations
@@ -24,8 +24,10 @@ from django.db.models import F, Q, Sum
 from django.db.models.functions import Now
 from django.utils import timezone
 
+from apps.core.choices import IngestSource
 from apps.core.fields import TokenDecryptError
 from apps.profiles.models import HandleOrigin, SocialHandle, SocialProfile
+from apps.profiles.services import InvalidHandle, get_or_create_handle
 
 from .clients.credits import CreditEntry
 from .config import ConnectionsConfig
@@ -48,15 +50,6 @@ from .publishing import LedgerEntry, LedgerStatus, PublishInProgress
 
 _HANDLE_RE = re.compile(r"^[a-z0-9._-]{1,100}$")
 _REMEMBERED_LIMIT = 200
-# Higher number wins when two sources describe the same handle (SCHEMA section 6.3).
-_ORIGIN_WEIGHT = {
-    HandleOrigin.SELECTED: 5,
-    HandleOrigin.PROFILE: 4,
-    HandleOrigin.LIVE: 3,
-    HandleOrigin.CACHE: 2,
-    HandleOrigin.NICHE: 1,
-    HandleOrigin.IMPORT: 0,
-}
 
 
 # --- OAuth state ---------------------------------------------------------------------------
@@ -497,47 +490,70 @@ class DjangoHandleStore:
             "cached_searches": HandleSearchCache.objects.count(),
         }
 
+    async def remember_rows(self, rows: list[HandleRow], origin: str) -> None:
+        """Add-if-absent under ``origin``: what a handle already holds is never replaced."""
+        await sync_to_async(self._remember, thread_sensitive=True)(rows, origin, False)
+
+    async def pictures(self, platform: str, handles: list[str]) -> list[HandleRow]:
+        """Rows of ``handles`` that carry a picture. A handle with no picture is left out."""
+        return await sync_to_async(self._pictures, thread_sensitive=True)(
+            platform, handles
+        )
+
+    def _pictures(self, platform: str, handles: list[str]) -> list[HandleRow]:
+        wanted = {n for h in handles if (n := normalize_handle(h))}
+        found = SocialHandle.objects.filter(
+            platform=platform, handle_normalized__in=wanted
+        ).exclude(avatar_url="")
+        return [_row(h) for h in found]
+
     def _remember(self, rows: list[HandleRow], origin: str, overwrite: bool) -> None:
-        by_platform: dict[str, list[HandleRow]] = {}
-        for row in rows:
-            by_platform.setdefault(row.platform, []).append(row)
+        """Write every row through ``get_or_create_handle``.
+
+        That service only fills fields that are empty and never lowers the origin, so a
+        picture already stored is never replaced here. ``overwrite`` (a fresh live pull)
+        only adds what the service does not own: the display name and the case of the
+        handle. A follower count enters as a dated snapshot, and a count from a cache row
+        never replaces one a live pull stored.
+        """
         with transaction.atomic():
-            for platform, group in by_platform.items():
-                self._ensure_handles(platform, group)
-                for row in group:
-                    name = normalize_handle(row.handle)
-                    if name is None:
-                        continue
-                    current = SocialHandle.objects.get(
-                        platform=platform, handle_normalized=name
+            for row in rows:
+                name = normalize_handle(row.handle)
+                if name is None:
+                    continue
+                current = SocialHandle.objects.filter(
+                    platform=row.platform, handle_normalized=name
+                ).first()
+                followers = row.followers
+                if (
+                    not overwrite
+                    and current is not None
+                    and current.follower_count is not None
+                ):
+                    followers = None
+                try:
+                    handle_id = get_or_create_handle(
+                        row.platform,
+                        row.handle,
+                        origin=origin,
+                        display_name=row.display_name,
+                        avatar_url=row.avatar_url,
+                        follower_count=followers,
+                        source=IngestSource.XPOZ if followers is not None else None,
+                        handle_display=row.handle,
                     )
-                    if not overwrite and not _is_blank(current):
-                        continue
-                    self._update(current, row, origin)
-
-    def _update(self, current: SocialHandle, row: HandleRow, origin: str) -> None:
-        changes: dict[str, object] = {"last_seen_at": Now()}
-        if row.handle:
-            changes["handle_display"] = row.handle
-        if row.display_name:
-            changes["display_name"] = row.display_name
-        if row.avatar_url:
-            changes["avatar_url"] = row.avatar_url
-        if row.followers is not None:  # a missing count never wipes a known one
-            changes["follower_count"] = row.followers
-            changes["follower_count_at"] = Now()
-        if _ORIGIN_WEIGHT.get(origin, 0) > _ORIGIN_WEIGHT.get(current.origin, 0):
-            changes["origin"] = origin
-        SocialHandle.objects.filter(pk=current.pk).update(**changes, updated_at=Now())
-
-
-def _is_blank(handle: SocialHandle) -> bool:
-    """True when nothing but the name is known, so a cache row may fill it in."""
-    return (
-        not handle.display_name
-        and not handle.avatar_url
-        and handle.follower_count is None
-    )
+                except InvalidHandle:
+                    continue
+                if overwrite:
+                    changes: dict[str, object] = {}
+                    if row.handle:
+                        changes["handle_display"] = row.handle
+                    if row.display_name:
+                        changes["display_name"] = row.display_name
+                    if changes:
+                        SocialHandle.objects.filter(pk=handle_id).update(
+                            **changes, updated_at=Now()
+                        )
 
 
 __all__ = [

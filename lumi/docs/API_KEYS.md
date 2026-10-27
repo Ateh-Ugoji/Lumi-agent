@@ -47,6 +47,7 @@ Son opcionales: sin ellas Lumi funciona, con menos calidad de evaluación y sin 
 | `X_LIVE_ENABLED` | real | Interruptor de llamadas reales a X. Por defecto `false`. Cada post en X gasta créditos prepagados; no se activa sin que Christian lo pida | no es una key |
 | `XPOZ_LIVE_ENABLED` | real | Interruptor de llamadas reales a Xpoz. Por defecto `false`. Cada consulta gasta créditos | no es una key |
 | `XPOZ_RUN_CREDIT_BUDGET` | real | Tope de créditos de Xpoz por ejecución. Por defecto `12` (una corrida de Instagram cuesta 12). Opcionales por red: `XPOZ_RUN_CREDIT_BUDGET_X`, `XPOZ_RUN_CREDIT_BUDGET_INSTAGRAM`, `XPOZ_RUN_CREDIT_BUDGET_TIKTOK` y `XPOZ_RUN_CREDIT_BUDGET_REDDIT` | no es una key |
+| `HANDLE_DB_ENRICH_LIMIT` | real | Handles nuevos que un escaneo completa con una búsqueda de pago por llamada. Por defecto `6` (2 créditos de Xpoz cada uno). `0` guarda solo los handles | no es una key |
 | `HANDLE_CACHE_TTL_MINUTES` | real | Minutos de vigencia de la caché de búsqueda de handles. Por defecto `60`. Sustituye a `MVP_CACHE_TTL_MINUTES` | no es una key |
 | `TOKEN_ENCRYPTION_KEY_PREVIOUS` | real | Clave Fernet anterior, solo mientras se rota `TOKEN_ENCRYPTION_KEY`. Vacía en el uso normal | no es una key |
 | `LINKEDIN_API_VERSION`, `META_GRAPH_VERSION` | real | Versiones de API que usan los adaptadores. Por defecto `202609` y `v26.0` | no son keys |
