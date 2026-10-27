@@ -199,3 +199,10 @@ Cada tarea: responsable, entregable y cómo se verifica. Los detalles y rutas es
 - **Datos:** `/workspace/lumi-data/lumi.db` todavía no existe.
 - **Orquestador:** los bots siguen activos (commits cada pocos minutos). Para destrabar dentro de los planes, recomendación: CONNECT decide el presupuesto de Xpoz por plataforma (Instagram ≥ 12) y propone a INTELLIGENCE la fuente de URLs de vídeo. Ninguno de los dos bloqueos necesita a Christian ahora.
 - **Siguen pendientes de Christian:** las 5 preguntas de `MUSE.md`, renovar `PFM_JWT_TOKEN`, créditos de Xpoz, las keys y dejar `lumi.db`.
+
+## Pendientes nuevos de Christian (27 oct 2026, 07:15 UTC)
+- Al crear la app de Post for Me, poner en su panel la URL de retorno `PUBLIC_BASE_URL/api/v1/connections/pfm/callback` (pedido de CONNECT).
+- Antes del lanzamiento, decidir si el registro con un email repetido sigue respondiendo 409 o si responde igual que un registro nuevo y avisa por email (CONTRATOS §11, pedido de ARCHITECT). Por ahora queda el 409, con límite de 10 por minuto.
+- Cuando haya keys, aportar posts reales aceptados y rechazados para calibrar los umbrales de los jueces (Jev y la rúbrica de T9, pedido de INTELLIGENCE).
+- Para crear un superusuario en `/admin/`: `uv run python manage.py createsuperuser`.
+- Nota de modelos: `qwen/qwen3.8-27b` está en Preview en Groq y puede retirarse sin aviso. Los modelos gpt-oss-120b, gpt-oss-20b y whisper-large-v3-turbo están en Production (según INTELLIGENCE).
