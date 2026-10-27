@@ -16,9 +16,10 @@ from apps.connections.models import (
     AccountStatus,
     ConnectedAccount,
     OAuthState,
+    PfmLink,
 )
 from apps.connections.providers.registry import build_provider
-from apps.connections.tests.fakes import Recorder, json_response, routes
+from apps.connections.tests.fakes import Recorder, fixture, json_response, routes
 
 FRONT = "http://localhost:5173"
 META_ENV = {"META_APP_ID": "app-1", "META_APP_SECRET": "sec-1"}
@@ -224,7 +225,9 @@ def test_pfm_connect_needs_the_platform_and_returns_the_pfm_url(
     response = connect(api, "pfm", platform="x")
     assert response.status_code == 200
     assert response.json()["authorize_url"].startswith("https://api.postforme.dev/")
-    assert f"lumi-user-{user.pk}".encode() in seen["body"]
+    link = PfmLink.objects.get(user=user)
+    assert link.external_id.encode() in seen["body"]
+    assert link.external_id != f"lumi-user-{user.pk}"
 
 
 def test_pfm_upstream_failure_is_a_502_without_the_provider_text(
@@ -429,15 +432,21 @@ def test_status_lists_only_my_accounts(api, env, providers, other_user) -> None:
     assert [a["id"] for a in body["accounts"]] == ["1001", "1002"]
 
 
-PFM_ACCOUNTS = {
-    ("GET", "/v1/social-accounts"): json_response("pfm_accounts.json"),
-}
+def pfm_list_for_the_asked_id(request: httpx.Request) -> httpx.Response:
+    """PFM filters by ``external_id``. The double answers the fixture under the asked id."""
+    body = fixture("pfm_accounts.json")
+    body["data"][0]["external_id"] = request.url.params["external_id"]
+    return httpx.Response(200, json=body)
+
+
+PFM_ACCOUNTS = {("GET", "/v1/social-accounts"): pfm_list_for_the_asked_id}
 
 
 def test_pfm_status_syncs_accounts_by_external_id_and_hides_their_tokens(
     api, env, providers, user
 ) -> None:
     env(PFM_ENV)
+    PfmLink.objects.create(user=user, external_id="lumi-link-1")
     providers.on("pfm", PFM_ACCOUNTS)
     response = api.get("/api/v1/connections/pfm/status")
     body = response.json()
@@ -445,7 +454,7 @@ def test_pfm_status_syncs_accounts_by_external_id_and_hides_their_tokens(
     assert body["accounts"][0]["handle"] == "Ateh"
     assert "FAKE-PLATFORM" not in response.content.decode()
     sent = providers.requests("pfm")[0]
-    assert sent.url.params["external_id"] == f"lumi-user-{user.pk}"
+    assert sent.url.params["external_id"] == "lumi-link-1"
     row = ConnectedAccount.objects.get(provider="pfm")
     assert row.access_token == "" and row.external_account_id == "sa_1"
 
@@ -514,8 +523,9 @@ def test_disconnect_one_account_and_404_for_unknown_or_foreign(
     assert [r.external_account_id for r in left] == ["1001"]
 
 
-def test_pfm_disconnect_calls_pfm_for_each_account(api, env, providers) -> None:
+def test_pfm_disconnect_calls_pfm_for_each_account(api, env, providers, user) -> None:
     env(PFM_ENV)
+    PfmLink.objects.create(user=user, external_id="lumi-link-1")
     providers.on(
         "pfm",
         {

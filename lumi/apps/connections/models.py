@@ -192,6 +192,24 @@ class PublishJob(models.Model):
         ]
 
 
+class PfmLink(models.Model):
+    """The ``external_id`` Lumi gave Post for Me for one user.
+
+    The value is random, so nobody can derive it from a user id. A sync accepts only accounts
+    PFM reports under this exact value. Users who connected before this table existed keep the
+    old ``lumi-user-<id>`` value, because PFM refuses to change the id of a connected account.
+    """
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="pfm_link"
+    )
+    external_id = models.CharField(max_length=64, unique=True)
+    created_at = models.DateTimeField(db_default=Now(), editable=False)
+
+    class Meta:
+        db_table = "pfm_links"
+
+
 class McpAuthAccount(models.Model):
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,

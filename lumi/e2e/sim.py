@@ -49,7 +49,7 @@ def _meta_handler(request: httpx.Request) -> httpx.Response:
     if path.endswith("/oauth/access_token"):
         name = (
             "meta_long_token.json"
-            if request.url.params.get("grant_type")
+            if httpx.QueryParams(request.content.decode()).get("grant_type")
             else "meta_short_token.json"
         )
         return httpx.Response(200, json=fixture(name))
