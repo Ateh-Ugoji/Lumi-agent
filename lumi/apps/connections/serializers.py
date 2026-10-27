@@ -19,6 +19,18 @@ class ConnectRequestSerializer(serializers.Serializer):
     )
 
 
+class CompleteRequestSerializer(serializers.Serializer):
+    code = serializers.CharField(max_length=2000, trim_whitespace=False)
+    state = serializers.CharField(max_length=256)
+
+
+class CompleteResponseSerializer(serializers.Serializer):
+    provider = serializers.CharField()
+    connected = serializers.BooleanField()
+    accounts = serializers.IntegerField()
+    redirect_after = serializers.CharField()
+
+
 class ConnectResponseSerializer(serializers.Serializer):
     authorize_url = serializers.URLField()
 

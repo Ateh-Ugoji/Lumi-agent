@@ -4,8 +4,10 @@ import {
   connectErrorMessage,
   googleScopeLabels,
   isLiveDisabled,
+  parseConnectHandoff,
   parseConnectReturn,
   startConnectMessage,
+  stripConnectHandoff,
   stripConnectReturn,
 } from "../src/api/connections.ts";
 import { ApiError } from "../src/api/http.ts";
@@ -73,4 +75,31 @@ test("googleScopeLabels translates known scopes and keeps unknown ones", () => {
 test("connectErrorMessage reads a bare contract code the same as the prefixed one", () => {
   assert.equal(connectErrorMessage("access_denied"), connectErrorMessage("connections.access_denied"));
   assert.notEqual(connectErrorMessage("access_denied"), connectErrorMessage("whatever"));
+});
+
+test("parseConnectHandoff reads the grant the public callback leaves in the fragment", () => {
+  assert.deepEqual(parseConnectHandoff("#connect=meta&code=abc%2F1&state=st_1"), {
+    provider: "meta",
+    code: "abc/1",
+    state: "st_1",
+  });
+  assert.equal(parseConnectHandoff("#connect=meta&code=abc"), null);
+  assert.equal(parseConnectHandoff("#connect=pfm&code=a&state=b"), null);
+  assert.equal(parseConnectHandoff("#connect=evil&code=a&state=b"), null);
+  assert.equal(parseConnectHandoff(""), null);
+});
+
+test("a handoff is never read from the query string, so a crafted ?code= is ignored", () => {
+  assert.equal(parseConnectHandoff("?connect=meta&code=a&state=b"), null);
+});
+
+test("stripConnectHandoff removes the grant and keeps unrelated fragment data", () => {
+  assert.equal(
+    stripConnectHandoff("http://localhost:3010/?tab=a#connect=meta&code=c&state=s"),
+    "/?tab=a",
+  );
+  assert.equal(
+    stripConnectHandoff("http://localhost:3010/#connect=meta&code=c&state=s&x=1"),
+    "/#x=1",
+  );
 });

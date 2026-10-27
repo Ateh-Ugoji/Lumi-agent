@@ -67,6 +67,41 @@ export function disconnect(
   });
 }
 
+/**
+ * What the public OAuth callback left in the URL fragment: the provider's `code` and our `state`.
+ * The callback cannot tell who is logged in, so it only hands them over. We finish the grant here
+ * with the user's own Token, which is what ties the state to this session.
+ */
+export type ConnectHandoff = { provider: Provider; code: string; state: string };
+
+const PROVIDERS: readonly string[] = ["meta", "linkedin", "x", "google"];
+
+export function parseConnectHandoff(hash: string): ConnectHandoff | null {
+  if (!hash.startsWith("#")) return null;
+  const params = new URLSearchParams(hash.replace(/^#/, ""));
+  const provider = params.get("connect");
+  const code = params.get("code");
+  const state = params.get("state");
+  if (!provider || !code || !state || !PROVIDERS.includes(provider)) return null;
+  return { provider: provider as Provider, code, state };
+}
+
+/** The URL without the handoff, so a reload or a shared link never repeats the grant. */
+export function stripConnectHandoff(href: string): string {
+  const url = new URL(href);
+  const params = new URLSearchParams(url.hash.replace(/^#/, ""));
+  for (const key of ["connect", "code", "state"]) params.delete(key);
+  const rest = params.toString();
+  return `${url.pathname}${url.search}${rest ? `#${rest}` : ""}`;
+}
+
+export function completeConnect(handoff: ConnectHandoff): Promise<{ provider: string; connected: boolean }> {
+  return request(`/connections/${handoff.provider}/complete`, {
+    method: "POST",
+    body: { code: handoff.code, state: handoff.state },
+  });
+}
+
 /** What the OAuth callback left in the URL when it sent the user back. */
 export type ConnectReturn =
   | { kind: "connected"; provider: string }

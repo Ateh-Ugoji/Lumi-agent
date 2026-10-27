@@ -176,7 +176,7 @@ El frontend vive en `lumi/frontend` (Vite, React 19, puerto 3010) y habla solo c
 
 - `src/api/http.ts` es el único cliente. Pone `Authorization: Token <key>`, entiende `{"error":{"code","message","details"}}` y abre el stream del chat. Pide `text/event-stream, application/json;q=0.5` porque DRF contesta 406 si solo se acepta `text/event-stream`.
 - `src/auth/` guarda el token y muestra el login o el registro antes de la app (`AuthGate` en `main.tsx`). Un 401 limpia el token y vuelve al login.
-- `src/api/connections.ts` pide `POST /connections/{provider}/connect`, abre `authorize_url` y, al volver, lee `?connected=` o `?error=`, limpia la URL y muestra el aviso. Con Post for Me llama a `GET /connections/pfm/status` al volver, porque el callback de PFM no trae el estado de Lumi y esa llamada es la que sincroniza las cuentas.
+- `src/api/connections.ts` pide `POST /connections/{provider}/connect`, abre `authorize_url` y, al volver, lee el fragmento `#connect=&code=&state=`, lo borra de la URL al instante y llama a `POST /connections/{provider}/complete` con el Token del usuario; luego muestra el aviso. Los errores del proveedor siguen llegando como `?error=`. Con Post for Me llama a `GET /connections/pfm/status` al volver, porque el callback de PFM no trae el estado de Lumi y esa llamada es la que sincroniza las cuentas.
 - Los códigos de error del callback llegan con prefijo (`connections.access_denied`). El mapa de mensajes acepta también la forma sin prefijo que lista CONTRATOS.
 - Publicación: el borrador se revisa con `dry_run`, y la publicación real exige pulsar dos veces (iniciar y confirmar). Cada intento lleva su `Idempotency-Key`.
 - Ningún token de proveedor llega al navegador. Las pruebas lo comprueban en el DOM.
@@ -258,7 +258,8 @@ Todas bajo `/api/v1/connections/{provider}`, con `provider` en `pfm|meta|linkedi
 | Ruta | Qué hace |
 | --- | --- |
 | `POST .../connect` | Cuerpo opcional `profile_id`, `redirect_after`, `platform` (solo PFM). Responde `{"authorize_url"}`. Sin llaves de la app responde 503 `not_configured` con `details.env_vars`. X apagado responde 409 `connections.live_disabled`. |
-| `GET .../callback` | Pública. Siempre 302 al frontend con `?connected=<provider>` o `?error=<código>`. Nunca devuelve JSON ni repite el texto del proveedor. |
+| `GET .../callback` | Pública. No intercambia nada. Con `code` y `state` responde 302 al frontend con `#connect=<provider>&code=...&state=...` en el fragmento; si el usuario canceló, 302 con `?error=connections.access_denied`. Nunca devuelve JSON ni repite el texto del proveedor. |
+| `POST .../complete` | Autenticada. Cuerpo `{code, state}`. Termina la autorización solo si el `state` lo empezó el usuario del Token (si no, 400 `connections.state_invalid`). Devuelve `{provider, connected, accounts, redirect_after}`. |
 | `GET .../status` | `configured`, `connected`, `stale` y la lista de cuentas sin tokens. En PFM sincroniza antes con `GET /v1/social-accounts?external_id=lumi-user-<id>`. |
 | `DELETE .../{provider}` | Revoca en el proveedor (si falla, borra igual) y borra las filas con sus tokens. `?account_id=` limita a una cuenta. |
 

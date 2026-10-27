@@ -62,7 +62,15 @@ def test_register_connect_chat_publish_and_disconnect() -> None:
     )
     assert back.status_code == 302
     assert back["Location"].startswith("http://localhost:3010")
-    assert "connected=meta" in back["Location"]
+    # The public callback only hands the grant to the frontend; the logged-in user finishes it.
+    fragment = parse_qs(urlsplit(back["Location"]).fragment)
+    assert fragment["connect"] == ["meta"] and fragment["state"] == [state]
+    done = api.post(
+        "/api/v1/connections/meta/complete",
+        {"code": fragment["code"][0], "state": fragment["state"][0]},
+        format="json",
+    )
+    assert done.status_code == 200 and done.json()["connected"] is True
 
     status = api.get("/api/v1/connections/meta/status").json()
     assert status["connected"] is True

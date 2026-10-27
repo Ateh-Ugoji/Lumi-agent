@@ -13,6 +13,8 @@ from apps.core.errors import ApiError
 
 from . import accounts, handles_api, publish_api
 from .serializers import (
+    CompleteRequestSerializer,
+    CompleteResponseSerializer,
     ConnectRequestSerializer,
     ConnectResponseSerializer,
     DisconnectSerializer,
@@ -50,11 +52,31 @@ class ConnectView(APIView):
         return Response({"authorize_url": url})
 
 
+class CompleteView(APIView):
+    """Authenticated: finishes a grant for the logged-in user and nobody else."""
+
+    @extend_schema(
+        request=CompleteRequestSerializer,
+        responses=CompleteResponseSerializer,
+        summary="Finish an OAuth grant with the code the provider returned",
+    )
+    def post(self, request, provider: str):
+        body = CompleteRequestSerializer(data=request.data or {})
+        body.is_valid(raise_exception=True)
+        data = body.validated_data
+        result = accounts.complete_connect(
+            request.user, provider, code=data["code"], state=data["state"]
+        )
+        return Response(CompleteResponseSerializer(result).data)
+
+
 class CallbackView(APIView):
     """Public: the provider's browser redirect carries no Token header.
 
-    The user is identified by the ``oauth_states`` row. The answer is always a 302 to the
-    frontend, never JSON, and never echoes the provider's code or error text.
+    It exchanges nothing. Whoever opens it could be a victim holding an attacker's link, so it
+    hands ``code`` and ``state`` to the frontend (URL fragment), which finishes the grant with
+    ``POST /connections/<provider>/complete`` under the user's own Token. The answer is always
+    a 302 to the frontend, never JSON, and never echoes the provider's error text.
     """
 
     authentication_classes: list = []

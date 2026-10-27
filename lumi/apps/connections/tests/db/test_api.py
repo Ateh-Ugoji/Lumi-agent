@@ -110,8 +110,56 @@ def state_of(url: str) -> str:
 
 
 def callback(name: str, **params):
-    # Deliberately a client with no credentials: the browser redirect has no Token header.
-    return APIClient().get(f"/api/v1/connections/{name}/callback", params)
+    """The browser's whole return trip, as one call.
+
+    1. The provider redirect hits the PUBLIC callback (no credentials). It exchanges nothing and
+       hands ``code`` and ``state`` to the frontend in the URL fragment.
+    2. The frontend answers with ``POST /complete`` under the Token of the user who started the
+       flow, which is how a real session behaves.
+
+    The response is the callback's 302 with its ``Location`` rewritten to what the old one-step
+    callback used to send, so the outcome assertions stay about the outcome. Tests of the split
+    itself use ``handoff`` and ``complete`` below.
+    """
+    response = APIClient().get(f"/api/v1/connections/{name}/callback", params)
+    fragment = parse_qs(urlsplit(response["Location"]).fragment)
+    if "code" not in fragment:
+        return response
+    done = complete(
+        name,
+        fragment["state"][0],
+        fragment["code"][0],
+        user=_owner_of(fragment["state"][0]),
+    )
+    config = accounts.get_config()
+    if done.status_code == 200:
+        response["Location"] = accounts.frontend_redirect(
+            config, done.json()["redirect_after"], connected=name
+        )
+    else:
+        response["Location"] = accounts.frontend_redirect(
+            config, "/", error=done.json()["error"]["code"]
+        )
+    return response
+
+
+def _owner_of(state: str):
+    """Whoever started ``state``, else the only user. A forged state has no owner."""
+    from django.contrib.auth import get_user_model
+
+    row = OAuthState.objects.filter(state=state).select_related("user").first()
+    if row:
+        return row.user
+    users = get_user_model().objects
+    return users.order_by("pk").first() or users.create_user("nobody@example.com")
+
+
+def complete(name: str, state: str, code: str, *, user):
+    return client_for(user).post(
+        f"/api/v1/connections/{name}/complete",
+        {"code": code, "state": state},
+        format="json",
+    )
 
 
 def location(response) -> tuple[str, dict[str, list[str]]]:

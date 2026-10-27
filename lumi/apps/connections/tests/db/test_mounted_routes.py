@@ -61,7 +61,9 @@ def test_the_callback_is_public_in_the_default_urlconf(client, monkeypatch) -> N
     )
     assert response.status_code == 302
     assert response["Location"].startswith("http://localhost:5173")
-    assert "error=" in response["Location"]
+    # Public and exchanging nothing: the grant moves to the frontend's authenticated /complete.
+    assert response["Location"].endswith("#connect=meta&code=x&state=nope")
+    assert client.post("/api/v1/connections/meta/complete", {}).status_code == 401
 
 
 def test_publish_is_mounted_and_guarded_in_the_default_urlconf(user, client) -> None:

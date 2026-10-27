@@ -78,6 +78,18 @@ export default function ConnectionsPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [providerKey, load]);
 
+  // The grant is finished after the page loads (the frontend posts it with the user's Token), so
+  // the status read at mount may predate it. Read it again once the return banner says connected.
+  useEffect(() => {
+    if (returned?.kind !== "connected") return;
+    const provider = returned.provider as Provider;
+    if (providers.includes(provider)) {
+      void load(provider);
+      onChanged?.();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [returned]);
+
   const connect = async (provider: Provider) => {
     patch(provider, { busy: true, error: null, note: null });
     try {

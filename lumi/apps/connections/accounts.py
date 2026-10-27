@@ -15,6 +15,7 @@ import secrets
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
+from typing import Any
 from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit, urlunsplit
 
 from asgiref.sync import async_to_sync
@@ -45,7 +46,7 @@ from .models import (
     PfmLink,
     Provider,
 )
-from .oauth import OAuthFlow, OAuthProvider
+from .oauth import MAX_STATE_LENGTH, OAuthFlow, OAuthProvider
 from .providers.base import AccountInfo, SocialProvider, TokenSet
 from .providers.registry import build_provider
 from .stores import DjangoOAuthStateStore, save_google_tokens
@@ -246,8 +247,26 @@ def frontend_redirect(
     return urlunsplit(parts._replace(query=urlencode(merged)))
 
 
+def frontend_handoff(
+    config: ConnectionsConfig, provider: str, code: str, state: str
+) -> str:
+    """Where the callback sends the browser so the logged-in frontend can finish the grant.
+
+    The code and state travel in the URL fragment, which no server log and no ``Referer`` sees.
+    The frontend answers with an authenticated ``POST /connections/<provider>/complete``.
+    """
+    parts = urlsplit(frontend_redirect(config, "/"))
+    fragment = urlencode({"connect": provider, "code": code, "state": state})
+    return urlunsplit(parts._replace(fragment=fragment))
+
+
 def finish_callback(provider: str, params: Mapping[str, str]) -> str:
     """Handle the provider's redirect back and return where to send the browser.
+
+    This endpoint is public and the browser carries no Token header, so it cannot tell WHO is
+    finishing the grant. It therefore exchanges nothing: a victim who opened an attacker's
+    authorize link would otherwise hand their provider account to the attacker. It passes the
+    code and state to the frontend, which calls ``complete_connect`` with the user's own Token.
 
     Never raises: every failure becomes ``?error=<code>`` on the frontend.
     """
@@ -258,23 +277,38 @@ def finish_callback(provider: str, params: Mapping[str, str]) -> str:
         return frontend_redirect(config, "/", error="connections.unknown_provider")
     if provider == "pfm":
         return _finish_pfm(config, params)
-    target = "/"
     try:
         state = params.get("state", "")
         if params.get("error"):
             # The user said no. Burn the state so the link cannot be replayed.
             _burn_state(provider, state)
-            return frontend_redirect(config, target, error="connections.access_denied")
+            return frontend_redirect(config, "/", error="connections.access_denied")
         code = params.get("code", "")
-        if not code or not state:
-            return frontend_redirect(config, target, error="connections.state_invalid")
+        if not code or not state or len(state) > MAX_STATE_LENGTH:
+            return frontend_redirect(config, "/", error="connections.state_invalid")
+        return frontend_handoff(config, provider, code, state)
+    except Exception:  # public boundary: a browser redirect must never be a 500
+        logger.exception("connections callback failed for %s", provider)
+        return frontend_redirect(config, "/", error="internal_error")
+
+
+def complete_connect(user, provider: str, *, code: str, state: str) -> dict[str, Any]:
+    """Finish a grant for the LOGGED-IN user. The state must have been started by that user."""
+    require_provider(provider)
+    if provider == "pfm":
+        raise ApiError(
+            "connections.unsupported", "Post for Me no usa este paso.", status_code=400
+        )
+    config = get_config()
+    try:
         flow = OAuthFlow(
             oauth_provider(provider),
             DjangoOAuthStateStore(config.redirect_uri),
             config,
         )
-        done = async_to_sync(flow.complete)(state=state, code=code)
-        target = done.record.redirect_after
+        done = async_to_sync(flow.complete)(
+            state=state, code=code, expected_user_id=user.pk
+        )
         count = store_accounts(
             provider,
             user_id=int(done.record.user_id),
@@ -282,17 +316,31 @@ def finish_callback(provider: str, params: Mapping[str, str]) -> str:
             profile_id=done.record.profile_id,
         )
         if count == 0:
-            return frontend_redirect(config, target, error="connections.no_accounts")
-        return frontend_redirect(config, target, connected=provider)
+            raise ApiError(
+                "connections.no_accounts",
+                "La autorización no incluyó ninguna cuenta.",
+                status_code=422,
+            )
+        return {
+            "provider": provider,
+            "connected": True,
+            "accounts": count,
+            "redirect_after": done.record.redirect_after,
+        }
     except OAuthStateError as exc:
-        return frontend_redirect(config, target, error=f"connections.{exc.code}")
-    except AccountTaken:
-        return frontend_redirect(config, target, error="connections.account_taken")
+        raise ApiError(
+            f"connections.{exc.code}",
+            "El enlace de conexión no es válido o caducó. Empieza de nuevo.",
+            status_code=400,
+        ) from exc
+    except AccountTaken as exc:
+        raise ApiError(
+            "connections.account_taken",
+            "Esa cuenta ya está conectada a otro usuario de Lumi.",
+            status_code=409,
+        ) from exc
     except (SocialDataError, ApiError) as exc:
-        return frontend_redirect(config, target, error=api_error_from(exc).api_code)
-    except Exception:  # public boundary: a browser redirect must never be a 500
-        logger.exception("connections callback failed for %s", provider)
-        return frontend_redirect(config, target, error="internal_error")
+        raise api_error_from(exc) from exc
 
 
 def _burn_state(provider: str, state: str) -> None:

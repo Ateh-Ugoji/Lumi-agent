@@ -35,11 +35,15 @@ import {
   connectLinksFrom,
   deleteChatHistory,
   generateChatTitle,
+  completeConnect,
   getProfileAnalytics,
+  parseConnectHandoff,
   parseConnectReturn,
   sendChatMessage,
   streamChatMessage,
+  stripConnectHandoff,
   stripConnectReturn,
+  type ConnectHandoff,
   type ConnectLink,
   type ConnectReturn,
   type ProfileAnalytics,
@@ -394,6 +398,36 @@ export default function App() {
     );
     setView("settings");
     window.history.replaceState(null, "", stripConnectReturn(window.location.href));
+  }, []);
+
+  // The public OAuth callback hands `code` and `state` over in the URL fragment because it cannot
+  // tell who is logged in. Finish the grant here, with this user's Token: the server refuses a
+  // state that someone else started. The fragment is stripped at once, so a reload or a shared
+  // URL never repeats it.
+  const handoffRef = useRef<ConnectHandoff | null>(null);
+  const handoffSentRef = useRef(false);
+  useLayoutEffect(() => {
+    const found = parseConnectHandoff(window.location.hash);
+    if (!found) return;
+    handoffRef.current = found;
+    window.history.replaceState(null, "", stripConnectHandoff(window.location.href));
+    setSettingsSection(found.provider === "google" ? "connectors" : "social");
+    setView("settings");
+  }, []);
+  useEffect(() => {
+    const handoff = handoffRef.current;
+    if (!handoff || handoffSentRef.current) return;
+    handoffSentRef.current = true;
+    completeConnect(handoff)
+      .then(() => {
+        setConnectReturn({ kind: "connected", provider: handoff.provider });
+        refreshProfiles();
+      })
+      .catch((err: unknown) => {
+        const code = err instanceof ApiError ? err.code : "internal_error";
+        setConnectReturn({ kind: "error", code });
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const runCounterRef = useRef(0);
