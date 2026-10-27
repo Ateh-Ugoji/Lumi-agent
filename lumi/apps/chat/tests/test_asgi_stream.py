@@ -19,6 +19,27 @@ from lumi_ai.agent.result import SSEEvent
 
 pytestmark = pytest.mark.django_db(transaction=True)
 
+#: Shape only, never used to call a provider or to encrypt anything real.
+DUMMY_FERNET = "ZmFrZS1mYWtlLWZha2UtZmFrZS1mYWtlLWZha2UtMDA="
+
+
+@pytest.fixture(autouse=True)
+def own_keys(monkeypatch, settings):
+    """``config.asgi`` runs the production startup check on import: give it its own environment.
+
+    The check stays on (``KEYS_ENFORCE_REQUIRED = True``), so this test passes with no keys in
+    the shell and still proves the application starts when the required ones are present.
+    """
+    monkeypatch.setenv("GROQ_API_KEY", "dummy-not-called")
+    monkeypatch.setenv("TOKEN_ENCRYPTION_KEY", DUMMY_FERNET)
+    settings.KEYS_ENFORCE_REQUIRED = True
+
+
+def test_the_startup_check_passes_with_the_required_keys_present():
+    from apps.core import startup
+
+    startup.check()
+
 
 class GatedRuntime:
     """Yields one event, then waits until the test says the client has seen it."""

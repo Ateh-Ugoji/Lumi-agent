@@ -224,27 +224,27 @@ def test_user_option_names_the_owner(legacy):
     assert SocialProfile.objects.get(pk=1).user.email == "maria@example.com"
 
 
-def test_verify_fails_for_a_table_nobody_imports(legacy, tmp_path, monkeypatch):
+def test_verify_fails_for_a_table_nobody_imports(legacy, monkeypatch):
+    """A legacy table no importer claims fails ``--verify``.
+
+    The table is synthetic and registered as legacy on purpose, so no team adding an importer
+    for a real table can make this test pass for the wrong reason.
+    """
     from sqlalchemy import create_engine, text
 
     from apps.core.legacy_import import engine
 
-    # Another app may import style_answers; take its importers out so the table is unclaimed.
-    engine.discover()
-    kept = {
-        name: imp
-        for name, imp in engine._REGISTRY.items()
-        if "style_answers" not in imp.tables
-    }
-    monkeypatch.setattr(engine, "_REGISTRY", kept)
+    table = "zz_unclaimed_for_test"
+    assert not any(table in imp.tables for imp in engine.importers())
+    monkeypatch.setattr(engine, "LEGACY_TABLES", (*engine.LEGACY_TABLES, table))
 
-    engine = create_engine(f"sqlite:///{legacy}")
-    with engine.begin() as c:
-        c.execute(text("INSERT INTO style_answers (id, profile_id, question_key, answer, created_at)"
-                       " VALUES (1, 1, 'q', 'a', '2026-01-01 00:00:00')"))  # fmt: skip
-    engine.dispose()
+    sqlite = create_engine(f"sqlite:///{legacy}")
+    with sqlite.begin() as c:
+        c.execute(text(f"CREATE TABLE {table} (id INTEGER PRIMARY KEY, note TEXT)"))
+        c.execute(text(f"INSERT INTO {table} (id, note) VALUES (1, 'x')"))
+    sqlite.dispose()
     run(legacy)
-    with pytest.raises(CommandError, match="style_answers.*sin importador"):
+    with pytest.raises(CommandError, match=f"{table}.*sin importador"):
         run(legacy, "--verify")
 
 
