@@ -167,9 +167,9 @@ Verifica: tests con el doble de prueba, incluido el formato de eventos SSE actua
 
 ### T8. Importador legado y verificación sin pérdida (2-3 h)
 1. `docs/MIGRACION_LEGADA.md`: mapa tabla/columna legado → nuevo (de SCHEMA.md), transformaciones (enums en MAYÚSCULAS a minúsculas, `profiles` a `User`+`SocialProfile`, handles a `SocialHandle`, payloads JSON a tablas hijas) y qué datos no se migran y por qué.
-2. `manage.py import_legacy --source $LEGACY_DATABASE_URL [--dry-run]`: lee el Postgres legado en solo lectura con SQL directo (psycopg), escribe en el esquema nuevo en una transacción por tabla, es idempotente (se puede repetir) y soporta orígenes sin usuarios creando un usuario "importado".
+2. `manage.py import_legacy --source $LEGACY_DATABASE_URL [--dry-run]`: lee el origen legado en solo lectura. Acepta SQLite (`sqlite:////ruta/lumi.db`, el caso real: los datos poblados existen como archivo `lumi.db`; ver `lumi/docs/DATA_IMPORT.md`) y Postgres (`postgresql://`, con psycopg), escribe en el esquema nuevo en una transacción por tabla, es idempotente (se puede repetir) y soporta orígenes sin usuarios creando un usuario "importado".
 3. `manage.py verify_legacy_import --source ...`: por tabla compara conteos y una suma de verificación determinista por columnas mapeadas; sale con código distinto de 0 si algo difiere. Imprime una tabla.
-4. Prueba automática: genera el DDL legado con `alembic upgrade head --sql` (o `pg_dump -s`; guárdalo en `apps/core/tests/fixtures/legacy_schema.sql`), carga filas de ejemplo en una base temporal, importa, verifica y repite para comprobar idempotencia. Hazlo mientras `alembic/` siga en el repo.
+4. Prueba automática: genera el DDL legado con `alembic upgrade head --sql` (o `pg_dump -s`; guárdalo en `apps/core/tests/fixtures/legacy_schema.sql`), carga filas de ejemplo en una base temporal (un `lumi.db` SQLite de prueba y también un Postgres), importa, verifica y repite para comprobar idempotencia. Hazlo mientras `alembic/` siga en el repo.
 Verifica: `uv run pytest apps/core/tests/test_import_legacy.py -q` pasa; `verify_legacy_import` devuelve 0 sobre los datos de ejemplo.
 
 ### T9. Tareas en segundo plano (1-2 h)
@@ -273,4 +273,4 @@ En cada reporte al orquestador y en `estado/ARCHITECT.md`:
 - Salida resumida de los comandos de la sección 13 que corriste (aprobados y fallidos).
 - Decisiones nuevas (ADR y filas de `decisiones.tsv`) y cualquier cambio del contrato.
 - Riesgos: pérdida de datos posible en el importador, consultas lentas, migraciones que otro bot referencia.
-- Qué necesitas de INTELLIGENCE, CONNECT o de Christian (por ejemplo, un `LEGACY_DATABASE_URL` real para ensayar el importador; sin él, solo corres la prueba con datos de ejemplo).
+- Qué necesitas de INTELLIGENCE, CONNECT o de Christian (por ejemplo, el archivo `lumi.db` real en `/workspace/lumi-data/lumi.db` para ensayar el importador; sin él, solo corres la prueba con datos de ejemplo).

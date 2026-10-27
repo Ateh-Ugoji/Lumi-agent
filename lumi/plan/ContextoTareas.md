@@ -175,3 +175,9 @@ Cada tarea: responsable, entregable y cómo se verifica. Los detalles y rutas es
 - El orquestador lo fusionó en `lumi-orquestador` (merge `0f9bd49`, sin conflictos). Antes de empezar, cada bot hace `git pull --rebase origin lumi-orquestador`. Si `main` vuelve a cambiar, el orquestador lo fusiona en la rama.
 - `WorkingMark` NO se porta en la fusión de frontends: el dueño lo quitó a propósito.
 - `how-to-setup.md` describe el backend FastAPI y SQLite. Cuando el port a Django esté listo, ARCHITECT lo actualiza (Postgres obligatorio, `manage.py`, `check_keys`) y CONNECT actualiza la parte del frontend.
+
+
+## Actualización 27 oct 2026, 06:00 UTC: bots activados y datos preparados
+- Christian activó a los 3 bots a las 06:00 UTC y vuelve hacia las 12:00 UTC. El orquestador revisa cada hora: fusiona `main` en la rama, actualiza este archivo y hace push.
+- Los datos reales son un archivo SQLite `lumi.db` del backend FastAPI. No están en git. Para conectarlos se sigue `lumi/docs/DATA_IMPORT.md`: el archivo se deja en `/workspace/lumi-data/lumi.db` y después se corren `import_legacy`, `verify_legacy_import` y `reindex_vectors`. El importador T8 de ARCHITECT acepta SQLite y Postgres.
+- Pendiente de Christian: dejar `lumi.db` en esa ruta, o pasarlo para que el orquestador lo deje ahí.
