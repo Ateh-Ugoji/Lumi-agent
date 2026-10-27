@@ -46,3 +46,4 @@ ts	phase	decision	why	evidence	result
 2026-10-27T07:02:05Z	T5-chat	chat routes + SSE with pump task, ping, cancel on disconnect; seam core.agent_runtime	INTELLIGENCE runtime not importable yet; legacy lost task refs and never awaited cancel	52 chat tests incl. real ASGI disconnect	green
 2026-10-27T07:02:11Z	T5-trends	trends matches (latest snapshot, no N+1) and scan via agent_runtime seam	scan goes through INTELLIGENCE tool registry per CONTRATOS 3.5	17 tests incl. constant query count	green
 2026-10-27T07:05:39Z	contratos-1.7	CONTRATOS ports 1.7, MatchStore, source_post_id, deviations 16 and 17	INTELLIGENCE T8/T9 request; atomic() cannot span awaits, single-function option proposed	docs only	green
+2026-10-27T07:10:46Z	T8	import_legacy: todo en una transacción, ids conservados solo en profiles/posts/chat	all-or-nothing evita importaciones a medias; los demás ids se rastrean en legacy_import_map	15 tests con SQLite sintético, 1204 pasan en total	ok
