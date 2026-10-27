@@ -70,7 +70,9 @@ Nota sobre la fila 18: `reach_series` y `saves_series` siguen recorriendo todas 
 - **Frontend**: `TrendMatch.author_avatar_url?: string | null` ya está en `api/trends.ts`; `ChronicOnline` usa la foto guardada y unavatar de respaldo.
 - **CONNECT, refresco de fotos** (`/handles/search`, ronda 5): `profiles.services.update_handle_avatar(handle_id, url) -> bool` sustituye la foto cuando llega una URL http(s) válida y distinta, e ignora vacíos. `get_or_create_handle` sigue siendo solo de relleno.
 - **CONNECT, foto de la cuenta de PFM**: en `sync_pfm_accounts`, tras `row.save()`, si la fila está `active` y enlazada: `update_profile_avatar(row.social_profile_id, acc.profile_photo_url, username=acc.username)`. Sin columna nueva (CONTRATOS 11, fila 28).
-- **INTELLIGENCE, 4 huecos de `test_handle_db`** (`check_niche_trends_*`, `frameworks_search_persists_every_author`): `af4e1d5` cubre solo la foto de la fuente y el alta del handle de cada autor con posts. Falta llamar a `HandleDirectory` (`remember_scanned`, `pictures`) desde el escaneo y probarlo.
+- **INTELLIGENCE, 4 huecos de `test_handle_db`: cerrados** en `4971a13` (HandleBook, PORTS 1.12). Paridad: 364 cubiertos, 45 reemplazados, 3 desviaciones, 10 retirados, 0 huecos (422).
+- **INTELLIGENCE, códigos de error de trabajos**: `sync_failed` y `voice_failed` (`apps/intelligence/tasks.py`) no llevan prefijo de dominio. Propuesta: `profiles.sync_failed` y `voice.learn_failed`. Están en `PENDING_RENAME` de `test_error_codes.py`; al renombrar hay que borrar la entrada y ajustar `test_api.py`.
+- **INTELLIGENCE, foto de la fuente**: `get_or_create_handle` solo rellena, así que la foto guardada gana a la de un escaneo. Si debe ganar la fresca, `update_handle_avatar` tras `get_or_create_handle` en `save_peer_posts` (CONTRATOS 11, fila 29).
 
 ## Notas del esqueleto
 

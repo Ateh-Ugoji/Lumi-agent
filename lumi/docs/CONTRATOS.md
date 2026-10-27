@@ -84,6 +84,18 @@ Los cuerpos coinciden con los de FastAPI salvo lo marcado como **cambio**.
 | `GET /profiles/{id}/listening` y `PUT` (**nuevos**) | `{keywords: [str], enabled: bool, interval_minutes: int}`. Respaldan `ListeningStore`. `PUT` reemplaza el conjunto de keywords en una transacción. |
 | `GET /jobs/{job_id}` (**nuevo**) | `{id, kind, status, progress, result, error_code, error_message, created_at, started_at, finished_at}`. `status` es `queued`, `running`, `succeeded`, `failed` o `cancelled`. |
 
+**Trabajos (`GET /jobs/{id}`).** Estados: `queued`, `running`, `succeeded`, `failed`, `cancelled`. `result` y `error_code` van vacíos hasta que el trabajo termina, y `error_code` solo se llena en `failed`. Con `LUMI_JOB_DISPATCH=none` ningún trabajo corre y todos se quedan en `queued`. Códigos de error de un trabajo, con la misma regla de dos niveles que el resto de la API:
+
+| `error_code` | Trabajo | Cuándo |
+| --- | --- | --- |
+| `job.no_handler` | cualquiera | Nadie registró ese `kind`. |
+| `job.unexpected` | cualquiera | El manejador lanzó una excepción no prevista. El mensaje es fijo. |
+| `validation_error` | `profile.*` | El trabajo no trae `profile_id`. |
+| `sync_failed` (pendiente: pasa a `profiles.sync_failed`) | `profile.refresh` | No se pudo leer el feed de la cuenta conectada (sin cuenta, sin configurar o caída del proveedor). `profile.bootstrap` no falla por esto: termina con `sync = unavailable`. |
+| `voice_failed` (pendiente: pasa a `voice.learn_failed`) | `profile.bootstrap` | No se pudo aprender la voz. Se puede reintentar. |
+
+`profile.refresh` devuelve `{posts_synced, posts_indexed, complete, flagged_deleted}` y avanza a `progress` 20 tras la lectura. `POST /profiles/{id}/refresh` no cambia: `202 {job_id}`.
+
 Un `profile_id` ya no tiene valor por defecto en ninguna ruta ni cuerpo. El legado aceptaba `profile_id=1`.
 
 ### 3.3 Chat
@@ -331,6 +343,7 @@ Pendiente de otros equipos, sin importador hoy (el `--verify` los marca `sin imp
 | 26 | `POST /connections/pfm/sync` | **Aceptada** por ARCHITECT (a petición de CONNECT); el orquestador está avisado. Ruta nueva: PFM no manda `state` ni `code`, así que no hay nada que consumir en un callback y el frontend llama a esta ruta al volver. Contrato en la sección 4. `GET /connections/pfm/status` pasa a ser de solo lectura: ni llama a PFM ni escribe (antes sincronizaba y podía poner cuentas en cuarentena). La ruta usa `pfm_links` (`SCHEMA.md` 8) para saber qué `external_id` preguntar, tiene un límite de 12 por minuto y usuario (`429 rate_limited`), guarda cada cuenta bajo `_lock_account` y, si PFM falla, responde `200` con `stale: true` y lo guardado. Los códigos de error siguen la fila 22 (`<dominio>.<motivo>`); los genéricos (`unauthenticated`, `rate_limited`) van sin prefijo. No cambia ninguna tabla. | CONNECT |
 | 27 | `author_avatar_url` en `/trends/matches` | **Aceptada** por ARCHITECT (a petición del orquestador, portada de `632217e`). El legado la guardaba en una columna de `listening_matches` porque ahí el autor era texto suelto. Aquí el autor es `social_handles`, que ya tiene `avatar_url`, así que se lee de ahí y no se añade columna ni migración: una sola foto por autor para todas las pantallas, y la que aprende cualquier escaneo o búsqueda aparece en la lista sin tocar las coincidencias viejas. Solo salen URL `http(s)`. Respuesta: campo nuevo `author_avatar_url: string \| null` (sección 3.5). Importador: el valor del legado rellena el handle si está vacío; si no cabe, queda en el `payload` y `--verify` lo vigila. `viral_posts[].avatar_url` y `sample_posts[].avatar_url` del SSE son de INTELLIGENCE (ver `plan/estado/ARCHITECT.md`). | ARCHITECT |
 | 28 | Foto de la cuenta conectada de PFM (`profile_photo_url`) | **Propuesta** de ARCHITECT, sin columna nueva. `connected_accounts` no guarda la foto: ya existe `social_handles.avatar_url`, y la cuenta llega al handle por `social_profile -> handle`. CONNECT llama a `profiles.services.update_profile_avatar(row.social_profile_id, acc.profile_photo_url, username=acc.username)` en `sync_pfm_accounts`, después de `row.save()` y solo si la fila está `active` y enlazada. Si la cuenta aún no está enlazada, no hace nada: la foto llega en la siguiente sincronización. | CONNECT |
+| 29 | Foto que trae un escaneo y el handle ya tiene otra | **Propuesta** a INTELLIGENCE. Hoy `save_peer_posts` pasa la foto a `get_or_create_handle`, que solo rellena: si el handle ya tiene foto, la guardada gana y es la que sale en `viral_posts[].avatar_url` y en `/trends/matches`. `HandleBook.remember` es igual (añadir si falta). El texto del puerto y de los tests ("la foto que dio la fuente gana") solo es cierto frente al directorio, no frente a lo guardado. Si se quiere que una foto fresca de la fuente reemplace la guardada, la vía sin coste y sin consulta de pago es `profiles.services.update_handle_avatar(handle_id, url)` justo después de `get_or_create_handle` en `save_peer_posts`: un `UPDATE` condicional que ignora vacíos y no repinta si es la misma. Contra: la foto de un post puede ser una miniatura más pequeña que la de la búsqueda de handles, y la última en llegar ganaría. Si se prefiere mantener lo guardado, basta corregir el texto. | INTELLIGENCE |
 
 ## 12. Cómo se pide un cambio
 

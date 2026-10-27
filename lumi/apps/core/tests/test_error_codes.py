@@ -1,7 +1,8 @@
 """Every error code in the API is a generic one from CONTRATOS section 2 or ``<domain>.<reason>``.
 
 The generic list is read from the contract table, so adding a code there is the only edit
-needed. The scan covers ``ApiError(...)`` and ``error_body(...)`` calls in every app.
+needed. The scan covers ``ApiError(...)``, ``error_body(...)`` and ``JobError(...)`` calls in every
+app: a job's ``error_code`` reaches the client in ``GET /jobs/{id}`` like any other code.
 """
 
 import ast
@@ -15,7 +16,10 @@ DOMAIN_CODE = re.compile(r"^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$")
 
 #: Codes that predate the rule and belong to another team's files. Each one names its owner and
 #: the new code. When the owner renames it, the test below fails until the entry is deleted here.
-PENDING_RENAME = {}
+PENDING_RENAME = {
+    "sync_failed": "INTELLIGENCE: profiles.sync_failed (apps/intelligence/tasks.py, profile.refresh)",
+    "voice_failed": "INTELLIGENCE: voice.learn_failed (apps/intelligence/tasks.py, profile.bootstrap)",
+}
 
 
 def generic_codes() -> set[str]:
@@ -34,7 +38,7 @@ def used_codes() -> list[tuple[str, int, str]]:
             if not isinstance(node, ast.Call):
                 continue
             func = getattr(node.func, "id", getattr(node.func, "attr", ""))
-            if func not in {"ApiError", "error_body"} or not node.args:
+            if func not in {"ApiError", "error_body", "JobError"} or not node.args:
                 continue
             first = node.args[0]
             if isinstance(first, ast.Constant) and isinstance(first.value, str):
