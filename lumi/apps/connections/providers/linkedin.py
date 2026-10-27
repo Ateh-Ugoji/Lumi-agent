@@ -51,7 +51,6 @@ API_BASE = "https://api.linkedin.com"
 HOSTS = frozenset({"www.linkedin.com", "api.linkedin.com"})
 SCOPES = ("openid", "profile", "email", "w_member_social")
 READ_SCOPE = "r_member_social"
-MAX_TEXT = 3000
 
 # Characters reserved by LinkedIn's "little" text format. An unescaped one is parsed as markup
 # and can swallow or truncate the post.
@@ -96,7 +95,7 @@ class LinkedInProvider(SocialProvider):
             can_read_metrics=False,
             uses_pkce=False,
             supports_refresh=False,
-            max_text_length=MAX_TEXT,
+            max_text_length=self.text_limit,
             scopes=SCOPES,
         )
 

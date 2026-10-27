@@ -46,7 +46,6 @@ SCOPES = (
 )
 GRAPH_HOST = "graph.facebook.com"
 HOSTS = frozenset({GRAPH_HOST})
-MAX_TEXT = 63206
 # v25.0 retired the *_impressions_* metrics in favour of these.
 POST_METRICS = ("post_media_view", "post_total_media_view_unique")
 
@@ -76,7 +75,7 @@ class MetaProvider(SocialProvider):
             can_read_metrics=True,
             uses_pkce=False,
             supports_refresh=False,
-            max_text_length=MAX_TEXT,
+            max_text_length=self.text_limit,
             scopes=SCOPES,
         )
 

@@ -22,7 +22,6 @@ from ..errors import (
     LiveDisabled,
     ProviderAuthError,
     ProviderUnavailable,
-    ValidationFailed,
 )
 from ..http import ProviderHttp
 from .base import (
@@ -46,7 +45,6 @@ TOKEN_URL = f"{API_BASE}/2/oauth2/token"
 REVOKE_URL = f"{API_BASE}/2/oauth2/revoke"  # unverified in the docs of 2026-10-27
 HOSTS = frozenset({"api.x.com"})
 SCOPES = ("tweet.read", "tweet.write", "users.read", "offline.access", "media.write")
-MAX_TEXT = 280
 COST_POST_USD = 0.015
 COST_POST_WITH_URL_USD = 0.20
 COST_USER_READ_USD = 0.010
@@ -87,7 +85,7 @@ class XProvider(SocialProvider):
             can_read_metrics=False,
             uses_pkce=True,
             supports_refresh=True,
-            max_text_length=MAX_TEXT,
+            max_text_length=self.text_limit,
             scopes=SCOPES,
             paid=True,
         )
@@ -221,11 +219,7 @@ class XProvider(SocialProvider):
             if cost == COST_POST_WITH_URL_USD
             else ()
         )
-        if len(text) > MAX_TEXT:
-            raise ValidationFailed(
-                f"the post has {len(text)} characters, X allows {MAX_TEXT}",
-                provider=self.name,
-            )
+        self.validate_draft(PublishDraft(text=text))  # the link counts toward the limit
         if "tweet.write" not in tokens.scopes:
             raise ProviderAuthError(
                 "the connection lacks the tweet.write scope", provider=self.name

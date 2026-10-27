@@ -13,6 +13,8 @@ from typing import Any, Literal
 
 import httpx
 
+from lumi_ai.generation.enforcement import hashtags
+from lumi_ai.generation.platforms import measure, rules_for
 from lumi_ai.ports import PostIn, PostMetrics
 
 from ..errors import ProviderUnavailable, UnsupportedOperation, ValidationFailed
@@ -174,16 +176,35 @@ class SocialProvider(ABC):
         dry_run: bool = False,
     ) -> PublishResult: ...
 
+    @property
+    def text_limit(self) -> int:
+        """The network's hard limit, from ``lumi_ai.generation.platforms`` (one source)."""
+        return rules_for(self.platform).hard_limit
+
     def validate_draft(self, draft: PublishDraft) -> None:
+        """Reject a draft the network would reject, using the same rules the generator uses.
+
+        Length is measured the way the network counts it (TikTok counts UTF-16 units). Facebook's
+        limit is not official, so it is a ceiling and not a promise.
+        """
         text = draft.text.strip()
         if not text:
             raise ValidationFailed("the post is empty", provider=self.name)
-        limit = self.capabilities().max_text_length
-        if len(draft.text) > limit:
+        rules = rules_for(self.platform)
+        length = measure(self.platform, draft.text)
+        if length > rules.hard_limit:
             raise ValidationFailed(
-                f"the post has {len(draft.text)} characters and {self.name} allows {limit}",
+                f"the post has {length} characters and {rules.label} allows {rules.hard_limit}",
                 provider=self.name,
             )
+        if rules.hashtag_cap_enforced:
+            found = len(hashtags(draft.text))
+            if found > rules.hashtags_max:
+                raise ValidationFailed(
+                    f"the post has {found} hashtags and {rules.label} accepts at most "
+                    f"{rules.hashtags_max}",
+                    provider=self.name,
+                )
 
 
 def bearer(tokens: TokenSet) -> dict[str, str]:
