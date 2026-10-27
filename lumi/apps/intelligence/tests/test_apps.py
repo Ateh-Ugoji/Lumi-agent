@@ -6,7 +6,7 @@ import pytest
 
 from apps.core import keys
 
-EXPECTED = {"groq", "openrouter", "openlux", "jev", "neatlogs", "video"}
+EXPECTED = {"groq", "openrouter", "openlux", "typesafe", "chroma", "neatlogs", "video"}
 
 
 @pytest.fixture

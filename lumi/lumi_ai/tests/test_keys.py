@@ -39,7 +39,7 @@ async def test_missing_required_key_is_an_error_and_optional_is_skipped():
     probes = {p.name: p for p in build_probes(AIConfig())}
     groq = await probes["groq"].run()
     assert groq.status == "error" and "GROQ_API_KEY" in groq.detail
-    for name in ("openrouter", "openlux", "jev", "neatlogs", "video"):
+    for name in ("openrouter", "openlux", "typesafe", "chroma", "neatlogs", "video"):
         result = await probes[name].run()
         assert result.status == "skipped", name
     assert probes["groq"].required and not probes["openrouter"].required
@@ -124,3 +124,40 @@ async def test_video_configured_without_key_is_an_error():
         AIConfig(video_provider="gemini"), _models_ok, name="video"
     ).run()
     assert result.status == "error" and "VIDEO_API_KEY" in result.detail
+
+
+def _chroma(cfg, factory):
+    return next(
+        p
+        for p in build_probes(cfg, chroma_client_factory=factory)
+        if p.name == "chroma"
+    )
+
+
+class _Heartbeat:
+    def __init__(self, fail: Exception | None = None) -> None:
+        self.fail = fail
+
+    def heartbeat(self):
+        if self.fail:
+            raise self.fail
+        return 1
+
+
+async def test_chroma_cloud_ok_when_the_heartbeat_answers():
+    cfg = AIConfig(chroma_api_key=KEY, chroma_tenant="t", chroma_database="d")
+    result = await _chroma(cfg, lambda c: _Heartbeat()).run()
+    assert result.status == "ok"
+
+
+async def test_chroma_cloud_needs_tenant_and_database():
+    result = await _chroma(AIConfig(chroma_api_key=KEY), lambda c: _Heartbeat()).run()
+    assert result.status == "error"
+    assert "CHROMA_TENANT" in result.detail and "CHROMA_DATABASE" in result.detail
+
+
+async def test_chroma_cloud_error_never_contains_the_key():
+    cfg = AIConfig(chroma_api_key=KEY, chroma_tenant="t", chroma_database="d")
+    boom = RuntimeError(f"401 for key {KEY}")
+    result = await _chroma(cfg, lambda c: _Heartbeat(boom)).run()
+    assert result.status == "error" and KEY not in result.detail

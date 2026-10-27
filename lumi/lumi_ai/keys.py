@@ -14,11 +14,16 @@ never contain a key value.
 
 from __future__ import annotations
 
+import asyncio
+from collections.abc import Callable
+from typing import Any
+
 import httpx
 
 from lumi_ai.config import AIConfig
 from lumi_ai.ports import KeyProbe, ProbeResult
 from lumi_ai.providers.urls import GROQ_BASE_URL, OPENLUX_BASE_URL, OPENROUTER_BASE_URL
+from lumi_ai.rag.vector_store import make_client
 from lumi_ai.video.factory import video_status
 from lumi_ai.video.gemini import GEMINI_BASE_URL
 
@@ -179,7 +184,9 @@ class _NeatlogsProbe:
 
 
 class _JevProbe:
-    name = "jev"
+    """Jev (TypeSafe AI). Listed as ``typesafe``: the id follows the key, as PLAN §9 names it."""
+
+    name = "typesafe"
     required = False
     env_vars = ("TYPESAFE_API_KEY",)
 
@@ -214,6 +221,47 @@ class _JevProbe:
                 _redact(f"{type(exc).__name__}: {exc}", self._api_key),
             )
         return ProbeResult(self.name, "ok", "system_one respondió")
+
+
+class _ChromaProbe:
+    """Chroma Cloud when ``CHROMA_API_KEY`` is set; without it the local store needs no key."""
+
+    name = "chroma"
+    required = False
+    env_vars = ("CHROMA_API_KEY", "CHROMA_TENANT", "CHROMA_DATABASE")
+
+    def __init__(self, config: AIConfig, client_factory: Callable[[AIConfig], Any]):
+        self._config = config
+        self._make_client = client_factory
+
+    async def run(self) -> ProbeResult:
+        key = self._config.chroma_api_key
+        if not key:
+            return ProbeResult(
+                self.name,
+                "skipped",
+                f"OMITIDA (sin CHROMA_API_KEY se usa Chroma local en {self._config.chroma_path})",
+            )
+        missing = [
+            var
+            for var, value in (
+                ("CHROMA_TENANT", self._config.chroma_tenant),
+                ("CHROMA_DATABASE", self._config.chroma_database),
+            )
+            if not value
+        ]
+        if missing:
+            return ProbeResult(
+                self.name, "error", f"con CHROMA_API_KEY faltan {', '.join(missing)}"
+            )
+        try:
+            client = await asyncio.to_thread(self._make_client, self._config)
+            await asyncio.to_thread(client.heartbeat)
+        except Exception as exc:  # noqa: BLE001 - a probe never raises
+            return ProbeResult(
+                self.name, "error", _redact(f"{type(exc).__name__}: {exc}", key)
+            )
+        return ProbeResult(self.name, "ok", "Chroma Cloud respondió (heartbeat)")
 
 
 class _VideoProbe:
@@ -277,6 +325,7 @@ def build_probes(
     *,
     ping_completion: bool = True,
     transport: httpx.AsyncBaseTransport | None = None,
+    chroma_client_factory: Callable[[AIConfig], Any] | None = None,
 ) -> list[KeyProbe]:
     """Probes for every provider of the AI package, in the order ``check_keys`` should print them."""
     return [
@@ -319,6 +368,7 @@ def build_probes(
             transport=transport,
         ),
         _JevProbe(config.typesafe_api_key),
+        _ChromaProbe(config, chroma_client_factory or make_client),
         _NeatlogsProbe(config.neatlogs_api_key),
         _VideoProbe(config, transport),
     ]

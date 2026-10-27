@@ -160,7 +160,8 @@ class AgentLoop:
         try:
             await self.deps.turns.record_turn(record)
         except Exception as exc:  # noqa: BLE001 - a failed audit write never touches the turn
-            logger.debug("turn log write skipped: %s", exc)
+            # Type only: a database error can quote the row, which holds a message preview.
+            logger.warning("turn log write failed: %s", type(exc).__name__)
 
 
 class _Turn:
