@@ -1,6 +1,6 @@
 """Pure ingestion policy: classify a post and map provider items to ``PostIn``.
 
-Ported from the legacy ``app/services/ingest.py`` and ``pfm.py`` without any database code. The
+Ported from the legacy ``legacy/app/services/ingest.py`` and ``pfm.py`` (same folder) without any database code. The
 database side (``apps.profiles.services``) receives the ``PostIn`` objects produced here.
 
 Rules that every path follows:

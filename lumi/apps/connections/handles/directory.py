@@ -1,6 +1,6 @@
 """The handle directory: what a scan learns about accounts, and the pictures it can reuse.
 
-This replaces ``app/services/handle_db.py``. A scan (Chronic Online, a niche search) calls
+This replaces ``legacy/app/services/handle_db.py``. A scan (Chronic Online, a niche search) calls
 ``remember_scanned`` with the accounts it listened to and ``remember`` with the authors it met.
 The render path calls ``pictures`` to find a face for an author.
 

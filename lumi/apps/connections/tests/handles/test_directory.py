@@ -1,4 +1,4 @@
-"""Port of ``tests/test_handle_db.py`` (the handle DB the scans fed).
+"""Port of ``legacy/tests/test_handle_db.py`` (the handle DB the scans fed).
 
 Legacy names are kept in the test names so the parity map matches them.
 """

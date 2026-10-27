@@ -1,7 +1,7 @@
 """End of an ingest pass: which stored posts the source stopped returning.
 
 Port of ``is_second_miss``, ``pass_reached_window`` and ``finalize_ingest_pass`` from
-``app/services/ingest.py``. A pass is one newest-first read of an account's posts. After it:
+``legacy/app/services/ingest.py``. A pass is one newest-first read of an account's posts. After it:
 
 * every post the pass returned gets ``last_seen_at = pass start``;
 * a post that is inside the last 30 days and missed TWO consecutive complete passes is flagged

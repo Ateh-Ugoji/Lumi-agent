@@ -20,7 +20,7 @@ from typing import Any
 import pytest
 
 LOOPBACK_NAMES = frozenset({"localhost", "localhost.localdomain"})
-# A tracing exporter that an earlier test (the legacy ``tests/``) started keeps a thread alive and
+# A tracing exporter that an earlier test (the legacy ``legacy/tests/``) started keeps a thread alive and
 # retries its endpoint at any time. It is blocked like any other attempt, but it is not this test's.
 # OpenTelemetry wraps every new thread once tracing is on, so its wrapper frame sits at the
 # bottom of *every* thread's stack. It says nothing about who started the thread.
