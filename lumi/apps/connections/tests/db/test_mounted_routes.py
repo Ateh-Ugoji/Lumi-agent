@@ -73,3 +73,12 @@ def test_publish_is_mounted_and_guarded_in_the_default_urlconf(user, client) -> 
     empty = api.post("/api/v1/publish", {}, format="json")
     assert empty.status_code == 400
     assert empty.json()["error"]["code"] == "validation_error"
+
+
+def test_google_status_is_served_by_the_default_urlconf(user, monkeypatch) -> None:
+    for var in ("GOOGLE_OAUTH_CLIENT_ID", "GOOGLE_OAUTH_CLIENT_SECRET"):
+        monkeypatch.delenv(var, raising=False)
+    body = client_for(user).get("/api/v1/connections/google/status").json()
+    assert body["provider"] == "google"
+    assert body["configured"] is False and body["connected"] is False
+    assert body["details"] == {}

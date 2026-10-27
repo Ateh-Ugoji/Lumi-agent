@@ -27,6 +27,7 @@ class Provider(models.TextChoices):
     META = "meta"
     LINKEDIN = "linkedin"
     X = "x"
+    GOOGLE = "google"
 
 
 class AccountStatus(models.TextChoices):

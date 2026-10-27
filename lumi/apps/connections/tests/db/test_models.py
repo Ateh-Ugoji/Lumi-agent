@@ -128,8 +128,7 @@ def test_status_and_provider_are_checked(user) -> None:
         account(user, status="great")
     with pytest.raises(IntegrityError), transaction.atomic():
         account(user, provider="myspace")
-    with pytest.raises(IntegrityError), transaction.atomic():
-        account(user, provider="google")
+    assert account(user, provider="google").provider == "google"
 
 
 def test_deleting_the_profile_keeps_the_account_unlinked(user, profile) -> None:

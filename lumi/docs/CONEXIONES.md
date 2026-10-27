@@ -22,7 +22,8 @@ El orquestador debe copiarlas a `API_KEYS.md` y ARCHITECT a `.env.example`.
 | `FRONTEND_URL` | `http://localhost:3010` | Adónde vuelve el usuario tras conectar (`?connected=` o `?error=`) |
 | `X_LIVE_ENABLED` | `false` | Interruptor de toda llamada real a X |
 | `XPOZ_LIVE_ENABLED` | `false` | Interruptor de las llamadas reales a Xpoz (cada consulta gasta créditos) |
-| `XPOZ_RUN_CREDIT_BUDGET` | `10` | Tope de créditos de Xpoz por ejecución. Al llegar se lanza `BudgetExceeded` |
+| `XPOZ_RUN_CREDIT_BUDGET` | `12` | Tope de créditos de Xpoz por ejecución. Al llegar se lanza `BudgetExceeded`. 12 alcanza para una búsqueda de Instagram (12 créditos) |
+| `XPOZ_RUN_CREDIT_BUDGET_<RED>` | sin definir | Tope propio de una red (`X`, `INSTAGRAM`, `TIKTOK`, `REDDIT`). Una red con tope propio no gasta del compartido. `0` la deshabilita |
 | `HANDLE_CACHE_TTL_MINUTES` | `60` | Vigencia de la caché de búsqueda de handles (sustituye a `MVP_CACHE_TTL_MINUTES`) |
 | `TOKEN_ENCRYPTION_KEY_PREVIOUS` | vacío | Clave Fernet anterior, solo mientras se rota |
 | `LINKEDIN_API_VERSION` | `202609` | Valor de la cabecera `Linkedin-Version` (formato AAAAMM) |

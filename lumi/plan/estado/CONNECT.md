@@ -8,14 +8,17 @@ Rama `lumi-orquestador`. Se actualiza en cada reporte.
 | --- | --- | --- |
 | T0 Preparar | hecha | Línea base 418 pruebas pasan |
 | T1 CONEXIONES.md y API_KEYS.md | hecha | Revalidado el 2026-10-27 |
-| T2 Fusión de frontends | hecho | `lumi/frontend` es el único frontend. Typecheck, build y 17 pruebas Node pasan. No hay linter en ninguno de los dos (solo `tsc`). |
-| T13 MUSE.md | hecha | Solo documentación, fuentes de dev.meta.ai con fecha 2026-10-27 |
-| Capa de adaptadores | hecha (sin Django) | Cifrado, OAuth, http, Meta, LinkedIn, X, publicación, claves. 139 pruebas sin red. |
-| T3 modelos | hecho | 7 modelos, `0001_initial`, almacenes Django y 53 pruebas contra Postgres real. Ida y vuelta de migración y `makemigrations --check` limpios |
-| T7 clientes PFM y Xpoz | hecha (sin red) | Mocks y fixtures. Sin llamadas en vivo. La ingesta a Postgres espera `apps.profiles.services` (T5 de ARCHITECT) |
-| T8 búsqueda de handles | almacén Postgres hecho | Falta la ruta `/handles/*` (T5) |
-| T5 cuentas y rutas de conexión | hecho (sin montar) | `connect`, `callback`, `status`, `DELETE`, renovación. 36 pruebas de API en Postgres real. Falta que ARCHITECT monte `apps.connections.urls` |
-| T4, T6, T9 a T12 y T14 | pendientes | `CONTRATOS.md` v1.0 ya está aceptado. Sigue T6 (publicación) y `/handles/*` |
+| T2 Fusión de frontends | hecha | `lumi/frontend` es el único frontend. Typecheck, build y 17 pruebas Node pasan |
+| T3 modelos | hecha | `0001` a `0005`. `makemigrations --check` limpio, ida y vuelta probada |
+| T4 a T7 adaptadores, clientes PFM y Xpoz, cuentas y rutas | hechas (sin red) | Rutas montadas por ARCHITECT en `config/urls.py` y probadas con el `ROOT_URLCONF` real |
+| T6 publicación | hecha para X, LinkedIn y Facebook | Instagram y TikTok no publican: falta la ruta de publicación de PFM. Límites desde `lumi_ai.generation.platforms` |
+| `/handles/*` | hecha | Presupuesto de Xpoz por plataforma (defecto 12) |
+| T8 importador | hecha | `apps/connections/legacy_import.py`: `mcp_auth_accounts` y cuentas pfm |
+| T9 Google MCP | hecha (sin servidor real) | Solo servidores simulados en loopback |
+| T10 `check_keys` | hecha | Sondas `pfm`, `xpoz`, `google` y las de cada red |
+| T11 frontend | pendiente | Siguiente en la cola |
+| T12, T14 | pendientes | |
+| T13 MUSE.md | hecha | Fuentes de dev.meta.ai con fecha 2026-10-27 |
 
 ## Contrato
 
@@ -25,16 +28,23 @@ Compatible. Puntos concretos:
 
 - Aceptados sin cambios: sección 11, filas 3 a 7 (`pfm_account_id` vive en `connected_accounts`, `PublishJob.status` con `fingerprint`, `OAuthState.consume` en un solo `UPDATE ... RETURNING`, `EncryptedTextField` en `apps.core.fields`, `connect` en JSON y `callback` público con `302`).
 - Rutas: el plan de CONNECT decía `/connections/<provider>/start`. Se usa `/connect` como fija el contrato. El contrato no trae `GET /connections` ni un `refresh` manual. Se propone añadirlos en una versión menor si el frontend los necesita. Mientras tanto, `status` por proveedor basta.
-- `publish_jobs.attempt_id` apunta a `repurpose_attempts`, que aún no existe (la app `intelligence` no tiene migraciones). `0001` crea la columna como `bigint` nula sin FK y `0002` añade la FK cuando INTELLIGENCE publique su migración. Esto es una desviación temporal de SCHEMA §8.
-- `google` aparece en las rutas pero no en `connected_accounts.provider`. Se mantiene así: Google vive en `mcp_auth_accounts` y `OAuthState` (T9).
+- `publish_jobs.attempt_id` es una FK nula a `repurpose_attempts` desde la migración `0003`, que depende de `intelligence.0001_initial`.
+- `google` está en `Provider` (migración `0005`, CHECK ampliado) a petición de ARCHITECT. En la práctica Google vive en `mcp_auth_accounts` y `OAuthState`, no en `connected_accounts`.
 - `xpoz_credit_ledger` será tabla (auditoría por clave y corrida). `mcp_pending_writes` se decide en T9. El presupuesto de una corrida es un contador en memoria de esa corrida y no sustituye al registro.
 - Los handles de Reddit salen de la capa de búsqueda porque SCHEMA v2 quitó `reddit` de `Platform`. El cliente Xpoz conserva la capacidad.
 
 ## Bloqueos
 
-- ARCHITECT publicó `manage.py`, ajustes, `apps.core` y `SCHEMA.md` v1 (propuesta). Falta `CONTRATOS.md` y las migraciones de `accounts` y `profiles`.
-- La sección 8 de `SCHEMA.md` es compatible con la capa de adaptadores. Respuestas a sus preguntas 2 y 8: de acuerdo con los defectos propuestos.
-- Nota para ARCHITECT: `apps/core/tests/test_keys.py::test_core_registers_its_services` falla en solitario (`pytest apps/core`) porque otro test vacía el registro sin restaurarlo.
+Bloqueos reales a 2026-10-27:
+
+- No hay claves en `.env` de Meta, LinkedIn, X, Post for Me ni Xpoz. Todo lo probado usa respuestas simuladas. Sin verificar contra el servicio real: `redirect_url_override` de PFM, la revocación y la renovación de Meta, los límites de PFM, si Xpoz cobra una llamada fallida y el servidor MCP real de Google.
+- El token de PFM está caducado y a Xpoz le quedan pocos créditos. No hay llamadas en vivo. `X_LIVE_ENABLED=false` y `XPOZ_LIVE_ENABLED=false`.
+- `PostIn.media` no se puede rellenar con lo que devuelven PFM y Xpoz hoy (investigación en `docs/CONEXIONES.md`).
+- Falta programar `connections.refresh_expiring` en Celery beat (ARCHITECT lo documentó como cron en CONTRATOS §8).
+- INTELLIGENCE aún no llama a `apps.connections.mcp_gateway.build_mcp_gateway()` ni a `resolve_pending`.
+- `.env.example` (de ARCHITECT) conserva `XPOZ_RUN_CREDIT_BUDGET=10`. El defecto real es 12.
+
+Resueltos: `CONTRATOS.md` v1.0 y las migraciones de `accounts` y `profiles` existen. Las rutas están montadas. La FK `publish_jobs.attempt_id` está aplicada en `0003` sin choque con `intelligence.0001`.
 
 ## Último SHA verde
 

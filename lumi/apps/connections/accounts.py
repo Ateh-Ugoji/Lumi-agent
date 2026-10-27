@@ -50,7 +50,7 @@ from .stores import DjangoOAuthStateStore, save_google_tokens
 logger = logging.getLogger(__name__)
 
 OAUTH_PROVIDERS = (Provider.META, Provider.LINKEDIN, Provider.X)
-ALL_PROVIDERS = (*(p.value for p in Provider), "google")
+ALL_PROVIDERS = tuple(p.value for p in Provider)
 REFRESH_WINDOW = timedelta(days=7)
 
 # Variables each provider needs before its connect flow can start.
