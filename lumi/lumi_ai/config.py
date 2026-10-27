@@ -143,9 +143,6 @@ class AIConfig:
     quality_min_style_similarity: float = (
         0.0  # 0 = recorded but not used: the raw cosine has no calibrated scale yet
     )
-    quality_style_examples: int = (
-        3  # the author's closest posts that style similarity averages
-    )
 
     # --- providers ---
     provider_cooldown_seconds: float = (

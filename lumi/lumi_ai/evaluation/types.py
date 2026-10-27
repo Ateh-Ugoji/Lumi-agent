@@ -32,4 +32,8 @@ class Evaluation:
 
     @property
     def mean_score(self) -> float | None:
-        return sum(self.scores.values()) / len(self.scores) if self.scores else None
+        return (
+            round(sum(self.scores.values()) / len(self.scores), 6)
+            if self.scores
+            else None
+        )

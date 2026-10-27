@@ -1,0 +1,534 @@
+[
+ {
+  "id": "det-x-over-280",
+  "synthetic": true,
+  "platform": "x",
+  "mode": "topic",
+  "topic": "pricing",
+  "source_text": null,
+  "must_keep": [],
+  "text": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "scores": null,
+  "expected": {
+   "decision": "regenerate",
+   "judge": "rules"
+  },
+  "note": "281 characters on X"
+ },
+ {
+  "id": "det-x-missing-must-keep",
+  "synthetic": true,
+  "platform": "x",
+  "mode": "topic",
+  "topic": "pricing",
+  "source_text": null,
+  "must_keep": [
+   "Acme"
+  ],
+  "text": "We changed our pricing today.",
+  "scores": null,
+  "expected": {
+   "decision": "regenerate",
+   "judge": "rules"
+  },
+  "note": "required phrase absent"
+ },
+ {
+  "id": "det-repurpose-lost-link",
+  "synthetic": true,
+  "platform": "linkedin",
+  "mode": "repurpose",
+  "topic": null,
+  "source_text": "We shipped the new dashboard today. See https://acme.io/new @acme",
+  "must_keep": [],
+  "text": "Our new dashboard is live. @acme",
+  "scores": null,
+  "expected": {
+   "decision": "regenerate",
+   "judge": "rules"
+  },
+  "note": "source link dropped"
+ },
+ {
+  "id": "det-repurpose-lost-mention",
+  "synthetic": true,
+  "platform": "linkedin",
+  "mode": "repurpose",
+  "topic": null,
+  "source_text": "We shipped the new dashboard today. See https://acme.io/new @acme",
+  "must_keep": [],
+  "text": "Our new dashboard is live. https://acme.io/new",
+  "scores": null,
+  "expected": {
+   "decision": "regenerate",
+   "judge": "rules"
+  },
+  "note": "source @mention dropped"
+ },
+ {
+  "id": "det-instagram-7-hashtags",
+  "synthetic": true,
+  "platform": "instagram",
+  "mode": "topic",
+  "topic": "pricing",
+  "source_text": null,
+  "must_keep": [],
+  "text": "New pricing is out. #a #b #c #d #e #f #g",
+  "scores": null,
+  "expected": {
+   "decision": "regenerate",
+   "judge": "rules"
+  },
+  "note": "cap is 5 since Dec 2025"
+ },
+ {
+  "id": "det-em-dash",
+  "synthetic": true,
+  "platform": "linkedin",
+  "mode": "topic",
+  "topic": "pricing",
+  "source_text": null,
+  "must_keep": [],
+  "text": "We changed our pricing — and learned a lot about value.",
+  "scores": null,
+  "expected": {
+   "decision": "regenerate",
+   "judge": "rules"
+  },
+  "note": ""
+ },
+ {
+  "id": "det-ai-tell-opener",
+  "synthetic": true,
+  "platform": "linkedin",
+  "mode": "topic",
+  "topic": "pricing",
+  "source_text": null,
+  "must_keep": [],
+  "text": "Let's dive in: we changed our pricing and customers noticed.",
+  "scores": null,
+  "expected": {
+   "decision": "regenerate",
+   "judge": "rules"
+  },
+  "note": ""
+ },
+ {
+  "id": "det-tiktok-utf16",
+  "synthetic": true,
+  "platform": "tiktok",
+  "mode": "topic",
+  "topic": "pricing",
+  "source_text": null,
+  "must_keep": [],
+  "text": "🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀",
+  "scores": null,
+  "expected": {
+   "decision": "regenerate",
+   "judge": "rules"
+  },
+  "note": "1101 emoji = 2202 UTF-16 units, over 2200"
+ },
+ {
+  "id": "det-linkedin-over-3000",
+  "synthetic": true,
+  "platform": "linkedin",
+  "mode": "topic",
+  "topic": "pricing",
+  "source_text": null,
+  "must_keep": [],
+  "text": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "scores": null,
+  "expected": {
+   "decision": "regenerate",
+   "judge": "rules"
+  },
+  "note": ""
+ },
+ {
+  "id": "pass-x-topic",
+  "synthetic": true,
+  "platform": "x",
+  "mode": "topic",
+  "topic": "pricing",
+  "source_text": null,
+  "must_keep": [],
+  "text": "We moved to usage-based pricing. Small teams now pay less than before.",
+  "scores": {
+   "voice_fidelity": 0.85,
+   "platform_fit": 0.85,
+   "hook": 0.85,
+   "specificity": 0.85,
+   "no_ai_tells": 0.85,
+   "no_invented_facts": 0.85
+  },
+  "expected": {
+   "decision": "pass",
+   "judge": "jev"
+  },
+  "note": ""
+ },
+ {
+  "id": "pass-linkedin-repurpose",
+  "synthetic": true,
+  "platform": "linkedin",
+  "mode": "repurpose",
+  "topic": null,
+  "source_text": "We shipped the new dashboard today. See https://acme.io/new @acme",
+  "must_keep": [],
+  "text": "Our new dashboard is live: one view for every account. https://acme.io/new @acme",
+  "scores": {
+   "voice_fidelity": 0.8,
+   "platform_fit": 0.8,
+   "hook": 0.8,
+   "specificity": 0.8,
+   "no_ai_tells": 0.8,
+   "no_invented_facts": 0.8
+  },
+  "expected": {
+   "decision": "pass",
+   "judge": "jev"
+  },
+  "note": ""
+ },
+ {
+  "id": "pass-facebook-topic",
+  "synthetic": true,
+  "platform": "facebook",
+  "mode": "topic",
+  "topic": "pricing",
+  "source_text": null,
+  "must_keep": [],
+  "text": "We changed our pricing this week. If you run a small shop, the new plan costs less and keeps every feature.",
+  "scores": {
+   "voice_fidelity": 0.75,
+   "platform_fit": 0.75,
+   "hook": 0.75,
+   "specificity": 0.75,
+   "no_ai_tells": 0.75,
+   "no_invented_facts": 0.75
+  },
+  "expected": {
+   "decision": "pass",
+   "judge": "jev"
+  },
+  "note": ""
+ },
+ {
+  "id": "pass-instagram-3-hashtags",
+  "synthetic": true,
+  "platform": "instagram",
+  "mode": "topic",
+  "topic": "pricing",
+  "source_text": null,
+  "must_keep": [],
+  "text": "New pricing, same features, lower bill for small teams. #pricing #saas #startups",
+  "scores": {
+   "voice_fidelity": 0.8,
+   "platform_fit": 0.8,
+   "hook": 0.8,
+   "specificity": 0.8,
+   "no_ai_tells": 0.8,
+   "no_invented_facts": 0.8
+  },
+  "expected": {
+   "decision": "pass",
+   "judge": "jev"
+  },
+  "note": ""
+ },
+ {
+  "id": "pass-tiktok-repurpose",
+  "synthetic": true,
+  "platform": "tiktok",
+  "mode": "repurpose",
+  "topic": null,
+  "source_text": "We shipped the new dashboard today. See https://acme.io/new @acme",
+  "must_keep": [],
+  "text": "New dashboard just dropped. All your accounts in one place. https://acme.io/new @acme",
+  "scores": {
+   "voice_fidelity": 0.72,
+   "platform_fit": 0.72,
+   "hook": 0.72,
+   "specificity": 0.72,
+   "no_ai_tells": 0.72,
+   "no_invented_facts": 0.72
+  },
+  "expected": {
+   "decision": "pass",
+   "judge": "jev"
+  },
+  "note": ""
+ },
+ {
+  "id": "pass-x-repurpose",
+  "synthetic": true,
+  "platform": "x",
+  "mode": "repurpose",
+  "topic": null,
+  "source_text": "We shipped the new dashboard today. See https://acme.io/new @acme",
+  "must_keep": [],
+  "text": "Dashboard v2 is live. https://acme.io/new @acme",
+  "scores": {
+   "voice_fidelity": 0.9,
+   "platform_fit": 0.9,
+   "hook": 0.9,
+   "specificity": 0.9,
+   "no_ai_tells": 0.9,
+   "no_invented_facts": 0.9
+  },
+  "expected": {
+   "decision": "pass",
+   "judge": "jev"
+  },
+  "note": ""
+ },
+ {
+  "id": "pass-linkedin-must-keep",
+  "synthetic": true,
+  "platform": "linkedin",
+  "mode": "topic",
+  "topic": "pricing",
+  "source_text": null,
+  "must_keep": [
+   "Acme"
+  ],
+  "text": "Acme's pricing now follows usage. Here is what we learned in the first month.",
+  "scores": {
+   "voice_fidelity": 0.78,
+   "platform_fit": 0.78,
+   "hook": 0.78,
+   "specificity": 0.78,
+   "no_ai_tells": 0.78,
+   "no_invented_facts": 0.78
+  },
+  "expected": {
+   "decision": "pass",
+   "judge": "jev"
+  },
+  "note": ""
+ },
+ {
+  "id": "pass-boundary-mean-0.7",
+  "synthetic": true,
+  "platform": "linkedin",
+  "mode": "topic",
+  "topic": "pricing",
+  "source_text": null,
+  "must_keep": [],
+  "text": "We rebuilt the pricing page and measured the result for four weeks.",
+  "scores": {
+   "voice_fidelity": 0.7,
+   "platform_fit": 0.7,
+   "hook": 0.7,
+   "specificity": 0.7,
+   "no_ai_tells": 0.7,
+   "no_invented_facts": 0.7
+  },
+  "expected": {
+   "decision": "pass",
+   "judge": "jev"
+  },
+  "note": "mean exactly at the pass threshold"
+ },
+ {
+  "id": "pass-boundary-criterion-0.5",
+  "synthetic": true,
+  "platform": "linkedin",
+  "mode": "topic",
+  "topic": "pricing",
+  "source_text": null,
+  "must_keep": [],
+  "text": "Pricing notes from the last quarter, with the numbers that mattered.",
+  "scores": {
+   "voice_fidelity": 0.9,
+   "platform_fit": 0.9,
+   "hook": 0.5,
+   "specificity": 0.9,
+   "no_ai_tells": 0.9,
+   "no_invented_facts": 0.9
+  },
+  "expected": {
+   "decision": "pass",
+   "judge": "jev"
+  },
+  "note": "one criterion exactly at the floor"
+ },
+ {
+  "id": "regen-voice",
+  "synthetic": true,
+  "platform": "linkedin",
+  "mode": "topic",
+  "topic": "pricing",
+  "source_text": null,
+  "must_keep": [],
+  "text": "Pricing is an important topic for every modern business owner.",
+  "scores": {
+   "voice_fidelity": 0.3,
+   "platform_fit": 0.85,
+   "hook": 0.85,
+   "specificity": 0.85,
+   "no_ai_tells": 0.85,
+   "no_invented_facts": 0.85
+  },
+  "expected": {
+   "decision": "regenerate",
+   "judge": "jev"
+  },
+  "note": ""
+ },
+ {
+  "id": "regen-hook",
+  "synthetic": true,
+  "platform": "linkedin",
+  "mode": "topic",
+  "topic": "pricing",
+  "source_text": null,
+  "must_keep": [],
+  "text": "Here is a post about our pricing changes this month.",
+  "scores": {
+   "voice_fidelity": 0.85,
+   "platform_fit": 0.85,
+   "hook": 0.35,
+   "specificity": 0.85,
+   "no_ai_tells": 0.85,
+   "no_invented_facts": 0.85
+  },
+  "expected": {
+   "decision": "regenerate",
+   "judge": "jev"
+  },
+  "note": ""
+ },
+ {
+  "id": "regen-platform-fit",
+  "synthetic": true,
+  "platform": "x",
+  "mode": "topic",
+  "topic": "pricing",
+  "source_text": null,
+  "must_keep": [],
+  "text": "Pricing update: we changed three plans, here are the details of each one and why we made the call.",
+  "scores": {
+   "voice_fidelity": 0.85,
+   "platform_fit": 0.4,
+   "hook": 0.85,
+   "specificity": 0.85,
+   "no_ai_tells": 0.85,
+   "no_invented_facts": 0.85
+  },
+  "expected": {
+   "decision": "regenerate",
+   "judge": "jev"
+  },
+  "note": ""
+ },
+ {
+  "id": "regen-specificity",
+  "synthetic": true,
+  "platform": "facebook",
+  "mode": "topic",
+  "topic": "pricing",
+  "source_text": null,
+  "must_keep": [],
+  "text": "We made some changes to our pricing and we think you will like them.",
+  "scores": {
+   "voice_fidelity": 0.85,
+   "platform_fit": 0.85,
+   "hook": 0.85,
+   "specificity": 0.4,
+   "no_ai_tells": 0.85,
+   "no_invented_facts": 0.85
+  },
+  "expected": {
+   "decision": "regenerate",
+   "judge": "jev"
+  },
+  "note": ""
+ },
+ {
+  "id": "regen-borderline-mean",
+  "synthetic": true,
+  "platform": "linkedin",
+  "mode": "topic",
+  "topic": "pricing",
+  "source_text": null,
+  "must_keep": [],
+  "text": "We updated our pricing. It should help many customers.",
+  "scores": {
+   "voice_fidelity": 0.65,
+   "platform_fit": 0.65,
+   "hook": 0.65,
+   "specificity": 0.65,
+   "no_ai_tells": 0.65,
+   "no_invented_facts": 0.65
+  },
+  "expected": {
+   "decision": "regenerate",
+   "judge": "jev"
+  },
+  "note": "every criterion above the floor, mean below 0.7"
+ },
+ {
+  "id": "fail-invented-facts",
+  "synthetic": true,
+  "platform": "linkedin",
+  "mode": "topic",
+  "topic": "pricing",
+  "source_text": null,
+  "must_keep": [],
+  "text": "Our new pricing raised revenue by 340% and was praised by Forbes.",
+  "scores": {
+   "voice_fidelity": 0.9,
+   "platform_fit": 0.9,
+   "hook": 0.9,
+   "specificity": 0.9,
+   "no_ai_tells": 0.9,
+   "no_invented_facts": 0.1
+  },
+  "expected": {
+   "decision": "fail",
+   "judge": "jev"
+  },
+  "note": "numbers and a quote nobody provided"
+ },
+ {
+  "id": "fail-all-poor",
+  "synthetic": true,
+  "platform": "x",
+  "mode": "topic",
+  "topic": "pricing",
+  "source_text": null,
+  "must_keep": [],
+  "text": "Prices changed. Things happen.",
+  "scores": {
+   "voice_fidelity": 0.15,
+   "platform_fit": 0.15,
+   "hook": 0.15,
+   "specificity": 0.15,
+   "no_ai_tells": 0.15,
+   "no_invented_facts": 0.15
+  },
+  "expected": {
+   "decision": "fail",
+   "judge": "jev"
+  },
+  "note": ""
+ },
+ {
+  "id": "rules-no-judge",
+  "synthetic": true,
+  "platform": "linkedin",
+  "mode": "topic",
+  "topic": "pricing",
+  "source_text": null,
+  "must_keep": [],
+  "text": "We changed our pricing and learned something real about value.",
+  "scores": null,
+  "expected": {
+   "decision": "pass",
+   "judge": "rules"
+  },
+  "note": "no semantic judge answered: passes on rules only and says so"
+ }
+]

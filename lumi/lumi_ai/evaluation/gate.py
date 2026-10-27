@@ -52,7 +52,9 @@ def decide(
     if failures:
         decision = "regenerate"
     if scores:
-        mean = sum(scores.values()) / len(scores)
+        mean = round(
+            sum(scores.values()) / len(scores), 6
+        )  # 6 x 0.7 / 6 is 0.6999999...
         for name, value in scores.items():
             if value < thresholds.min_criterion:
                 why = reasons.get(name, "")
