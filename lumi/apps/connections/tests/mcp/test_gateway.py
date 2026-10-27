@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import httpx
 
-from apps.connections.mcp.gateway import RemoteResult
+from apps.connections.mcp.gateway import RemoteResult, RemoteTool
 from apps.connections.providers.base import TokenSet
 from lumi_ai.ports import McpGateway
 
@@ -27,7 +27,7 @@ async def test_lists_namespaced_tools_with_cost_and_confirmation():
         "mcp__gdrive__search_files",
         "mcp__gdrive__create_file",
         "mcp__gdrive__files_get_v2",
-        "mcp__gdocs__read_document",
+        "mcp__gdocs__read_doc",
         "mcp__gdocs__batch_update",
     }
     assert found["mcp__gdrive__search_files"].cost == "free"
@@ -92,7 +92,9 @@ async def test_read_tool_runs_with_the_users_bearer_token():
 
 async def test_the_server_name_is_used_for_the_real_call():
     gateway, _, transport, _ = build()
-    await gateway.call(PROFILE, "mcp__gdrive__files_get_v2", {})
+    parked = await gateway.call(PROFILE, "mcp__gdrive__files_get_v2", {})
+    assert parked.status == "confirmation_required"  # an unlisted tool waits for a yes
+    await gateway.resolve_pending(PROFILE, "yes")
     assert transport.calls[0][1] == "files.get v2"
 
 
@@ -145,14 +147,6 @@ async def test_an_expired_write_is_not_run_even_after_a_yes():
     resolution = await gateway.resolve_pending(PROFILE, "yes")
     assert resolution is not None and resolution.tool is None
     assert "expired" in resolution.note and transport.calls == []
-
-
-async def test_a_new_write_replaces_the_parked_one():
-    gateway, _store, transport, _ = build()
-    await gateway.call(PROFILE, "mcp__gdrive__create_file", {"title": "A"})
-    await gateway.call(PROFILE, "mcp__gdrive__create_file", {"title": "B"})
-    await gateway.resolve_pending(PROFILE, "yes")
-    assert transport.calls == [("gdrive", "create_file", {"title": "B"})]
 
 
 async def test_no_pending_write_means_no_resolution():
@@ -247,3 +241,101 @@ async def test_an_allow_list_hides_other_tools_and_blocks_calling_them(monkeypat
     assert "mcp__gdrive__create_file" not in found
     result = await core.call(PROFILE, "mcp__gdrive__create_file", {"title": "x"})
     assert transport.calls == [] and result.status != "ok"
+
+
+async def test_a_write_with_no_write_verb_in_its_name_still_waits_for_a_yes():
+    gateway, store, transport, _ = build()
+    transport.tools["gdrive"].append(
+        RemoteTool("copy_file", "Copy.", {"type": "object"})
+    )
+    gateway._discovered.clear()
+    specs = {s.name: s for s in await gateway.list_tools(PROFILE)}
+    assert specs["mcp__gdrive__copy_file"].requires_confirmation
+    result = await gateway.call(PROFILE, "mcp__gdrive__copy_file", {"fileId": "f1"})
+    assert result.status == "confirmation_required"
+    assert [c for c in transport.calls if c[1] == "copy_file"] == []
+    assert store.pending[PROFILE].server_tool == "copy_file"
+
+
+async def test_a_tool_added_to_the_server_later_is_gated():
+    gateway, _store, transport, _ = build()
+    transport.tools["gdocs"].append(
+        RemoteTool("publish_everything", "?", {"type": "object"})
+    )
+    gateway._discovered.clear()
+    specs = {s.name: s for s in await gateway.list_tools(PROFILE)}
+    assert specs["mcp__gdocs__publish_everything"].requires_confirmation
+    assert not specs["mcp__gdocs__read_doc"].requires_confirmation
+
+
+async def test_the_user_is_shown_every_argument_unshortened():
+    gateway, store, _transport, _ = build()
+    long_text = "x" * 1500 + "END-OF-TEXT"
+    args = {"title": "Plan", "textContent": long_text, "parentId": "folder-9"}
+    result = await gateway.call(PROFILE, "mcp__gdrive__create_file", args)
+    assert result.status == "confirmation_required"
+    assert "END-OF-TEXT" in (result.summary or "")
+    assert "folder-9" in (result.summary or "")
+    assert result.payload["arguments"] == args
+    assert store.pending[PROFILE].arguments == args
+
+
+async def test_a_write_too_long_to_show_in_full_is_not_parked():
+    gateway, store, transport, _ = build()
+    result = await gateway.call(
+        PROFILE, "mcp__gdrive__create_file", {"textContent": "y" * 25_000}
+    )
+    assert result.status == "error" and PROFILE not in store.pending
+    assert transport.calls == []
+
+
+async def test_a_second_different_write_cannot_take_the_place_of_the_one_shown():
+    gateway, store, transport, _ = build()
+    first = await gateway.call(PROFILE, "mcp__gdrive__create_file", {"title": "Plan"})
+    second = await gateway.call(
+        PROFILE, "mcp__gdrive__create_file", {"title": "Something else"}
+    )
+    assert second.status == "confirmation_required"
+    assert second.payload["confirmation_id"] == first.payload["confirmation_id"]
+    assert "NOT parked" in second.payload["message"]
+    assert store.pending[PROFILE].arguments == {"title": "Plan"}
+    resolution = await gateway.resolve_pending(PROFILE, "yes")
+    assert resolution is not None
+    assert [c[2] for c in transport.calls if c[1] == "create_file"] == [
+        {"title": "Plan"}
+    ]
+
+
+async def test_asking_for_the_same_write_again_is_the_same_confirmation():
+    gateway, _store, _transport, _ = build()
+    first = await gateway.call(PROFILE, "mcp__gdrive__create_file", {"title": "Plan"})
+    again = await gateway.call(PROFILE, "mcp__gdrive__create_file", {"title": "Plan"})
+    assert again.payload["confirmation_id"] == first.payload["confirmation_id"]
+    assert "NOT parked" not in again.payload["message"]
+
+
+async def test_the_confirmation_id_names_the_write_that_ran():
+    gateway, _store, _transport, _ = build()
+    parked = await gateway.call(PROFILE, "mcp__gdrive__create_file", {"title": "Plan"})
+    resolution = await gateway.resolve_pending(PROFILE, "yes")
+    assert parked.payload["confirmation_id"] in resolution.note
+
+
+async def test_a_different_argument_is_a_different_confirmation():
+    gateway, *_ = build()
+    a = await gateway.call(PROFILE, "mcp__gdrive__create_file", {"title": "A"})
+    gateway2, *_ = build()
+    b = await gateway2.call(PROFILE, "mcp__gdrive__create_file", {"title": "B"})
+    assert a.payload["confirmation_id"] != b.payload["confirmation_id"]
+
+
+def test_the_same_write_for_two_profiles_has_two_confirmation_ids():
+    from apps.connections.mcp.gateway import confirmation_id
+
+    args = {"title": "Plan"}
+    assert confirmation_id(1, "create_file", args) != confirmation_id(
+        2, "create_file", args
+    )
+    assert confirmation_id(1, "create_file", args) == confirmation_id(
+        1, "create_file", {"title": "Plan"}
+    )

@@ -253,10 +253,35 @@ def test_a_parked_write_is_claimed_exactly_once(user, profile) -> None:
     assert async_to_sync(store.claim)(profile.pk) is None
 
 
-def test_a_profile_has_one_parked_write_and_the_newest_wins(user, profile) -> None:
-    park(user, profile, title="A")
-    park(user, profile, title="B")
+def test_a_live_parked_write_is_not_replaced_by_a_different_one(user, profile) -> None:
+    first = park(user, profile, title="A")
+    from django.utils import timezone
+
+    other = PendingWrite(
+        user_id=user.pk,
+        profile_id=profile.pk,
+        tool=first.tool,
+        server_tool=first.server_tool,
+        arguments={"title": "B"},
+        summary="create B",
+        expires_at=timezone.now() + timedelta(minutes=30),
+    )
+    waiting = async_to_sync(DjangoMcpStore().park)(other)
+    assert waiting is not None and waiting.arguments == {"title": "A"}
     assert McpPendingWrite.objects.count() == 1
+    claimed = async_to_sync(DjangoMcpStore().claim)(profile.pk)
+    assert claimed is not None and claimed.arguments == {"title": "A"}
+
+
+def test_the_same_write_again_is_stored_and_an_expired_one_is_replaced(
+    user, profile
+) -> None:
+    from django.utils import timezone
+
+    park(user, profile, title="A")
+    assert park(user, profile, title="A") is not None  # same write: stored again
+    park(user, profile, title="A", expires=timezone.now() - timedelta(minutes=1))
+    park(user, profile, title="B")  # the live A is gone: it expired
     claimed = async_to_sync(DjangoMcpStore().claim)(profile.pk)
     assert claimed is not None and claimed.arguments == {"title": "B"}
 

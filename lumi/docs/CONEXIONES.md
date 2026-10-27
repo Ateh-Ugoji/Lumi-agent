@@ -322,3 +322,18 @@ CONNECT puede implementar el punto 1 y, para X, el mapeo de `mediaUrls` en el si
 Dos llamadas simultáneas pueden pasar la comprobación a la vez, así que el exceso máximo es una llamada por petición concurrente. Por eso `GET /handles/search` admite 30 por minuto y usuario, y `POST /publish` 10 por minuto y usuario (`apps/connections/throttles.py`).
 
 `GET /handles/stats` devuelve también `daily_cap_user` y `daily_cap_global`. Las dos variables nuevas hay que copiarlas a `.env.example` (no es de CONNECT).
+
+## Confirmación de escrituras MCP (revisión de seguridad, MEDIO 6)
+
+Antes, una herramienta pedía confirmación si su nombre tenía un verbo de escritura. Eso fallaba con nombres sin verbo: `copy_file` del Drive MCP duplica archivos y corría sin preguntar. Ahora es una lista blanca. Cada `MCPConnector` declara `read_only_tools` y solo esas herramientas corren a la primera. Todo lo demás, incluida una herramienta que el servidor añada mañana, queda aparcado hasta un "sí".
+
+- Drive: `search_files`, `read_file_content`, `download_file_content`, `get_file_metadata`, `get_file_permissions`, `list_recent_files`.
+- Docs: `read_doc`. `update_doc` pide confirmación.
+- La coincidencia es exacta: ni mayúsculas, ni prefijos, ni espacios. Un conector sin lista pide confirmación en todo.
+- Los nombres salen de la referencia oficial de Google (Drive y Docs MCP, en vista previa para desarrolladores). Si Google añade una lectura, se añade a la lista a mano.
+
+El usuario ve la herramienta y todos los argumentos completos, sin recortar. Una escritura cuyos argumentos pasen de 20.000 caracteres no se aparca, porque nadie podría leerla entera.
+
+Cada escritura aparcada lleva un `confirmation_id` (hash de perfil, herramienta y argumentos). Mientras haya una escritura viva esperando, otra distinta se rechaza con "NOT parked" y el modelo recibe el id de la que espera. Así el "sí" del usuario solo puede referirse a la escritura que el modelo acaba de describir, y una segunda petición del mismo turno no puede sustituirla. La misma escritura repetida se acepta, y una caducada se reemplaza. El resultado tras confirmar cita el `confirmation_id` que se ejecutó.
+
+Límite que sigue en pie: el "sí" lo interpreta el servidor sobre el siguiente mensaje del usuario, y qué describió el modelo no se puede comprobar. Atar la confirmación a un botón de la interfaz con el id requeriría cambiar el puerto `resolve_pending` (INTELLIGENCE, `lumi_ai/ports.py`).

@@ -6,6 +6,7 @@ import pytest
 
 from apps.connections.mcp.connectors import (
     CONNECTORS,
+    MCPConnector,
     connector_enabled,
     get_connector,
     google_consent_url,
@@ -16,39 +17,58 @@ from apps.connections.mcp.connectors import (
     tool_spec_name,
 )
 
+GDRIVE = get_connector("gdrive")
+GDOCS = get_connector("gdocs")
+
 
 @pytest.mark.parametrize(
     "tool",
     [
         "create_file",
-        "createFile",
-        "docs.update",
-        "delete-document",
-        "move_file",
+        "copy_file",  # no write verb in the name, and still a write
+        "update_doc",
+        "delete_file",
         "share_file",
-        "batchUpdate",  # camelCase 'batch' + 'Update'
-        "insert_text",
-        "trash_file",
+        "some_tool_added_next_year",
+        "Search_Files",  # a lookalike is not the allow-listed name
+        "search_files ",
+        "",
     ],
 )
-def test_write_verbs_are_gated(tool):
-    assert requires_confirmation(tool)
+def test_anything_not_listed_as_read_only_is_gated(tool):
+    assert requires_confirmation(GDRIVE, tool)
 
 
 @pytest.mark.parametrize(
     "tool",
     [
         "search_files",
-        "read_document",
-        "list_files",
-        "get_file_metadata",
-        "get_file_created_time",  # 'created' is not 'create'
+        "read_file_content",
         "download_file_content",
-        "",
+        "get_file_metadata",
+        "get_file_permissions",
+        "list_recent_files",
     ],
 )
-def test_read_tools_are_not_gated(tool):
-    assert not requires_confirmation(tool)
+def test_only_the_listed_drive_reads_run_freely(tool):
+    assert not requires_confirmation(GDRIVE, tool)
+
+
+def test_docs_reads_are_free_and_its_update_is_gated():
+    assert not requires_confirmation(GDOCS, "read_doc")
+    assert requires_confirmation(GDOCS, "update_doc")
+    # A read-only tool of one connector is not read-only on the other.
+    assert requires_confirmation(GDOCS, "search_files")
+
+
+def test_a_connector_with_no_read_only_list_gates_every_tool():
+    bare = MCPConnector(name="x", url="https://x.invalid/mcp")
+    assert requires_confirmation(bare, "search_files")
+
+
+def test_a_connector_that_turns_the_gate_off_gates_nothing():
+    open_ = MCPConnector(name="x", url="https://x.invalid/mcp", confirm_writes=False)
+    assert not requires_confirmation(open_, "delete_everything")
 
 
 @pytest.mark.parametrize(

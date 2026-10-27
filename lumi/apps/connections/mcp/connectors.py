@@ -3,8 +3,8 @@
 Adding a connector means adding one ``MCPConnector`` entry. The gateway discovers each
 server's tools with ``tools/list`` and dispatches ``tools/call``; no other code changes.
 
-Write safety: a tool whose name holds a write verb never runs on the first call. It is parked in
-the database and runs only after the user confirms in chat. Google's ``drive.file`` scope is the
+Write safety: a tool the connector does not list as read-only never runs on the first call. It is
+parked in the database and runs only after the user confirms in chat. Google's ``drive.file`` scope is the
 second fence: a confirmed write can only touch files this app created.
 """
 
@@ -35,6 +35,9 @@ class MCPConnector:
     scopes: tuple[str, ...] = ()
     enabled_env: str | None = None  # env var that switches this connector off
     allowed_tools: tuple[str, ...] | None = None  # None exposes every tool
+    # Tools known to only read. Everything else, including a tool the server adds tomorrow, waits
+    # for the user's yes. An empty tuple gates every tool.
+    read_only_tools: tuple[str, ...] = ()
     confirm_writes: bool = True
 
 
@@ -44,12 +47,21 @@ CONNECTORS: tuple[MCPConnector, ...] = (
         url="https://drivemcp.googleapis.com/mcp/v1",
         scopes=(DRIVE_READONLY_SCOPE, DRIVE_FILE_SCOPE),
         enabled_env="MCP_GDRIVE_ENABLED",
+        read_only_tools=(
+            "search_files",
+            "read_file_content",
+            "download_file_content",
+            "get_file_metadata",
+            "get_file_permissions",
+            "list_recent_files",
+        ),
     ),
     MCPConnector(
         name="gdocs",
         url="https://docsmcp.googleapis.com/mcp/v1",
         scopes=(DOCS_SCOPE,),
         enabled_env="MCP_GDOCS_ENABLED",
+        read_only_tools=("read_doc",),
     ),
 )
 
@@ -117,16 +129,6 @@ def google_consent_url(
 
 # --- the write gate ----------------------------------------------------------
 
-# Whole-word match on the tool name, so ``get_file_created_time`` (word "created") is not gated.
-_WRITE_WORDS = frozenset(
-    {
-        "create", "update", "delete", "remove", "move", "trash", "write", "insert",
-        "send", "rename", "share", "unshare", "upload", "modify", "patch", "clear",
-        "purge", "revoke", "duplicate", "apply", "restore", "reorder", "add", "set",
-    }
-)  # fmt: skip
-_WORD_SPLIT = re.compile(r"[^A-Za-z0-9]+|(?<=[a-z0-9])(?=[A-Z])")
-
 # Only a clear yes runs a parked write. Anything else cancels it.
 _AFFIRMATIVE = re.compile(
     r"^\W*(?:yes|yep|yeah|yup|y|sure|absolutely|definitely|of course"
@@ -143,9 +145,12 @@ _DEFER = re.compile(
 )
 
 
-def requires_confirmation(tool_name: str) -> bool:
-    words = {w.lower() for w in _WORD_SPLIT.split(tool_name or "") if w}
-    return bool(words & _WRITE_WORDS)
+def requires_confirmation(connector: MCPConnector, tool_name: str) -> bool:
+    """Allow-list, not a block-list: only a tool the connector names as read-only runs without
+    a yes. A name that merely looks harmless (``copy_file``) or is new is treated as a write."""
+    if not connector.confirm_writes:
+        return False
+    return tool_name not in connector.read_only_tools
 
 
 MAX_CONFIRMATION_WORDS = 6

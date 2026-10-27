@@ -95,7 +95,9 @@ async def test_a_tool_error_is_flagged_not_raised(server_url):
 
 async def test_the_whole_gateway_over_the_real_transport(server_url, monkeypatch):
     fake, store, _, _ = build()
-    local = (MCPConnector(name="gdrive", url=server_url),)
+    local = (
+        MCPConnector(name="gdrive", url=server_url, read_only_tools=("search_files",)),
+    )
     monkeypatch.setattr(connectors, "CONNECTORS", local)
     monkeypatch.setattr(gateway_module, "CONNECTORS", local)
     real = McpGatewayCore(

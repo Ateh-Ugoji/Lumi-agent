@@ -6,9 +6,11 @@ through ``McpStore`` and ``McpTransport``. Django's implementation is ``DjangoMc
 
 Rules that do not bend:
 
-* A write tool never runs on the first call. It is parked in the database and runs only after
+* A tool that is not on its connector's read-only list never runs on the first call. It is parked in the database and runs only after
   the user's next message is a clear yes. Any other message cancels it.
 * A parked write is claimed with one atomic delete, so two workers cannot both run it.
+* A profile has one parked write at a time. While one waits, a different write is refused, so
+  the user's yes can only mean the write the model just described, with its full arguments.
 * An exception never carries its message into the model's context. The error names the tool
   and the exception class, and tells the model not to claim success. A tool-level error the
   server returns on purpose is treated like any other tool output.
@@ -18,6 +20,7 @@ Rules that do not bend:
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 import time
@@ -49,6 +52,7 @@ logger = logging.getLogger(__name__)
 RESULT_CHAR_LIMIT = 12000
 REFRESH_MARGIN = timedelta(seconds=120)
 PENDING_TTL = timedelta(minutes=30)
+MAX_ARGUMENT_CHARS = 20_000  # a write the user cannot read in full is not parked
 FAILURE_CACHE_SECONDS = 60.0
 
 
@@ -89,6 +93,23 @@ class PendingWrite:
     summary: str
     expires_at: datetime
 
+    @property
+    def confirmation_id(self) -> str:
+        """Short id of exactly this write: profile, tool and every argument."""
+        return confirmation_id(self.profile_id, self.server_tool, self.arguments)
+
+
+def confirmation_id(
+    profile_id: int, server_tool: str, arguments: Mapping[str, Any]
+) -> str:
+    canonical = json.dumps(
+        [profile_id, server_tool, dict(arguments)],
+        sort_keys=True,
+        ensure_ascii=False,
+        default=str,
+    )
+    return hashlib.sha256(canonical.encode()).hexdigest()[:10]
+
 
 class McpStore(Protocol):
     async def owner_of(self, profile_id: int) -> int | None:
@@ -99,8 +120,10 @@ class McpStore(Protocol):
 
     async def save_tokens(self, user_id: int, tokens: TokenSet) -> None: ...
 
-    async def park(self, write: PendingWrite) -> None:
-        """Store the write. A profile has one parked write: a new one replaces it."""
+    async def park(self, write: PendingWrite) -> PendingWrite | None:
+        """Store the write and return ``None``. A profile has one parked write: while a live,
+        different one waits, nothing is stored and that waiting write is returned. The same write
+        again, or one whose predecessor expired, is stored."""
         ...
 
     async def claim(self, profile_id: int) -> PendingWrite | None:
@@ -171,28 +194,50 @@ class McpGatewayCore:
         if server_tool is None:
             return _error(name, "this tool is not offered to this user")
         arguments = dict(args or {})
-        if connector.confirm_writes and requires_confirmation(server_tool):
+        if requires_confirmation(connector, server_tool):
             summary = _summarize(name, arguments)
-            await self._store.park(
-                PendingWrite(
-                    user_id=user_id,
-                    profile_id=profile_id,
-                    tool=name,
-                    server_tool=server_tool,
-                    arguments=arguments,
-                    summary=summary,
-                    expires_at=self._clock() + PENDING_TTL,
+            if len(summary) > MAX_ARGUMENT_CHARS:
+                return _error(
+                    name,
+                    "its arguments are too long to show the user in full, so it cannot be "
+                    "confirmed. Split it into smaller writes",
                 )
+            write = PendingWrite(
+                user_id=user_id,
+                profile_id=profile_id,
+                tool=name,
+                server_tool=server_tool,
+                arguments=arguments,
+                summary=summary,
+                expires_at=self._clock() + PENDING_TTL,
             )
+            waiting = await self._store.park(write)
+            if waiting is not None:
+                return McpCallResult(
+                    status="confirmation_required",
+                    payload={
+                        "tool": name,
+                        "confirmation_id": waiting.confirmation_id,
+                        "message": (
+                            f"NOT parked. Another write is already waiting for the user's "
+                            f"answer ({waiting.summary}). Ask the user about that one first. "
+                            "Never claim either happened."
+                        ),
+                    },
+                    summary=waiting.summary,
+                )
             return McpCallResult(
                 status="confirmation_required",
                 payload={
                     "tool": name,
+                    "confirmation_id": write.confirmation_id,
+                    "arguments": arguments,
                     "message": (
                         "This action writes to the user's account and has NOT run. Tell the user "
-                        "exactly what will run (the summary) and ask them to confirm, then stop "
-                        "and wait. Never claim it happened. If they confirm, the system runs it "
-                        "before your next reply and tells you the real outcome."
+                        "exactly what will run (the tool and every argument above, unshortened) "
+                        "and ask them to confirm, then stop and wait. Never claim it happened. "
+                        "If they confirm, the system runs it before your next reply and tells "
+                        "you the real outcome."
                     ),
                 },
                 summary=summary,
@@ -236,8 +281,8 @@ class McpGatewayCore:
             outcome["error"] = result.error
         return McpPendingResolution(
             note=(
-                f"PENDING MCP ACTION OUTCOME: {pending.tool} was executed after the user "
-                f"confirmed it. Real result: {json.dumps(outcome, ensure_ascii=False)[:4000]}. "
+                f"PENDING MCP ACTION OUTCOME: {pending.tool} (confirmation "
+                f"{pending.confirmation_id}) was executed after the user confirmed it. Real result: {json.dumps(outcome, ensure_ascii=False)[:4000]}. "
                 "Report this exact outcome to the user, including any error."
             ),
             tool=pending.tool,
@@ -316,7 +361,7 @@ class McpGatewayCore:
                 and tool.name not in connector.allowed_tools
             ):
                 continue
-            gated = connector.confirm_writes and requires_confirmation(tool.name)
+            gated = requires_confirmation(connector, tool.name)
             schema = dict(tool.input_schema)
             if schema.get("type") != "object":
                 schema = {
@@ -390,5 +435,5 @@ def _error(name: str, reason: str) -> McpCallResult:
 
 
 def _summarize(name: str, arguments: Mapping[str, Any]) -> str:
-    text = json.dumps(dict(arguments), ensure_ascii=False, default=str)
-    return f"{name} with {text[:500]}{'...' if len(text) > 500 else ''}"
+    """The tool and every argument, never shortened: this is what the user agrees to."""
+    return f"{name} with {json.dumps(dict(arguments), ensure_ascii=False, default=str)}"

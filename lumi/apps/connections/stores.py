@@ -550,8 +550,8 @@ class DjangoMcpStore:
     async def save_tokens(self, user_id: int, tokens: TokenSet) -> None:
         await sync_to_async(save_google_tokens, thread_sensitive=True)(user_id, tokens)
 
-    async def park(self, write: PendingWrite) -> None:
-        await sync_to_async(self._park, thread_sensitive=True)(write)
+    async def park(self, write: PendingWrite) -> PendingWrite | None:
+        return await sync_to_async(self._park, thread_sensitive=True)(write)
 
     async def claim(self, profile_id: int) -> PendingWrite | None:
         return await sync_to_async(self._claim, thread_sensitive=True)(profile_id)
@@ -582,18 +582,31 @@ class DjangoMcpStore:
         )
 
     @staticmethod
-    def _park(write: PendingWrite) -> None:
-        McpPendingWrite.objects.update_or_create(
-            social_profile_id=write.profile_id,
-            defaults={
-                "user_id": write.user_id,
-                "tool": write.tool,
-                "server_tool": write.server_tool,
-                "arguments": dict(write.arguments),
-                "summary": write.summary,
-                "expires_at": write.expires_at,
-            },
-        )
+    def _park(write: PendingWrite) -> PendingWrite | None:
+        values = {
+            "user_id": write.user_id,
+            "tool": write.tool,
+            "server_tool": write.server_tool,
+            "arguments": dict(write.arguments),
+            "summary": write.summary,
+            "expires_at": write.expires_at,
+        }
+        with transaction.atomic():
+            row, created = McpPendingWrite.objects.select_for_update().get_or_create(
+                social_profile_id=write.profile_id, defaults=values
+            )
+            if created:
+                return None
+            waiting = _pending_from(row)
+            if (
+                waiting.expires_at > timezone.now()
+                and waiting.confirmation_id != write.confirmation_id
+            ):
+                return waiting
+            for field, value in values.items():
+                setattr(row, field, value)
+            row.save()
+        return None
 
     @staticmethod
     def _claim(profile_id: int) -> PendingWrite | None:
@@ -605,17 +618,21 @@ class DjangoMcpStore:
             )
             if row is None:
                 return None
-            write = PendingWrite(
-                user_id=row.user_id,
-                profile_id=profile_id,
-                tool=row.tool,
-                server_tool=row.server_tool,
-                arguments=row.arguments,
-                summary=row.summary,
-                expires_at=row.expires_at,
-            )
+            write = _pending_from(row)
             row.delete()
         return write
+
+
+def _pending_from(row: McpPendingWrite) -> PendingWrite:
+    return PendingWrite(
+        user_id=row.user_id,
+        profile_id=row.social_profile_id,
+        tool=row.tool,
+        server_tool=row.server_tool,
+        arguments=row.arguments,
+        summary=row.summary,
+        expires_at=row.expires_at,
+    )
 
 
 def save_google_tokens(user_id: int, tokens: TokenSet) -> None:

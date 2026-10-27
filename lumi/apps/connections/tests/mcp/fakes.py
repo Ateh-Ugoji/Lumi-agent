@@ -29,7 +29,7 @@ DRIVE_TOOLS = [
     RemoteTool("files.get v2", "Odd name.", {"type": "object"}),
 ]
 DOCS_TOOLS = [
-    RemoteTool("read_document", "Read a doc.", {"type": "object"}),
+    RemoteTool("read_doc", "Read a doc.", {"type": "object"}),
     RemoteTool("batch_update", "Edit a doc.", {"type": "object"}),
 ]
 
@@ -57,8 +57,16 @@ class MemoryMcpStore:
         self.tokens[user_id] = tokens
         self.saved.append(tokens)
 
-    async def park(self, write: PendingWrite) -> None:
+    async def park(self, write: PendingWrite) -> PendingWrite | None:
+        held = self.pending.get(write.profile_id)
+        if (
+            held is not None
+            and held.expires_at > NOW
+            and held.confirmation_id != write.confirmation_id
+        ):
+            return held
         self.pending[write.profile_id] = write
+        return None
 
     async def claim(self, profile_id: int) -> PendingWrite | None:
         return self.pending.pop(profile_id, None)
