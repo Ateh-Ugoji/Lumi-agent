@@ -42,3 +42,19 @@ class IsProfileOwner(BasePermission):
             return True
         request.profile = get_owned_profile(request.user, raw)
         return True
+
+
+class IsStaffOrDebug(BasePermission):
+    """OpenAPI schema and Swagger UI: open with ``DEBUG=True``, staff only otherwise.
+
+    ``settings.DEBUG`` is read per request. Staff sign in at ``/admin/`` and the session cookie
+    then opens ``/api/docs/``; a staff API token works too.
+    """
+
+    def has_permission(self, request, view) -> bool:
+        from django.conf import settings
+
+        user = request.user
+        return bool(
+            settings.DEBUG or (user and user.is_authenticated and user.is_staff)
+        )

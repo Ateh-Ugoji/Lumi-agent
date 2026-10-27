@@ -216,10 +216,3 @@ def test_unknown_route_uses_the_error_format(client):
     response = client.get("/api/v1/nope")
     assert response.status_code == 404
     assert response.json()["error"]["code"] == "not_found"
-
-
-def test_openapi_schema_is_public_and_declares_token_auth(client):
-    response = client.get("/api/schema/?format=json")
-    assert response.status_code == 200
-    schemes = response.json()["components"]["securitySchemes"]
-    assert schemes["tokenAuth"]["name"] == "Authorization"

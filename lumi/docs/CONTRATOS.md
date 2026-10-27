@@ -23,7 +23,7 @@ Protocolo de aceptación: cada equipo responde con un commit que diga `CONTRATO 
 
 | Tema | Regla |
 | --- | --- |
-| Prefijo | `/api/v1/`. `/health` queda en la raíz. OpenAPI en `/api/schema/` y `/api/docs/` (`drf-spectacular`). |
+| Prefijo | `/api/v1/`. `/health` queda en la raíz. OpenAPI en `/api/schema/` y `/api/docs/` (`drf-spectacular`): públicas solo con `DEBUG=True`; en producción exigen staff (sesión de `/admin/` o token de un usuario staff). Panel de revisión en `/admin/` (solo staff, solo lectura). |
 | Formato | JSON UTF-8. Nombres de campo en `snake_case`. Ids numéricos. Fechas ISO 8601 en UTC (`2026-10-27T14:03:00Z`). |
 | Autenticación | Cabecera `Authorization: Token <clave>`. Toda ruta la exige salvo las marcadas "pública". |
 | Propiedad | Toda ruta con `profile_id` comprueba que el perfil es del usuario. Si no lo es, responde `404 not_found` (no `403`), para no revelar que existe. La comprueba `IsProfileOwner` en `apps/core/permissions.py`. |
@@ -47,7 +47,7 @@ Catálogo de códigos de error. Los equipos pueden añadir códigos propios con 
 | `internal_error` | 500 | Error no previsto. El detalle va al log, no a la respuesta. |
 | `method_not_allowed` | 405 | Verbo no admitido en la ruta. |
 
-El manejador `apps/core/errors.py` traduce las excepciones de DRF y de Django a este formato, también las rutas inexistentes (`404`) y los fallos del servidor (`500`). Para un error de dominio, un servicio lanza `ApiError(code, message, status_code=..., details=...)`. Los `message` están en español y son para mostrar; el cliente decide por `code`.
+El manejador `apps/core/errors.py` traduce las excepciones de DRF y de Django a este formato, también las rutas inexistentes (`404`) y los fallos del servidor (`500`). Para un error de dominio, un servicio lanza `ApiError(code, message, status_code=..., details=...)`. Los `message` están en español y son para mostrar; el cliente decide por `code`, que es estable y no cambia con el idioma del texto.
 
 ## 3. Rutas de ARCHITECT
 
@@ -241,8 +241,8 @@ Cambios que el orquestador debe copiar a sus documentos (ARCHITECT no los edita)
 
 | N.º | Tema | Decisión | Quién lo decide si discrepa |
 | --- | --- | --- | --- |
-| 1 | Tokens de API | Tabla propia `auth_tokens` con hash, caducidad y un token por dispositivo, en lugar de `rest_framework.authtoken`. El contrato HTTP es el mismo. | Orquestador |
-| 2 | `alerts` | Único parcial (solo una alerta `active` por perfil, post y tipo), en lugar del único completo del plan. Permite avisar de nuevo tras descartar. | Orquestador |
+| 1 | Tokens de API | Tabla propia `auth_tokens` con hash, caducidad y un token por dispositivo, en lugar de `rest_framework.authtoken`. El contrato HTTP es el mismo. **Aceptado por el orquestador.** | Orquestador |
+| 2 | `alerts` | Único parcial (solo una alerta `active` por perfil, post y tipo), en lugar del único completo del plan. Permite avisar de nuevo tras descartar. **Aceptado por el orquestador.** | Orquestador |
 | 3 | `profiles.pfm_account_id` | No existe en `social_profiles`: vive en `connections.connected_accounts`. | CONNECT |
 | 4 | `PublishJob.status` | CONNECT lo pide con valores `pending`, `done`, `failed`, `unknown` y una columna `fingerprint` `char(64)`. **Aceptado.** `SCHEMA.md` 8 queda actualizado. `idempotency_key` sigue siendo único por perfil. Los valores de `status` no usan `JobStatus` (otra máquina de estados: `unknown` significa "no se sabe si el proveedor publicó"). | CONNECT |
 | 5 | `OAuthState.consume` | CONNECT lo implementa como un solo `UPDATE ... SET consumed_at = now() WHERE state = %s AND consumed_at IS NULL AND expires_at > now() RETURNING ...`. Ya es el contrato de `SCHEMA.md` 8. ARCHITECT no escribe ese código. | CONNECT |
@@ -252,9 +252,10 @@ Cambios que el orquestador debe copiar a sus documentos (ARCHITECT no los edita)
 | 9 | Índices | Django limita el nombre de un índice a 30 caracteres (comprobación `models.E034`). `SCHEMA.md` describe los índices por columnas, no por nombre. Los nombres reales (`ix_`, `uq_`, `ck_`) están en las migraciones. | ARCHITECT |
 | 10 | `User.email` | `unique=True` más `CHECK (email = lower(email))`, en lugar del único sobre `Lower(email)` de `SCHEMA.md` v2: Django exige `unique` en `USERNAME_FIELD`. El efecto es el mismo. | ARCHITECT |
 | 11 | `tool_call_id` | Falta en `ChatMessageIn` y `ChatMessageOut` de `ports.py` (sección 5). | INTELLIGENCE |
-| 12 | `contrib.admin`, `sessions` | No están en `INSTALLED_APPS`. Todo el acceso es por token. Se añadirá `admin` solo si el orquestador lo pide. | Orquestador |
-| 13 | Documentación OpenAPI | `/api/schema/` y `/api/docs/` son públicas: describen rutas, no datos. | Orquestador |
-| 14 | Registro duplicado | `POST /auth/register` con un email ya usado responde `409 conflict`. Revela que el email existe; el límite de 10 por minuto acota el sondeo. | Orquestador |
+| 12 | `contrib.admin`, `sessions` | **Añadidos a petición del orquestador** (d64718e). `/admin/` es solo staff y solo lectura. Todo modelo se registra con `SafeModelAdmin` (`apps/core/admin.py`): no oculta ni muestra nunca un `EncryptedTextField` y la comprobación `lumi.E001` falla el arranque si un admin lo expone. Se ocultan también `password` y `key_hash`. La API sigue siendo solo por token; la sesión solo sirve para `/admin/` y la documentación. | Orquestador |
+| 13 | Documentación OpenAPI | **Decidido.** `/api/schema/` y `/api/docs/` son públicas solo con `DEBUG=True`; en producción exigen staff (`IsStaffOrDebug`). | Orquestador |
+| 14 | Registro duplicado | **Aceptado.** `POST /auth/register` con un email ya usado responde `409 conflict`. Revela que el email existe (enumeración de cuentas); el límite de 10 por minuto acota el sondeo. **A revisar antes del lanzamiento**: alternativa, responder igual y avisar por email. | Orquestador |
+| 15 | Mensajes de error | **Aceptado.** Los `message` van en español; el cliente decide por `code`. | Orquestador |
 
 ## 12. Cómo se pide un cambio
 

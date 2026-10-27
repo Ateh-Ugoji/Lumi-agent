@@ -126,9 +126,12 @@ SPECTACULAR_SETTINGS = {
     "DESCRIPTION": "API del backend de Lumi. Contrato en lumi/docs/CONTRATOS.md.",
     "VERSION": "0.1.0",
     "SERVE_INCLUDE_SCHEMA": False,
-    # The schema describes routes, not data: it is readable without a token.
-    "SERVE_PERMISSIONS": ["rest_framework.permissions.AllowAny"],
-    "SERVE_AUTHENTICATION": [],
+    # Open with DEBUG=True; staff only otherwise (session from /admin/ or a staff token).
+    "SERVE_PERMISSIONS": ["apps.core.permissions.IsStaffOrDebug"],
+    "SERVE_AUTHENTICATION": [
+        "apps.accounts.authentication.TokenAuthentication",
+        "rest_framework.authentication.SessionAuthentication",
+    ],
 }
 
 # Shared state (OAuth state, pending MCP writes) must never live in process memory in production.
