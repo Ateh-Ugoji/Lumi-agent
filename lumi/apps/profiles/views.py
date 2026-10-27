@@ -2,16 +2,23 @@
 
 from __future__ import annotations
 
+from asgiref.sync import async_to_sync
 from django.db import transaction
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.core import jobs
+from apps.core import agent_runtime, jobs
 from apps.core.errors import ApiError
 from apps.core.permissions import IsProfileOwner
+from apps.core.throttles import ChatUserThrottle
 from apps.profiles import services
-from apps.profiles.serializers import CreateProfileSerializer, ListeningSerializer
+from apps.profiles.serializers import (
+    CreateProfileSerializer,
+    ListeningSerializer,
+    ScanTrendsSerializer,
+    TrendMatchesQuerySerializer,
+)
 from lumi_ai.ports import ListeningConfig
 
 BOOTSTRAP_KIND = "profile.bootstrap"
@@ -143,3 +150,56 @@ class ListeningView(_OwnedProfileView):
                 "validation_error", "Configuración de escucha no válida."
             ) from None
         return Response(_listening_body(saved))
+
+
+def _require_profile(request) -> int:
+    """``IsProfileOwner`` lets a request with no ``profile_id`` through; trends need one."""
+    profile = getattr(request, "profile", None)
+    if profile is None:
+        raise ApiError(
+            "validation_error",
+            "profile_id es obligatorio.",
+            details={"profile_id": ["Este campo es obligatorio."]},
+        )
+    return profile.pk
+
+
+class TrendMatchesView(APIView):
+    permission_classes = [IsProfileOwner]
+
+    def get(self, request):
+        query = TrendMatchesQuerySerializer(data=request.query_params)
+        query.is_valid(raise_exception=True)
+        matches = services.list_trend_matches(
+            _require_profile(request), query.validated_data["limit"]
+        )
+        return Response({"matches": matches})
+
+
+class ScanTrendsView(APIView):
+    permission_classes = [IsProfileOwner]
+    throttle_classes = [ChatUserThrottle]  # each scan spends provider credits
+
+    def post(self, request):
+        data = ScanTrendsSerializer(data=request.data)
+        data.is_valid(raise_exception=True)
+        profile_id = _require_profile(request)
+        result = async_to_sync(agent_runtime.get_runtime().scan_trends)(
+            profile_id,
+            data.validated_data.get("handles"),
+            data.validated_data["min_likes"],
+        )
+        if result.get("error"):
+            raise ApiError(
+                "scan_failed",
+                "No se pudo completar el escaneo de tendencias.",
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                details={"reason": str(result["error"])[:300]},
+            )
+        return Response(
+            {
+                "profile_id": profile_id,
+                "new_matches_found": result.get("new_matches_found", 0),
+                "viral_posts": list(result.get("viral_posts", [])),
+            }
+        )

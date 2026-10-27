@@ -22,3 +22,26 @@ class ListeningSerializer(serializers.Serializer):
     interval_minutes = serializers.IntegerField(
         required=False, allow_null=True, min_value=MIN_INTERVAL, max_value=MAX_INTERVAL
     )
+
+
+TRENDS_DEFAULT = 50
+TRENDS_MAX = 200
+MAX_HANDLES = 20
+
+
+class TrendMatchesQuerySerializer(serializers.Serializer):
+    profile_id = serializers.IntegerField()
+    limit = serializers.IntegerField(
+        required=False, min_value=1, max_value=TRENDS_MAX, default=TRENDS_DEFAULT
+    )
+
+
+class ScanTrendsSerializer(serializers.Serializer):
+    profile_id = serializers.IntegerField()
+    handles = serializers.ListField(
+        child=serializers.CharField(max_length=100),
+        required=False,
+        allow_null=True,
+        max_length=MAX_HANDLES,
+    )
+    min_likes = serializers.IntegerField(required=False, min_value=0, default=20)

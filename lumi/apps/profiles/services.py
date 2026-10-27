@@ -27,6 +27,7 @@ from apps.profiles.models import (
     HandleOrigin,
     HandleSnapshot,
     ListeningKeyword,
+    ListeningMatch,
     MetricSnapshot,
     PollConfig,
     Post,
@@ -53,6 +54,7 @@ __all__ = [
     "InvalidHandle",
     "ProfileSummary",
     "SnapshotIn",
+    "TrendMatch",
     "UpsertResult",
 ]
 
@@ -702,6 +704,52 @@ def record_listening_match(
         return cursor.fetchone() is not None
 
 
+class TrendMatch(TypedDict):
+    id: int
+    profile_id: int
+    platform: str
+    platform_post_id: str
+    author_handle: str
+    caption: str
+    platform_url: str
+    metrics: (
+        dict[str, int | None] | None
+    )  # latest snapshot; ``None`` before the first one
+    discovered_at: datetime
+
+
+MATCHES_MAX = 200
+
+
+def list_trend_matches(profile_id: int, limit: int = 50) -> list[TrendMatch]:
+    """Posts of other accounts the profile found, newest first, with their latest metrics."""
+    limit = max(1, min(int(limit), MATCHES_MAX))
+    matches = list(
+        ListeningMatch.objects.filter(profile_id=profile_id)
+        .select_related("post__author")
+        .order_by("-discovered_at", "-id")[:limit]
+    )
+    latest = _latest_snapshots([m.post_id for m in matches])
+    out: list[TrendMatch] = []
+    for m in matches:
+        snap = latest.get(m.post_id)
+        out.append(
+            TrendMatch(
+                id=m.pk,
+                profile_id=m.profile_id,
+                platform=m.post.author.platform,
+                platform_post_id=m.post.platform_post_id,
+                author_handle=m.post.author.handle_display
+                or m.post.author.handle_normalized,
+                caption=m.post.caption,
+                platform_url=m.post.url,
+                metrics={f: getattr(snap, f) for f in METRIC_FIELDS} if snap else None,
+                discovered_at=m.discovered_at,
+            )
+        )
+    return out
+
+
 def create_alert_once(
     profile_id: int,
     post_id: int,
@@ -1013,6 +1061,7 @@ _ASYNC = (
     "set_listening",
     "claim_due_polls",
     "get_analytics",
+    "list_trend_matches",
 )
 for _name in _ASYNC:
     globals()[f"a{_name}"] = sync_to_async(globals()[_name], thread_sensitive=True)

@@ -34,4 +34,6 @@ urlpatterns = [
         views.ListeningView.as_view(),
         name="profile-listening",
     ),
+    path("trends/matches", views.TrendMatchesView.as_view(), name="trends-matches"),
+    path("trends/scan", views.ScanTrendsView.as_view(), name="trends-scan"),
 ]
