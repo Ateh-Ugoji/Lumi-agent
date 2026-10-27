@@ -444,7 +444,11 @@ def _peer_post(
 ) -> PeerPostIn:
     kwargs = {}
     if raw is not None:
-        kwargs = {"metrics": raw.metrics, "media": raw.media}
+        kwargs = {
+            "metrics": raw.metrics,
+            "media": raw.media,
+            "author_avatar_url": raw.author_avatar_url,
+        }
     return PeerPostIn(
         platform=platform,
         external_id=m.post_id,

@@ -366,6 +366,7 @@ def build(services: CompetitorServices) -> list[ToolSpec]:
                             "url": row.url,
                             "likes": row.metrics.likes,
                             "views": row.metrics.views,
+                            "avatar_url": row.author_avatar_url or "",
                         }
                     )
         out: dict[str, Any] = {
@@ -537,6 +538,7 @@ def _peer_post(post: PostIn, handle: str, niche_key: str | None) -> PeerPostIn:
         metrics=post.metrics,
         media=post.media,
         niche_key=niche_key,
+        author_avatar_url=post.author_avatar_url,
     )
 
 

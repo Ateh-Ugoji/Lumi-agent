@@ -38,7 +38,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Literal, Protocol, get_args, runtime_checkable
 
-PORTS_VERSION = "1.10"  # 1.1: SemanticJudge, 1.2: OwnPostSync, 1.3: AttemptIn.is_fallback, EvaluationRecord.attempt_id required, 1.4: MemoryStore.touch_notes, save_voice model/prompt_version, 1.5: tool_call_id, report query/peers, repurpose mode/brief, user request platform, 1.6: MatchStore, 1.7: create_request_with_attempts(source_post_id=), 1.8: create_request_with_attempts(evaluations=) + EvaluationIn, 1.9: MediaRef.kind may be None (type unknown), 1.10: VideoAnalysisStore
+PORTS_VERSION = "1.11"  # 1.1: SemanticJudge, 1.2: OwnPostSync, 1.3: AttemptIn.is_fallback, EvaluationRecord.attempt_id required, 1.4: MemoryStore.touch_notes, save_voice model/prompt_version, 1.5: tool_call_id, report query/peers, repurpose mode/brief, user request platform, 1.6: MatchStore, 1.7: create_request_with_attempts(source_post_id=), 1.8: create_request_with_attempts(evaluations=) + EvaluationIn, 1.9: MediaRef.kind may be None (type unknown), 1.10: VideoAnalysisStore, 1.11: author_avatar_url on PostIn/PeerPostIn/PeerPostOut
 
 # ---------------------------------------------------------------------------
 # Shared vocabulary
@@ -99,6 +99,9 @@ class PostIn:
     language: str | None = None
     source: str | None = None  # "pfm" | "xpoz" | ...
     text_truncated: bool = False
+    # The author's photo when the source reports it with the post. None = the source does not
+    # (Xpoz post rows carry no avatar; only its user endpoints do). Never guessed or built.
+    author_avatar_url: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -448,6 +451,9 @@ class PeerPostIn:
     metrics: PostMetrics = field(default_factory=PostMetrics)
     media: tuple[MediaRef, ...] = ()
     niche_key: str | None = None
+    author_avatar_url: str | None = (
+        None  # from the source; the store fills the handle only if empty
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -463,6 +469,7 @@ class PeerPostOut:
     metrics: PostMetrics
     media: tuple[MediaRef, ...]
     niche_key: str | None
+    author_avatar_url: str = ""  # the stored handle's photo, "" when nobody has one
 
 
 @runtime_checkable

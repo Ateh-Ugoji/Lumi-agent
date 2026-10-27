@@ -164,6 +164,7 @@ class FakePeerStore:
                 metrics=p.metrics,
                 media=p.media,
                 niche_key=p.niche_key,
+                author_avatar_url=p.author_avatar_url or "",
             )
             self.rows[key] = replace(row)
             out.append(row)

@@ -101,6 +101,7 @@ def extract_sample_posts(result: Any, limit: int = 4) -> list[dict[str, Any]]:
                 "text": (post.get("caption") or post.get("text") or "")[:120],
                 "likes": post.get("likes") or post.get("likeCount"),
                 "url": post.get("url") or post.get("platform_url"),
+                "avatar_url": post.get("avatar_url") or "",
             }
         )
     return out

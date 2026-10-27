@@ -1,7 +1,7 @@
 # Cómo funciona la IA de Lumi
 
 Paquete Python puro `lumi/lumi_ai/` (no importa Django; lo comprueba `lumi_ai/tests/test_boundaries.py`) más el pegamento Django en
-`lumi/apps/intelligence/`. Todo colaborador entra por un puerto (`lumi_ai/ports.py`, `PORTS_VERSION` 1.10); PostgreSQL vía ORM es el único
+`lumi/apps/intelligence/`. Todo colaborador entra por un puerto (`lumi_ai/ports.py`, `PORTS_VERSION` 1.11); PostgreSQL vía ORM es el único
 almacén transaccional. Los valores de umbrales y modelos salen de `AIConfig` (`lumi_ai/config.py`), que se llena con `AIConfig.from_env()`.
 
 ## 1. Un turno del agente (`agent/loop.py`)

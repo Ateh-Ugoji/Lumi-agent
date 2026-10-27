@@ -132,6 +132,32 @@ class TestPeerPosts:
         assert all(p.metrics.likes == 40 and p.profile_id == profile.pk for p in saved)
         assert call(PostRepo().list_posts, profile.pk) == []  # not the profile's own
 
+    def test_the_source_photo_fills_the_handle_and_an_existing_one_is_kept(
+        self, profile
+    ):
+        from dataclasses import replace
+
+        repo = PeerPostRepo()
+        saved = call(
+            repo.save_peer_posts,
+            profile.pk,
+            [
+                replace(peer("p1"), author_avatar_url="https://cdn.example/rival.jpg"),
+                peer("p2", "other"),
+            ],
+        )
+        photos = {p.author_handle: p.author_avatar_url for p in saved}
+        assert photos == {"rival": "https://cdn.example/rival.jpg", "other": ""}
+        again = call(
+            repo.save_peer_posts,
+            profile.pk,
+            [replace(peer("p3"), author_avatar_url="https://cdn.example/new.jpg")],
+        )
+        assert again[0].author_avatar_url == "https://cdn.example/rival.jpg"
+        assert call(repo.get_peer_posts, [saved[0].id])[0].author_avatar_url == (
+            "https://cdn.example/rival.jpg"
+        )
+
     def test_saving_twice_is_idempotent(self, profile):
         repo = PeerPostRepo()
         call(repo.save_peer_posts, profile.pk, [peer("p1")])

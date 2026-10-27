@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 
 from lumi_ai.competitors.pipeline import PipelineDeps
@@ -256,6 +258,22 @@ async def test_trends_keep_viral_posts_once_and_default_to_the_niche_handles() -
     assert again["new_matches_found"] == 0  # the same posts are not matched twice
     assert len(peers.rows) == 10
     assert all(r.niche_key == "ai:global" for r in peers.rows.values())
+
+
+async def test_viral_posts_carry_the_photo_the_source_gave_and_an_empty_string_otherwise() -> (
+    None
+):
+    posts = make_posts("peer_one", 2, winners=0)
+    with_photo = replace(posts[0], author_avatar_url="https://cdn.example/peer_one.jpg")
+    registry, _, _, _, peers, _ = _services({"peer_one": [with_photo, posts[1]]})
+    out = await _call(registry, "check_niche_trends", handles=["peer_one"])
+    by_url = {p["url"]: p["avatar_url"] for p in out["viral_posts"]}
+    assert by_url[with_photo.url] == "https://cdn.example/peer_one.jpg"
+    assert by_url[posts[1].url] == ""  # unknown: empty, never invented
+    assert {r.author_avatar_url for r in peers.rows.values()} == {
+        "https://cdn.example/peer_one.jpg",
+        "",
+    }
 
 
 async def test_trends_threshold_and_missing_likes() -> None:

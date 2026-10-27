@@ -182,8 +182,12 @@ class PeerPostRepo:
         ids: dict[int, None] = {}
         with transaction.atomic():
             for (platform, author), group in by_handle.items():
+                # fill-only: a photo already on the handle (from the handle search) is kept
+                avatar = next(
+                    (p.author_avatar_url for p in group if p.author_avatar_url), ""
+                )
                 handle_id = services.get_or_create_handle(
-                    platform, author, origin=HandleOrigin.NICHE
+                    platform, author, origin=HandleOrigin.NICHE, avatar_url=avatar
                 )
                 result = services.upsert_posts(handle_id, group)
                 ids.update(dict.fromkeys(result.post_ids))
@@ -228,6 +232,11 @@ class PeerPostRepo:
 
 
 def _peer_outs(posts: Sequence[PostOut], profile_id: int) -> list[PeerPostOut]:
+    avatars = dict(
+        Post.objects.filter(pk__in=[p.id for p in posts]).values_list(
+            "pk", "author__avatar_url"
+        )
+    )
     return [
         PeerPostOut(
             id=p.id,
@@ -241,6 +250,7 @@ def _peer_outs(posts: Sequence[PostOut], profile_id: int) -> list[PeerPostOut]:
             metrics=p.metrics or PostMetrics(),
             media=p.media,
             niche_key=None,
+            author_avatar_url=avatars.get(p.id) or "",
         )
         for p in posts
     ]

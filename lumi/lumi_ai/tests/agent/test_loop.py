@@ -432,7 +432,15 @@ async def test_failed_scan_opens_the_reply_with_a_coverage_block():
         {
             "scanned_handles": {"beaconsai": 10},
             "failed_handles": ["@wabi: provider 402"],
-            "viral_posts": [{"author": "wabi", "caption": "x", "likes": 77}],
+            "viral_posts": [
+                {
+                    "author": "wabi",
+                    "caption": "x",
+                    "likes": 77,
+                    "avatar_url": "https://cdn.example/wabi.jpg",
+                },
+                {"author": "other", "caption": "y", "likes": 5},
+            ],
         }
     )
     rig = make_rig(
@@ -447,7 +455,10 @@ async def test_failed_scan_opens_the_reply_with_a_coverage_block():
     assert "@beaconsai: scanned" in result.content and "@wabi: failed" in result.content
     assert "full picture" not in result.content
     assert "partial picture" in result.content
-    assert result.tool_executions[0].sample_posts[0]["author"] == "wabi"
+    samples = result.tool_executions[0].sample_posts
+    assert samples[0]["author"] == "wabi"
+    assert samples[0]["avatar_url"] == "https://cdn.example/wabi.jpg"
+    assert samples[1]["avatar_url"] == ""  # unknown stays an empty string
 
 
 async def test_complete_coverage_leaves_the_reply_untouched():
