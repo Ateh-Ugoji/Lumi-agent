@@ -42,3 +42,4 @@ ts	phase	decision	why	evidence	result
 2026-10-27T06:52:45Z	T7	refresh de conexiones por cron, no beat	Celery no está configurado (T9)	comando refresh_connections existe en 9678bee	ok
 2026-10-27T06:54:07Z	T7	servicios de chat y analytics de solo lectura	CONTRATOS §5; analytics suma el último snapshot por post (corrige el legado)	tests chat y analytics, 1 query por historial	ok
 2026-10-27T06:57:14Z	T5-jobs	core.jobs: registry plus atomic claim, dispatcher by setting	Celery is not configured; routes need a job table now	12 tests incl. two-thread claim	green
+2026-10-27T06:57:20Z	T5-routes	profiles/alerts/listening/jobs routes; POST /profiles 200 when it exists	CONTRATOS says 201 always; 200 avoids a second bootstrap job	32 API tests incl. query counts, ownership	green
