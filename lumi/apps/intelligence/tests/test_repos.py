@@ -617,6 +617,16 @@ class TestDelegations:
         ]
         assert history[1].tools_used == ("t",)
 
+    def test_a_tool_row_keeps_the_id_of_the_call_it_answers(self, profile):
+        repo = ChatRepo()
+        call(
+            repo.append,
+            profile.pk,
+            ChatMessageIn("tool", "{}", tool_name="get_posts", tool_call_id="call_9"),
+        )
+        (row,) = call(repo.history, profile.pk, 10)
+        assert (row.role, row.tool_call_id) == ("tool", "call_9")
+
     def test_listening_config_and_alerts(self, profile):
         repo = ListeningRepo()
         assert call(repo.get_listening, profile.pk).enabled is False
