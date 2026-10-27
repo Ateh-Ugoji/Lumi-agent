@@ -288,7 +288,7 @@ Pendiente de otros equipos, sin importador hoy (el `--verify` los marca `sin imp
 | 15 | Mensajes de error | **Aceptado.** Los `message` van en español; el cliente decide por `code`. | Orquestador |
 | 16 | Evaluaciones y transacción | **Retirada.** INTELLIGENCE la cerró en `85a2cff` (puertos 1.8): `create_request_with_attempts(..., evaluations=)` guarda intentos y evaluaciones en un solo `atomic()`, así que la fila 2 de `SCHEMA.md` se cumple tal como está escrita. Un error en una evaluación hace fallar toda la llamada: no quedan intentos sin evaluación. Nota: en `85a2cff` la constante `PORTS_VERSION` sigue en `"1.7"`; falta el aumento a 1.8 (lo hace INTELLIGENCE). | INTELLIGENCE |
 | 17 | `niche_reports.origin` | **Aceptado.** `varchar(24)` en lugar de `varchar(20)`: `legacy_peer_frameworks` tiene 22 caracteres. `SCHEMA.md` queda corregido. | INTELLIGENCE |
-| 18 | Analytics | El puerto suma la lectura más reciente de cada post. El código legado sumaba todas las lecturas y contaba un post varias veces. | Frontend |
+| 18 | Analytics | **Aceptado por el orquestador.** Los totales suman la lectura más reciente de cada post. El código legado sumaba todas las lecturas y contaba un post varias veces. Las series (`reach_series`, `saves_series`) siguen usando todas las lecturas. Está en la matriz de paridad (`plan/estado/ARCHITECT.md`) con test. | Orquestador |
 | 19 | Importador | **Aceptado**: todo en una transacción (un savepoint por importador) e ids conservados solo en perfiles, posts y chat (sección 10). **Rechazado** perder la lectura de métricas duplicada: cero pérdida verificable; `legacy_import_map` guarda `outcome` y el `payload` de cada fila fusionada u omitida (`SCHEMA.md` 10). | Orquestador |
 
 ## 12. Cómo se pide un cambio

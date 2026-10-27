@@ -42,7 +42,21 @@ Rama: `lumi-orquestador`. Registro de decisiones: `ARCHITECT-decisiones.tsv`.
 
 ## Matriz de paridad
 
-Pendiente (se llena antes de T12).
+Cada fila es un comportamiento donde el backend nuevo difiere del legado a propósito (sección 11 de `docs/CONTRATOS.md`) y el test que lo fija. Lo que se comporta igual lo cubren los tests de cada app; esta matriz no sustituye la comparación endpoint por endpoint con los 418 tests legados de `lumi/tests/`, que sigue sin hacerse.
+
+| Fila | Comportamiento | Legado | Nuevo | Estado | Test |
+| --- | --- | --- | --- | --- | --- |
+| 1 | Tokens de API | `rest_framework.authtoken` | Tabla `auth_tokens` con hash y caducidad | Aceptada | `apps/accounts/tests/test_models.py::test_token_stores_only_the_hash_and_authenticates` |
+| 2 | Alertas repetidas | Avisa de nuevo tras descartar | Único parcial: una `active` por episodio, varias `dismissed` | Aceptada | `apps/profiles/tests/test_models.py::test_alert_only_one_active_per_episode_but_dismissed_can_repeat` |
+| 8 | `GET /profiles/{id}/analytics` | Tenía efectos secundarios | Solo lectura; el refresco va en `POST /profiles/{id}/refresh` | Aceptada | `apps/profiles/tests/test_api.py::test_analytics_is_read_only_and_empty_without_posts` |
+| 12 | `/admin/` | No existía | Solo staff y solo lectura | Aceptada | `apps/core/tests/test_admin.py::test_the_admin_is_read_only` |
+| 13 | `/api/schema/` y `/api/docs/` | Públicas | Públicas solo con `DEBUG`; en producción exigen staff | Aceptada | `apps/core/tests/test_docs_access.py::test_anonymous_is_refused_in_production` |
+| 14 | Registro con email repetido | Error de integridad | `409 conflict` | Aceptada, a revisar antes del lanzamiento | `apps/accounts/tests/test_auth_api.py::test_register_rejects_duplicate_email_case_insensitively` |
+| 16 | Intentos y evaluaciones | Dos transacciones | Una (`evaluations=`, puertos 1.8) | Retirada | `apps/intelligence/tests/test_repos.py` (casos con `evaluations=`) |
+| 18 | Analytics: totales | Suma todas las lecturas de cada post, así que un post leído tres veces cuenta tres | Suma la lectura más reciente de cada post | **Aceptada por el orquestador** | `apps/profiles/tests/test_parity.py::test_row_18_analytics_adds_the_latest_reading_of_each_post_not_every_reading` (más `test_services.py::test_analytics_counts_the_latest_snapshot_of_each_post_once`) |
+| 19 | Importador | No existía | Una transacción, ids conservados solo en perfiles, posts y chat, cero pérdida | Aceptada (cero pérdida exigida) | `apps/core/tests/test_legacy_import.py::test_every_legacy_row_is_imported_or_kept_with_its_payload` y `::test_the_duplicate_metric_reading_of_post_12_is_not_lost` |
+
+Nota sobre la fila 18: `reach_series` y `saves_series` siguen recorriendo todas las lecturas en orden, como el legado. Solo los totales cambian.
 
 ## Notas del esqueleto
 
