@@ -29,6 +29,11 @@ urlpatterns = [
         name="connections-callback",
     ),
     path(
+        "connections/<str:provider>/link",
+        views.LinkView.as_view(),
+        name="connections-link",
+    ),
+    path(
         "connections/<str:provider>/status",
         views.ProviderView.as_view(),
         name="connections-status",

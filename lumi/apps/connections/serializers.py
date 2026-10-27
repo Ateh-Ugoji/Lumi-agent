@@ -34,6 +34,11 @@ class CallbackResponseSerializer(serializers.Serializer):
     redirect_after = serializers.CharField()
 
 
+class LinkRequestSerializer(serializers.Serializer):
+    account_id = serializers.CharField(max_length=128)
+    profile_id = serializers.IntegerField(min_value=1)
+
+
 class ConnectResponseSerializer(serializers.Serializer):
     authorize_url = serializers.URLField()
 
@@ -71,6 +76,14 @@ class StatusSerializer(serializers.Serializer):
         required=False,
         help_text="Datos propios del proveedor que no son cuentas (Google: scopes, caducidad).",
     )
+
+
+class LinkResponseSerializer(serializers.Serializer):
+    provider = serializers.CharField()
+    profile_id = serializers.IntegerField()
+    account = ConnectedAccountSerializer()
+    replaced_account_id = serializers.CharField(allow_null=True)
+    moved_from_profile_id = serializers.IntegerField(allow_null=True)
 
 
 class DisconnectSerializer(serializers.Serializer):

@@ -8,8 +8,9 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.core.errors import ApiError
+from apps.core.permissions import get_owned_profile
 
-from . import accounts, handles_api, publish_api
+from . import account_links, accounts, handles_api, publish_api
 from .serializers import (
     CallbackRequestSerializer,
     CallbackResponseSerializer,
@@ -23,6 +24,8 @@ from .serializers import (
     HandleSelectResponseSerializer,
     HandleSelectSerializer,
     HandleStatsSerializer,
+    LinkRequestSerializer,
+    LinkResponseSerializer,
     PublishRequestSerializer,
     PublishResponseSerializer,
     StatusSerializer,
@@ -112,6 +115,27 @@ class PfmSyncView(APIView):
     )
     def post(self, request):
         return Response(_status_body(accounts.sync_pfm(request.user)))
+
+
+class LinkView(APIView):
+    """Choose which connected account publishes for a profile. See CONTRATOS 4.1."""
+
+    @extend_schema(
+        request=LinkRequestSerializer,
+        responses=LinkResponseSerializer,
+        summary="Link a connected account (a Meta Page, say) to one of the user's profiles",
+    )
+    def post(self, request, provider: str):
+        account_links.ensure_linkable(provider)  # before the body, like the callback
+        body = LinkRequestSerializer(data=request.data or {})
+        body.is_valid(raise_exception=True)
+        data = body.validated_data
+        # Ownership is checked here, after the type check, so a malformed id is a 400.
+        profile = get_owned_profile(request.user, data["profile_id"])
+        result = account_links.link_account(
+            request.user, provider, account_id=data["account_id"], profile=profile
+        )
+        return Response(LinkResponseSerializer(result).data)
 
 
 class ProviderView(APIView):

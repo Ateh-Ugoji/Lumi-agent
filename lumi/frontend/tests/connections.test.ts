@@ -6,6 +6,9 @@ import {
   getConnectionStatus,
   googleScopeLabels,
   isLiveDisabled,
+  linkAccount,
+  linkChoice,
+  linkErrorMessage,
   parseCallbackLanding,
   startConnectMessage,
   syncPfm,
@@ -145,4 +148,39 @@ test("syncPfm is a POST and reading a status is a GET", async () => {
       ["GET", "/api/v1/connections/pfm/status"],
     ],
   );
+});
+
+test("linkChoice offers an account only where the server would accept it", () => {
+  const profile = { id: 7, platform: "facebook" };
+  const page = { platform: "facebook", status: "active", profile_id: null };
+  assert.equal(linkChoice(page, profile), "available");
+  assert.equal(linkChoice({ ...page, profile_id: 7 }, profile), "linked");
+  assert.equal(linkChoice({ ...page, profile_id: 9 }, profile), "available");
+  assert.equal(linkChoice({ ...page, platform: "instagram" }, profile), "other_network");
+  assert.equal(linkChoice({ ...page, platform: null }, profile), "available");
+  assert.equal(linkChoice({ ...page, status: "revoked" }, profile), "reconnect");
+  assert.equal(linkChoice({ ...page, status: "error" }, profile), "reconnect");
+  assert.equal(linkChoice({ ...page, status: "limited" }, profile), "available");
+});
+
+test("linkAccount posts the account and the profile and nothing else", async () => {
+  const seen: { url: string; body: unknown; method: string }[] = [];
+  globalThis.fetch = (async (url: string, init: RequestInit) => {
+    seen.push({ url: String(url), body: JSON.parse(String(init.body)), method: String(init.method) });
+    return new Response(JSON.stringify({ provider: "meta", profile_id: 7 }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  }) as typeof fetch;
+  await linkAccount("meta", "1001", 7);
+  assert.equal(seen.length, 1);
+  assert.match(seen[0].url, /\/connections\/meta\/link$/);
+  assert.equal(seen[0].method, "POST");
+  assert.deepEqual(seen[0].body, { account_id: "1001", profile_id: 7 });
+});
+
+test("a refused link says why", () => {
+  assert.match(linkErrorMessage(new ApiError(409, "connections.platform_mismatch", "x")), /otra red/);
+  assert.match(linkErrorMessage(new ApiError(409, "connections.account_unusable", "x")), /reconect/);
+  assert.match(linkErrorMessage(new Error("boom")), /No se pudo enlazar/);
 });

@@ -246,6 +246,7 @@ export default function Settings({
               <ConnectionsPanel
                 providers={["meta", "linkedin", "x", "pfm"]}
                 profileId={activeProfileId}
+                profile={active}
                 returned={returned}
                 onDismissReturn={onDismissReturn}
                 onChanged={onConnectionsChanged}

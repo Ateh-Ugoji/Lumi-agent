@@ -178,6 +178,52 @@ test("publish: review without publishing, then really publish after confirming",
   await expect(card.getByTestId("publish-result")).toBeVisible();
 });
 
+test("link a Facebook Page to a Facebook profile, replace it, and see it refused on an X profile", async () => {
+  // A login with two Pages stores both and links none: the user picks one per profile.
+  await page.request.get("http://localhost:8000/__sim__/meta/pages?n=2");
+  await openSettings("Profile");
+  await page.getByLabel("Red del nuevo perfil").selectOption("facebook");
+  await page.getByLabel("Usuario del nuevo perfil").fill("@pagina");
+  await page.getByRole("button", { name: "Añadir perfil" }).click();
+  const fbRow = page.getByRole("list", { name: "Profiles" }).getByRole("listitem").filter({ hasText: "@pagina" });
+  await expect(fbRow).toBeVisible();
+  if ((await fbRow.getByRole("button", { name: "Usar este" }).count()) > 0) {
+    await fbRow.getByRole("button", { name: "Usar este" }).click();
+  }
+  await expect(fbRow.getByText("Activo", { exact: true })).toBeVisible();
+
+  await openSettings("Connected Accounts");
+  await page.getByTestId("connect-meta").click();
+  await expect(page.getByTestId("connect-return")).toContainText("Facebook conectado");
+  await openSettings("Connected Accounts");
+  const meta = page.getByTestId("provider-meta");
+  const uno = meta.getByRole("listitem").filter({ hasText: "Pagina Uno" });
+  const dos = meta.getByRole("listitem").filter({ hasText: "Pagina Dos" });
+
+  const linkCall = page.waitForRequest((r) => r.method() === "POST" && r.url().endsWith("/connections/meta/link"));
+  await uno.getByRole("button", { name: "Usar para @pagina" }).click();
+  const sent = (await linkCall).postDataJSON();
+  expect(Object.keys(sent).sort()).toEqual(["account_id", "profile_id"]);
+  await expect(uno).toContainText("Publica para @pagina");
+  await expect(dos.getByRole("button", { name: "Usar para @pagina" })).toBeVisible();
+
+  // Choosing the other Page replaces the first, which stays connected and can be chosen again.
+  await dos.getByRole("button", { name: "Usar para @pagina" }).click();
+  await expect(dos).toContainText("Publica para @pagina");
+  await expect(page.getByTestId("note-meta")).toContainText("La anterior sigue conectada");
+  await expect(uno.getByRole("button", { name: "Usar para @pagina" })).toBeVisible();
+  await expect(page.getByTestId("status-meta")).toHaveText("Conectado");
+
+  // The X profile cannot take a Facebook Page: the panel does not offer it.
+  await openSettings("Profile");
+  const xRow = page.getByRole("list", { name: "Profiles" }).getByRole("listitem").filter({ hasText: "@demo" });
+  await xRow.getByRole("button", { name: "Usar este" }).click();
+  await openSettings("Connected Accounts");
+  await expect(uno).toContainText("Es de otra red");
+  await expect(dos).toContainText("Es de otra red");
+  await expect(meta.getByRole("button", { name: /Usar para/ })).toHaveCount(0);
+});
+
 test("disconnect Facebook, then sign out and back in", async () => {
   await openSettings("Connected Accounts");
   const card = page.getByTestId("provider-meta");

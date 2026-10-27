@@ -67,6 +67,55 @@ export async function startConnect(
   return res.authorize_url;
 }
 
+export type LinkResult = {
+  provider: Provider;
+  profile_id: number;
+  account: ConnectedAccount;
+  replaced_account_id: string | null;
+  moved_from_profile_id: number | null;
+};
+
+/**
+ * Choose which connected account publishes for a profile (a Meta login can hold many Pages).
+ * Repeating the call changes nothing. Linking another account replaces the previous one, which
+ * stays connected.
+ */
+export function linkAccount(
+  provider: Provider,
+  accountId: string,
+  profileId: number,
+): Promise<LinkResult> {
+  return request<LinkResult>(`/connections/${provider}/link`, {
+    method: "POST",
+    body: { account_id: accountId, profile_id: profileId },
+  });
+}
+
+/** What the panel offers for one account next to the active profile. */
+export type LinkChoice = "linked" | "available" | "other_network" | "reconnect";
+
+export function linkChoice(
+  account: Pick<ConnectedAccount, "platform" | "status" | "profile_id">,
+  profile: { id: number; platform: string },
+): LinkChoice {
+  if (account.status === "revoked" || account.status === "error") return "reconnect";
+  if (account.profile_id === profile.id) return "linked";
+  // An account with no platform links to any profile, like the server does.
+  if (account.platform && account.platform !== profile.platform) return "other_network";
+  return "available";
+}
+
+const LINK_ERRORS: Record<string, string> = {
+  "connections.account_unusable": "Esa cuenta necesita reconectarse antes de usarla.",
+  "connections.platform_mismatch": "Esa cuenta es de otra red social que este perfil.",
+  not_found: "La cuenta o el perfil ya no existen. Actualiza la lista.",
+};
+
+export function linkErrorMessage(err: unknown): string {
+  if (err instanceof ApiError) return LINK_ERRORS[err.code] ?? err.message;
+  return "No se pudo enlazar la cuenta.";
+}
+
 export function disconnect(
   provider: Provider,
   accountId?: string,

@@ -8,12 +8,17 @@ import {
   getConnectionStatus,
   googleScopeLabels,
   isLiveDisabled,
+  linkAccount,
+  linkChoice,
+  linkErrorMessage,
   startConnect,
   startConnectMessage,
   syncPfm,
   type ConnectReturn,
   type ConnectionStatus,
+  type LinkChoice,
   type Provider,
+  type ProfileSummary,
 } from "../../api";
 import styles from "./Settings.module.css";
 
@@ -43,12 +48,15 @@ const formatExpiry = (iso: string): string => {
 export default function ConnectionsPanel({
   providers,
   profileId,
+  profile = null,
   returned,
   onDismissReturn,
   onChanged,
 }: {
   providers: Provider[];
   profileId: number | null;
+  /** The active profile. With it, each account can be chosen as the one that publishes for it. */
+  profile?: ProfileSummary | null;
   returned: ConnectReturn | null;
   onDismissReturn: () => void;
   onChanged?: () => void;
@@ -119,6 +127,24 @@ export default function ConnectionsPanel({
           ? { note: startConnectMessage(err) }
           : { error: startConnectMessage(err) }),
       });
+    }
+  };
+
+  const link = async (provider: Provider, accountId: string) => {
+    if (!profile) return;
+    patch(provider, { busy: true, error: null, note: null });
+    try {
+      const done = await linkAccount(provider, accountId, profile.id);
+      patch(provider, {
+        busy: false,
+        note: done.replaced_account_id
+          ? `Ahora publica esta cuenta para @${profile.handle}. La anterior sigue conectada.`
+          : `Esta cuenta publicará para @${profile.handle}.`,
+      });
+      await load(provider);
+      onChanged?.();
+    } catch (err) {
+      patch(provider, { busy: false, error: linkErrorMessage(err) });
     }
   };
 
@@ -222,14 +248,25 @@ export default function ConnectionsPanel({
                       {account.platform ? ` · ${account.platform}` : ""}
                       {account.status !== "active" ? ` · ${account.status}` : ""}
                     </span>
-                    <button
-                      type="button"
-                      className={styles.textBtn}
-                      disabled={card.busy}
-                      onClick={() => void remove(provider, account.id)}
-                    >
-                      Desconectar
-                    </button>
+                    <span className={styles.cardActions}>
+                      {profile && (
+                        <LinkControl
+                          choice={linkChoice(account, profile)}
+                          handle={profile.handle}
+                          busy={card.busy}
+                          testId={`link-${provider}-${account.id}`}
+                          onLink={() => void link(provider, account.id)}
+                        />
+                      )}
+                      <button
+                        type="button"
+                        className={styles.textBtn}
+                        disabled={card.busy}
+                        onClick={() => void remove(provider, account.id)}
+                      >
+                        Desconectar
+                      </button>
+                    </span>
                   </li>
                 ))}
               </ul>
@@ -283,5 +320,45 @@ export default function ConnectionsPanel({
         );
       })}
     </>
+  );
+}
+
+function LinkControl({
+  choice,
+  handle,
+  busy,
+  testId,
+  onLink,
+}: {
+  choice: LinkChoice;
+  handle: string;
+  busy: boolean;
+  testId: string;
+  onLink: () => void;
+}) {
+  if (choice === "linked") {
+    return (
+      <span className={styles.chipOn} data-testid={`${testId}-linked`}>
+        Publica para @{handle}
+      </span>
+    );
+  }
+  if (choice === "available") {
+    return (
+      <button
+        type="button"
+        className={styles.btn}
+        data-testid={testId}
+        disabled={busy}
+        onClick={onLink}
+      >
+        Usar para @{handle}
+      </button>
+    );
+  }
+  return (
+    <span className={styles.mutedText} data-testid={`${testId}-unavailable`}>
+      {choice === "other_network" ? "Es de otra red" : "Reconecta esta cuenta"}
+    </span>
   );
 }
