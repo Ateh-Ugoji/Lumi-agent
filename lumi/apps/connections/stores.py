@@ -14,10 +14,11 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable, Iterable
+from dataclasses import replace
 
 from asgiref.sync import sync_to_async
 from django.db import IntegrityError, connection, transaction
-from django.db.models import Q
+from django.db.models import F, Q
 from django.db.models.functions import Now
 
 from apps.profiles.models import HandleOrigin, SocialHandle, SocialProfile
@@ -264,6 +265,16 @@ def _row(handle: SocialHandle) -> HandleRow:
 
 
 class DjangoHandleStore:
+    """Handle tables over Postgres.
+
+    ``user_id`` limits "handles of profiles already in Lumi" to the caller's own profiles, so
+    one user's profile list never leads another user's dropdown. Remembered handles and the
+    search cache stay shared: they are public identities and public search results.
+    """
+
+    def __init__(self, user_id: int | None = None) -> None:
+        self._user_id = user_id
+
     async def profile_handles(self, platform: str, prefix: str) -> list[str]:
         return await sync_to_async(self._profile_handles, thread_sensitive=True)(
             platform, prefix
@@ -298,14 +309,13 @@ class DjangoHandleStore:
         )
 
     def _profile_handles(self, platform: str, prefix: str) -> list[str]:
-        names = (
-            SocialProfile.objects.filter(
-                handle__platform=platform,
-                handle__handle_normalized__startswith=prefix.lower(),
-            )
-            .values_list("handle__handle_normalized", flat=True)
-            .distinct()
+        profiles = SocialProfile.objects.filter(
+            handle__platform=platform,
+            handle__handle_normalized__startswith=prefix.lower(),
         )
+        if self._user_id is not None:
+            profiles = profiles.filter(user_id=self._user_id)
+        names = profiles.values_list("handle__handle_normalized", flat=True).distinct()
         return sorted(names)
 
     def _remembered(self, platform: str, prefix: str) -> list[HandleRow]:
@@ -389,6 +399,43 @@ class DjangoHandleStore:
                 ).values_list("handle_normalized", "id")
             )
         return [existing[n] for n in names if n in existing]
+
+    def select(self, row: HandleRow) -> str | None:
+        """Remember a handle the user picked. Returns the normalized handle, or ``None``."""
+        name = normalize_handle(row.handle)
+        if name is None:
+            return None
+        self._remember([row], HandleOrigin.SELECTED, True)
+        return name
+
+    def saved(self, platforms: list[str], limit: int) -> list[HandleRow]:
+        """Own profile handles first-class, then remembered ones, followers first."""
+        rows: dict[str, HandleRow] = {}
+        own = SocialProfile.objects.filter(handle__platform__in=platforms)
+        if self._user_id is not None:
+            own = own.filter(user_id=self._user_id)
+        for h in SocialHandle.objects.filter(pk__in=own.values("handle_id")):
+            rows[f"{h.platform}:{h.handle_normalized}"] = replace(_row(h), source="db")
+        remembered = SocialHandle.objects.filter(platform__in=platforms).order_by(
+            F("follower_count").desc(nulls_last=True), "handle_normalized"
+        )[:limit]
+        for h in remembered:
+            rows.setdefault(f"{h.platform}:{h.handle_normalized}", _row(h))
+        ordered = sorted(
+            rows.values(),
+            key=lambda r: (
+                r.followers is None,
+                -(r.followers or 0),
+                r.handle.lower(),
+            ),
+        )
+        return ordered[:limit]
+
+    def counts(self) -> dict[str, int]:
+        return {
+            "remembered_handles": SocialHandle.objects.count(),
+            "cached_searches": HandleSearchCache.objects.count(),
+        }
 
     def _remember(self, rows: list[HandleRow], origin: str, overwrite: bool) -> None:
         by_platform: dict[str, list[HandleRow]] = {}

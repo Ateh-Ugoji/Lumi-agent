@@ -15,6 +15,7 @@ so one outage cannot hide a platform for a whole TTL.
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable
+from dataclasses import replace
 from datetime import datetime, timedelta
 
 from ..errors import (
@@ -119,6 +120,9 @@ class HandleSearch:
                 return
             if row.key in merged and stale:
                 return  # stale data never overwrites fresher data
+            if row.key in db_keys and row.source == "cache":
+                # A profile handle is also remembered. Keep its "db" label, take the richer data.
+                row = replace(row, source="db")
             merged[row.key] = row
             if row.platform in rows_by_p:
                 rows_by_p[row.platform] += 1

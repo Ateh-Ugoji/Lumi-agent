@@ -10,7 +10,7 @@ from apps.connections.errors import (
     RateLimited,
 )
 from apps.connections.handles.service import HandleSearch
-from apps.connections.handles.types import CacheEntry
+from apps.connections.handles.types import CacheEntry, HandleRow
 
 from .fakes import Clock, MemoryHandleStore, ScriptedLive, row
 
@@ -193,3 +193,16 @@ async def test_multi_platform_search_spends_per_platform() -> None:
     result = await svc.search("ateh", platforms="x,instagram")
     assert live.calls == [("x", "ateh"), ("instagram", "ateh")]
     assert {r.platform for r in result.results} == {"x", "instagram"}
+
+
+async def test_a_profile_handle_that_is_also_remembered_keeps_the_db_label_and_the_richer_data() -> (
+    None
+):
+    svc, store, _, _ = build()
+    store.profiles["x"] = ["navalrav"]
+    store.rows["x:navalrav"] = HandleRow(
+        "NavalRav", "x", "Naval R", "https://i/a.png", 900, "cache"
+    )
+    result = await svc.search("naval")
+    (found,) = [r for r in result.results if r.handle.lower() == "navalrav"]
+    assert (found.source, found.display_name, found.followers) == ("db", "Naval R", 900)

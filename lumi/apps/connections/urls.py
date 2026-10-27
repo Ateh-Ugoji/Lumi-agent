@@ -10,6 +10,10 @@ from django.urls import path
 from . import views
 
 urlpatterns = [
+    path("handles/search", views.HandleSearchView.as_view(), name="handles-search"),
+    path("handles/saved", views.HandleSavedView.as_view(), name="handles-saved"),
+    path("handles/select", views.HandleSelectView.as_view(), name="handles-select"),
+    path("handles/stats", views.HandleStatsView.as_view(), name="handles-stats"),
     path(
         "connections/<str:provider>/connect",
         views.ConnectView.as_view(),

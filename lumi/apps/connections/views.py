@@ -8,11 +8,20 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from . import accounts
+from apps.core.errors import ApiError
+
+from . import accounts, handles_api
 from .serializers import (
     ConnectRequestSerializer,
     ConnectResponseSerializer,
     DisconnectSerializer,
+    HandleSavedQuerySerializer,
+    HandleSavedResponseSerializer,
+    HandleSearchQuerySerializer,
+    HandleSearchResponseSerializer,
+    HandleSelectResponseSerializer,
+    HandleSelectSerializer,
+    HandleStatsSerializer,
     StatusSerializer,
 )
 
@@ -90,3 +99,57 @@ class ProviderView(APIView):
             request.user, provider, account_id=request.query_params.get("account_id")
         )
         return Response(DisconnectSerializer(result).data)
+
+
+class HandleSearchView(APIView):
+    @extend_schema(
+        parameters=[HandleSearchQuerySerializer],
+        responses=HandleSearchResponseSerializer,
+        summary="Search @-handles. Live lookups cost Xpoz credits and are off by default",
+    )
+    def get(self, request):
+        query = HandleSearchQuerySerializer(data=request.query_params)
+        query.is_valid(raise_exception=True)
+        d = query.validated_data
+        return Response(
+            handles_api.search(request.user, d["q"], d["context"], d["platforms"])
+        )
+
+
+class HandleSavedView(APIView):
+    @extend_schema(
+        parameters=[HandleSavedQuerySerializer],
+        responses=HandleSavedResponseSerializer,
+        summary="Handles Lumi already knows, for instant suggestions. Costs nothing",
+    )
+    def get(self, request):
+        query = HandleSavedQuerySerializer(data=request.query_params)
+        query.is_valid(raise_exception=True)
+        return Response(
+            handles_api.saved(request.user, query.validated_data["platforms"])
+        )
+
+
+class HandleSelectView(APIView):
+    @extend_schema(
+        request=HandleSelectSerializer,
+        responses=HandleSelectResponseSerializer,
+        summary="Remember a picked handle",
+    )
+    def post(self, request):
+        body = HandleSelectSerializer(data=request.data or {})
+        body.is_valid(raise_exception=True)
+        result = handles_api.select(request.user, body.validated_data)
+        if result is None:
+            raise ApiError(
+                "validation_error",
+                "El handle no es válido.",
+                details={"handle": ["Usa letras, números, punto, guion o guion bajo."]},
+            )
+        return Response(result)
+
+
+class HandleStatsView(APIView):
+    @extend_schema(responses=HandleStatsSerializer, summary="Credit meter and counts")
+    def get(self, request):
+        return Response(handles_api.stats(request.user))
