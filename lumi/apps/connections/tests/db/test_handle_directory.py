@@ -39,16 +39,61 @@ def test_a_live_pull_stores_the_picture_of_a_handle_that_has_none(db) -> None:
     assert handle.avatar_url == "https://img/a.jpg" and handle.follower_count == 900
 
 
-def test_a_picture_that_is_stored_is_not_replaced_by_a_later_pull(db) -> None:
-    """Fill-only is ARCHITECT's rule for ``get_or_create_handle``. A refresh service is theirs."""
+def test_a_live_pull_refreshes_a_picture_that_is_stored(db) -> None:
     store = DjangoHandleStore()
     async_to_sync(store.remember_live)([row("karpathy", avatar="https://img/old.jpg")])
     async_to_sync(store.remember_live)(
         [row("karpathy", avatar="https://img/new.jpg", followers=5)]
     )
     handle = SocialHandle.objects.get(handle_normalized="karpathy")
-    assert handle.avatar_url == "https://img/old.jpg"
+    assert handle.avatar_url == "https://img/new.jpg"
     assert handle.follower_count == 5, "the rest of a live pull still lands"
+
+
+@pytest.mark.parametrize("empty", ["", "   ", "not a url", "javascript:alert(1)"])
+def test_a_live_pull_without_a_usable_picture_keeps_the_one_stored(db, empty) -> None:
+    store = DjangoHandleStore()
+    async_to_sync(store.remember_live)([row("karpathy", avatar="https://img/old.jpg")])
+    async_to_sync(store.remember_live)([row("karpathy", avatar=empty, followers=5)])
+    handle = SocialHandle.objects.get(handle_normalized="karpathy")
+    assert handle.avatar_url == "https://img/old.jpg"
+
+
+def test_a_live_row_the_directory_saves_refreshes_the_picture(db) -> None:
+    services.get_or_create_handle(
+        "x", "karpathy", origin=HandleOrigin.NICHE, avatar_url="https://img/old.jpg"
+    )
+    async_to_sync(HandleDirectory(DjangoHandleStore()).remember)(
+        [row("karpathy", avatar="https://img/new.jpg", followers=7)], origin="niche"
+    )
+    assert SocialHandle.objects.get(handle_normalized="karpathy").avatar_url == (
+        "https://img/new.jpg"
+    )
+
+
+def test_a_row_the_directory_got_from_posts_only_fills(db) -> None:
+    """A cache row is not a fresh answer from the provider, so it never replaces a photo."""
+    services.get_or_create_handle(
+        "x", "karpathy", origin=HandleOrigin.NICHE, avatar_url="https://img/old.jpg"
+    )
+    async_to_sync(DjangoHandleStore().remember_rows)(
+        [row("karpathy", avatar="https://img/other.jpg", source="cache")], "niche"
+    )
+    assert SocialHandle.objects.get(handle_normalized="karpathy").avatar_url == (
+        "https://img/old.jpg"
+    )
+
+
+def test_a_picked_row_comes_from_the_client_and_never_repaints_a_public_photo(
+    db,
+) -> None:
+    services.get_or_create_handle(
+        "x", "karpathy", origin=HandleOrigin.NICHE, avatar_url="https://img/old.jpg"
+    )
+    DjangoHandleStore().select(row("karpathy", avatar="https://evil/x.jpg"))
+    assert SocialHandle.objects.get(handle_normalized="karpathy").avatar_url == (
+        "https://img/old.jpg"
+    )
 
 
 def test_an_author_the_scan_knew_gets_a_picture_when_it_had_none(db) -> None:
@@ -141,3 +186,19 @@ def test_the_store_itself_returns_only_rows_with_a_picture(db) -> None:
     services.get_or_create_handle("x", "nopic")
     rows = async_to_sync(DjangoHandleStore().pictures)("x", ["pic", "nopic"])
     assert [r.handle for r in rows] == ["pic"]
+
+
+def test_in_a_mixed_batch_only_the_live_row_refreshes(db) -> None:
+    for name in ("one", "two"):
+        services.get_or_create_handle(
+            "x", name, origin=HandleOrigin.NICHE, avatar_url=f"https://img/{name}-old"
+        )
+    async_to_sync(DjangoHandleStore().remember_rows)(
+        [
+            row("one", avatar="https://img/one-new", source="live"),
+            row("two", avatar="https://img/two-new", source="cache"),
+        ],
+        "niche",
+    )
+    photos = dict(SocialHandle.objects.values_list("handle_normalized", "avatar_url"))
+    assert photos == {"one": "https://img/one-new", "two": "https://img/two-old"}

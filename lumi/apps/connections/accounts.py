@@ -24,6 +24,7 @@ from django.db import DatabaseError, IntegrityError, connection, transaction
 from apps.core.errors import ApiError
 from apps.core.fields import TokenDecryptError, decrypt_value
 from apps.core.permissions import get_owned_profile
+from apps.profiles.services import update_profile_avatar
 
 from .clients.pfm import PfmClient
 from .config import ConnectionsConfig
@@ -594,6 +595,11 @@ def sync_pfm_accounts(user) -> int:
                 else AccountStatus.REVOKED
             )
             row.save()
+            if row.status == AccountStatus.ACTIVE and row.social_profile_id:
+                # The service writes only when ``username`` is the profile's own handle.
+                update_profile_avatar(
+                    row.social_profile_id, acc.profile_photo_url, username=acc.username
+                )
         ConnectedAccount.objects.filter(user=user, provider="pfm").exclude(
             external_account_id__in=seen
         ).update(status=AccountStatus.REVOKED)

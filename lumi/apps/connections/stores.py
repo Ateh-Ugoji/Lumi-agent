@@ -28,7 +28,11 @@ from apps.core.choices import IngestSource
 from apps.core.fields import TokenDecryptError
 from apps.intelligence.repos.aio import aio
 from apps.profiles.models import HandleOrigin, Post, SocialHandle, SocialProfile
-from apps.profiles.services import InvalidHandle, get_or_create_handle
+from apps.profiles.services import (
+    InvalidHandle,
+    get_or_create_handle,
+    update_handle_avatar,
+)
 
 from .clients.credits import CreditEntry
 from .config import ConnectionsConfig
@@ -356,7 +360,7 @@ class DjangoHandleStore:
 
     async def remember_live(self, rows: list[HandleRow]) -> None:
         await sync_to_async(self._remember, thread_sensitive=True)(
-            rows, HandleOrigin.LIVE, True
+            rows, HandleOrigin.LIVE, True, True
         )
 
     async def remember_new(self, rows: list[HandleRow]) -> None:
@@ -495,7 +499,10 @@ class DjangoHandleStore:
 
     async def remember_rows(self, rows: list[HandleRow], origin: str) -> None:
         """Add-if-absent under ``origin``: what a handle already holds is never replaced."""
-        await sync_to_async(self._remember, thread_sensitive=True)(rows, origin, False)
+        # Only a row the provider just returned (``source == "live"``) refreshes a picture.
+        await sync_to_async(self._remember, thread_sensitive=True)(
+            rows, origin, False, True
+        )
 
     async def pictures(self, platform: str, handles: list[str]) -> list[HandleRow]:
         """Rows of ``handles`` that carry a picture. A handle with no picture is left out."""
@@ -510,11 +517,20 @@ class DjangoHandleStore:
         ).exclude(avatar_url="")
         return [_row(h) for h in found]
 
-    def _remember(self, rows: list[HandleRow], origin: str, overwrite: bool) -> None:
+    def _remember(
+        self,
+        rows: list[HandleRow],
+        origin: str,
+        overwrite: bool,
+        refresh_picture: bool = False,
+    ) -> None:
         """Write every row through ``get_or_create_handle``.
 
-        That service only fills fields that are empty and never lowers the origin, so a
-        picture already stored is never replaced here. ``overwrite`` (a fresh live pull)
+        That service only fills fields that are empty and never lowers the origin.
+        ``refresh_picture`` is for rows the provider returned in this call (a live search, a
+        completed scan): the picture then goes through ``update_handle_avatar``, which replaces
+        an old one with a new valid URL and ignores an empty one. A picked row (``select``) comes
+        from the client, so it never refreshes a public photo. ``overwrite`` (a fresh live pull)
         only adds what the service does not own: the display name and the case of the
         handle. A follower count enters as a dated snapshot, and a count from a cache row
         never replaces one a live pull stored.
@@ -547,6 +563,8 @@ class DjangoHandleStore:
                     )
                 except InvalidHandle:
                     continue
+                if refresh_picture and row.source == "live":
+                    update_handle_avatar(handle_id, row.avatar_url)
                 if overwrite:
                     changes: dict[str, object] = {}
                     if row.handle:
