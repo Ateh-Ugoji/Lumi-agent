@@ -185,7 +185,7 @@ Cualquier cambio de esquema posterior va en `0002_*` de la app dueña. Los enums
 | `apps.core.errors` | `ApiError`, `exception_handler`, `error_body`. |
 | `apps.accounts.authentication.TokenAuthentication` | Autenticación por defecto de DRF. Deja la fila `AuthToken` en `request.auth`. Actualiza `last_used_at` como mucho una vez por hora. |
 
-Formato del cifrado: token Fernet estándar, igual que `apps.connections.crypto.TokenCipher`. Los dos leen lo que escribe el otro (hay un test que lo fija). CONNECT puede dejar `TokenCipher` para uso fuera de modelos, o delegar en `apps.core.fields`. `core` no importa `connections`, por eso la lógica mínima está en los dos sitios.
+Formato del cifrado: token Fernet estándar. El cifrado vive solo en `apps.core.fields` (`EncryptedTextField`, `encrypt_value`, `decrypt_value`). `apps/connections/crypto.py` ya no hace falta y CONNECT puede borrarlo. Un test fija el formato con `Fernet` directo, sin depender de `connections`.
 
 ## 8. Registro de keys y `check_keys`
 

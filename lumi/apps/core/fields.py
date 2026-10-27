@@ -4,8 +4,7 @@
 read, so a key rotates without downtime: set the new key, move the old one to ``_PREVIOUS``, run
 ``rotate_value`` over the stored rows (``manage.py rotate_tokens`` in a later task), drop ``_PREVIOUS``.
 
-The ciphertext is a standard Fernet token, the same format as ``apps.connections.crypto.TokenCipher``,
-so values written by one are readable by the other.
+The ciphertext is a standard Fernet token. This module is the only place that encrypts stored values.
 
 Limits, by design: the column cannot be filtered or ordered by value (each encryption is different),
 and a value that no configured key opens raises ``TokenDecryptError`` without carrying the value.

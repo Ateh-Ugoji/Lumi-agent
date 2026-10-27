@@ -118,9 +118,8 @@ def test_each_encryption_differs_so_value_lookups_are_refused():
         EncryptedTextField().get_lookup("exact")
 
 
-def test_interoperates_with_the_connections_token_cipher():
-    from apps.connections.crypto import TokenCipher
+def test_ciphertext_is_a_plain_fernet_token():
+    from cryptography.fernet import Fernet
 
-    cipher = TokenCipher(KEY_A)
-    assert fields.decrypt_value(cipher.encrypt("from-connect")) == "from-connect"
-    assert cipher.decrypt(fields.encrypt_value("from-core")) == "from-core"
+    assert Fernet(KEY_A).decrypt(fields.encrypt_value("plain").encode()) == b"plain"
+    assert fields.decrypt_value(Fernet(KEY_A).encrypt(b"outside").decode()) == "outside"

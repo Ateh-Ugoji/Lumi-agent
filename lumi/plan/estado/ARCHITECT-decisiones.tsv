@@ -37,3 +37,4 @@ ts	phase	decision	why	evidence	result
 2026-10-27T06:45:20Z	T2	docs/schema public only with DEBUG, staff in prod; CONTRATOS section 11 updated	orchestrator steering A	925 passed	pushed
 2026-10-27T06:51:17Z	T7	profiles.services publicado antes de las rutas	CONNECT lo necesita para ingesta	49 tests de servicios en Postgres real	ok
 2026-10-27T06:51:54Z	T7	montar connections.urls en api/v1/	ruta pedida por CONNECT; sin choques con auth ni CONTRATOS	test_url_mounts	ok
+2026-10-27T06:52:18Z	T7	quitar test de interoperabilidad con TokenCipher	el cifrado vive solo en core.fields	test de formato Fernet directo	ok
