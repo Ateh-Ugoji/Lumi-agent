@@ -290,3 +290,31 @@ El orquestador eligió (c) mientras Christian decide. Entretanto, ARCHITECT comp
 - **INTELLIGENCE** activo (último 11:20). Hecho: `DjangoOwnPostSync` cableado (`backfill_posts`, `profile.bootstrap`, `profile.refresh`, `0377f2d`); `HandleBook` (PORTS 1.12) y paridad del legado con 0 huecos (364 cubiertos, `4971a13`); pruebas HTTP de `/voice/transcribe` (`4f997e4`); `JobError` con prefijo de dominio (`b92761e`); gana la foto guardada en `social_handles` (`f8c50ea`). Sigue esperando keys y decisiones de Christian.
 - Dato nuevo para Christian: los handles elegidos del legado no están en `lumi.db`, vivían en la colección Chroma `handle_mappings`. Para importarlos hace falta, además del `lumi.db`, un export JSON de esa colección (`import_legacy --handle-mappings`). Sin él la demo funciona: `saved` muestra los perfiles propios y se llena al elegir.
 - Ningún bot lleva más de 2 h sin commits ni reportó un bloqueo nuevo; no se escribió a ninguno.
+
+## TRASPASO, 27 oct 2026, 13:05 UTC: todo apagado
+Christian pidió apagar todo para que otro agente siga. Los 3 bots (ARCHITECT, INTELLIGENCE, CONNECT) están detenidos y la rutina horaria del orquestador está borrada. La rama es `lumi-orquestador`. Reglas que siguen vigentes: sin force-push, sin merge a main, sin deploy y nada live sin permiso de Christian.
+
+**Estado**
+- Migración a Django/DRF + PostgreSQL completa. Paridad con el legado: 0 huecos (364 cubiertos, 45 reemplazados, 3 desvíos, 10 retirados).
+- El backend viejo se movió a `lumi/legacy/` por decisión de Christian (12:50 UTC), en `7fff124`, `c3821c0` y `845a612`. Los tests viejos se corren a mano según `lumi/legacy/README.md`.
+- Tests sin keys: el pytest por defecto da 1471 pasan; `apps lumi_ai` da 2031 pasan y 9 se saltan; frontend 62/62; e2e 11/11 (reportado por CONNECT).
+- Seguridad: los hallazgos altos y medios están cerrados, incluido OAuth con callback al frontend y POST autenticado. Las redirect URIs son `{FRONTEND_URL}/connections/<provider>/callback`.
+- El registro de decisiones en inglés está en `lumi/plan/decisions.tsv`. Ver en sus filas 55 a 70 los avisos de verificación.
+
+**Pendiente**
+- **Christian:**
+  - Keys en `lumi/.env`: `GROQ_API_KEY`, `SECRET_KEY` y `TOKEN_ENCRYPTION_KEY`; recomendadas `TYPESAFE_API_KEY` y `OPENROUTER_API_KEY`.
+  - Autorizar los tests live.
+  - `lumi.db` y el export de Chroma `handle_mappings`.
+  - Gemini de pago para video y los términos de cada red.
+  - PFM (token y callback), créditos de Xpoz, verificación de Meta y acceso de LinkedIn.
+  - Las 5 preguntas de MUSE.md.
+  - Posts reales para calibrar a los jueces.
+  - La primera conexión real.
+  - El 409 del registro.
+- **Técnico:**
+  - Actualizar las rutas viejas en `CLAUDE.md`, `CONTRIBUTING.md`, `.agents/*.md`, `docs/flow-map.*`, `docs/blueprint-fix.md`, `docs/mcp-connectors.md`, `docs/xpoz_optimization.md` y `docs/tools.md`.
+  - `how-to-setup.md` pide Node 20+, pero hace falta Node 22.6+.
+  - Corregir los SHA mal citados en este archivo: OAuth `456873b` → `a2ba0b5`..`3e67db4`; avatar `9fd5c17` → `67ad108`.
+  - Revisión de seguridad externa antes de tener usuarios reales.
+  - Nunca se corrieron docker compose ni la importación con datos reales.
