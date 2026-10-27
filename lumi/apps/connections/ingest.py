@@ -12,8 +12,10 @@ Rules that every path follows:
   conversation id, so it stays in ``posts``.
 * A post without an id, text or a parsable date is dropped. A date is never invented.
 * Media is mapped only when the source states its kind (PFM items with a type or MIME). A kind
-  is never guessed from a URL. Xpoz sends bare URLs for X posts, so X media waits for
-  ``MediaRef.kind`` to accept ``None``. Thumbnails are not carried.
+  is never guessed from a URL. Xpoz sends bare URLs for X posts. Ports 1.9 allow
+  ``MediaRef.kind = None``, but ``post_media.kind`` is NOT NULL and ``upsert_posts`` would raise
+  ``IntegrityError`` for the whole batch, so X media stays unmapped until ``apps.profiles``
+  skips or stores unknown kinds. Thumbnails are not carried.
 * Provider payload fields that are not mapped here (tokens, raw ids of other users) are not
   carried over.
 """

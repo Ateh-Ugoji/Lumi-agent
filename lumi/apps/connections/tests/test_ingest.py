@@ -265,7 +265,7 @@ def test_pfm_media_keeps_only_entries_with_a_stated_kind() -> None:
     assert map_pfm_item({**item, "media": "nope"}).media == ()
 
 
-def test_xpoz_x_media_is_not_mapped_until_kind_may_be_none() -> None:
+def test_xpoz_x_media_is_not_mapped_until_persistence_accepts_unknown_kind() -> None:
     post = map_xpoz_post(
         {
             "id": 7,
