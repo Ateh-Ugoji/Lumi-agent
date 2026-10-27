@@ -762,3 +762,49 @@ def test_rethread_is_idempotent_and_ignores_a_blank_conversation(handle_id):
         assert services.rethread_conversation(handle_id, "c1") == 1
     assert not [q for q in queries if q["sql"].lstrip().upper().startswith("UPDATE")]
     assert services.rethread_conversation(handle_id, "") == 0
+
+
+# ------------------------------------------------------------------ last_checked_at
+
+
+def test_an_unchanged_recheck_stamps_the_post_without_a_new_snapshot(handle_id):
+    same = post_in("1", metrics=PostMetrics(views=100, likes=7))
+    services.upsert_posts(handle_id, [same])
+    first = Post.objects.get(platform_post_id="1")
+    assert first.last_checked_at is not None
+    Post.objects.filter(pk=first.pk).update(
+        last_checked_at=T0 - timedelta(days=3)  # pretend the first check was long ago
+    )
+    services.upsert_posts(handle_id, [same])
+    assert MetricSnapshot.objects.count() == 1
+    again = Post.objects.get(pk=first.pk)
+    assert again.last_checked_at > T0  # restamped by the second check
+
+
+def test_a_changed_recheck_stamps_the_post_and_stores_a_snapshot(handle_id):
+    services.upsert_posts(handle_id, [post_in("1", metrics=PostMetrics(likes=7))])
+    Post.objects.update(last_checked_at=T0)
+    services.upsert_posts(handle_id, [post_in("1", metrics=PostMetrics(likes=9))])
+    assert MetricSnapshot.objects.count() == 2
+    assert Post.objects.get().last_checked_at > T0
+
+
+def test_a_post_that_came_without_metrics_is_not_marked_as_checked(handle_id):
+    services.upsert_posts(handle_id, [post_in("1")])
+    assert Post.objects.get().last_checked_at is None
+    services.upsert_posts(handle_id, [post_in("1", metrics=PostMetrics())])
+    assert Post.objects.get().last_checked_at is None
+
+
+def test_explicit_readings_move_the_stamp_forward_but_never_back(handle_id):
+    services.upsert_posts(handle_id, [post_in("1")])
+    pid = Post.objects.get().pk
+    late = T0 + timedelta(hours=5)
+    services.append_metric_snapshots(
+        pid, [services.SnapshotIn(captured_at=late, metrics=PostMetrics(likes=1))]
+    )
+    assert Post.objects.get().last_checked_at == late
+    services.append_metric_snapshots(
+        pid, [services.SnapshotIn(captured_at=T0, metrics=PostMetrics(likes=2))]
+    )
+    assert Post.objects.get().last_checked_at == late

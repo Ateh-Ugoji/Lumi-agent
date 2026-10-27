@@ -540,7 +540,8 @@ def upsert_posts(handle_id: int, posts: Sequence[PostIn | PeerPostIn]) -> Upsert
     """Insert or update posts of one author in a single ``INSERT ... ON CONFLICT``.
 
     Idempotent. A ``NULL`` never overwrites a known ``published_at``, kind, source or metric.
-    A metric snapshot is written only when the (carried-forward) metrics changed.
+    A metric snapshot is written only when the (carried-forward) metrics changed. Every post that
+    came with metrics gets ``last_checked_at = now``, changed or not.
     """
     unique: dict[str, PostIn | PeerPostIn] = {}
     for post in posts:
@@ -615,6 +616,8 @@ def _write_snapshots(
     }
     if not incoming:
         return
+    # Every check stamps the post, even when no snapshot is stored below.
+    Post.objects.filter(pk__in=list(incoming)).update(last_checked_at=now)
     latest = _latest_snapshots(list(incoming))
     fresh: list[MetricSnapshot] = []
     for post_id, (metrics, source) in incoming.items():
@@ -672,6 +675,11 @@ def append_metric_snapshots(post_id: int, snapshots: Sequence[SnapshotIn]) -> in
         for s in snapshots
     ]
     MetricSnapshot.objects.bulk_create(rows, ignore_conflicts=True)
+    if rows:
+        newest = max(s.captured_at for s in snapshots)
+        Post.objects.filter(pk=post_id).filter(
+            Q(last_checked_at__isnull=True) | Q(last_checked_at__lt=newest)
+        ).update(last_checked_at=newest)
     return len(rows)
 
 

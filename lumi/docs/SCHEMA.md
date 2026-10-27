@@ -309,6 +309,7 @@ La plataforma y el handle viven en `social_handles`. La identidad externa de la 
 | `text_truncated` | boolean NN | Defecto `false`. |
 | `is_deleted_suspect` | boolean NN | Defecto `false`. |
 | `last_seen_at` | timestamptz | Nulo. |
+| `last_checked_at` | timestamptz | Nulo = nadie ha leído sus métricas. Cada lectura de métricas la pone en `now()`, haya o no fila nueva en `metric_snapshots` (`profiles.0003`). Nunca es anterior a la última captura. Un post que solo llegó sin métricas no se marca. |
 | `created_at`, `updated_at` | timestamptz NN | |
 
 Único `uq_posts_author_platform_post` (`author`, `platform_post_id`). La plataforma sale del `author`, por eso no hay columna `platform`. `upsert_posts` usa `INSERT ... ON CONFLICT (author_id, platform_post_id) DO UPDATE`, que es idempotente. `published_at` y las métricas ya conocidas no se sobrescriben con `NULL`.
@@ -482,6 +483,7 @@ El importador usa este mapa (`MIGRACION_LEGADA.md` lo detalla en T8). En todas l
 | `posts.id` | `posts.id` | Se conserva (la voz y las etiquetas lo referencian). |
 | `posts.profile_id` | `posts.author_id` | Handle del perfil. |
 | `posts.platform_post_id`, `caption`, `published_at`, `source`, `last_seen_at`, `is_deleted_suspect`, `text_truncated`, `conversation_id`, `thread_position`, `is_thread_head`, `kind_source` | mismas columnas | `conversation_id` nulo pasa a `''`. |
+| (no existe en el legado) | `posts.last_checked_at` | Se llena al final de la importación con la captura más reciente de cada post (el legado guardaba una captura cada 6 horas aunque nada cambiara, así que es el mejor registro de la última lectura). Sin capturas queda nulo. Nunca baja un valor existente. |
 | `posts.kind` (nulo) | `posts.kind` | Nulo pasa a `original` (así lo trataba el código). |
 | `posts.alerted_at`, `alert_dismissed` | `alerts` | Si `alerted_at` no es nulo: una fila `kind = 'spike'`, `trigger` nulo, `created_at = alerted_at`, `status = 'dismissed'` si `alert_dismissed` y `'active'` si no. `dismissed_at` queda nulo en las descartadas (la hora real no se guardaba). |
 | `metric_snapshots.post_id`, `captured_at`, `likes`, `comments`, `shares`, `views`, `source` | `metric_snapshots` | `post_id` por el mapa de `posts`. |

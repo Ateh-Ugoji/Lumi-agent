@@ -135,6 +135,13 @@ def test_spot_checks_on_values(legacy):
     m2 = MetricSnapshot.objects.get(post_id=10, captured_at__day=4)
     assert (m2.comments, m2.shares) == (None, None)
     assert MetricSnapshot.objects.get(post_id=11).likes is None
+    # last_checked_at comes from the newest snapshot of each post; no snapshot, no stamp
+    for pk in (10, 11, Post.objects.get(platform_post_id="r-1").pk):
+        newest = (
+            MetricSnapshot.objects.filter(post_id=pk).order_by("-captured_at").first()
+        )
+        assert Post.objects.get(pk=pk).last_checked_at == newest.captured_at
+    assert Post.objects.get(pk=13).last_checked_at is None
     # alerts: spike from alerted_at, dismissed keeps no dismissed_at
     a10 = Alert.objects.get(post_id=10, kind="spike")
     assert (a10.status, a10.trigger, a10.created_at.day) == ("active", None, 4)

@@ -42,14 +42,21 @@ def used_codes() -> list[tuple[str, int, str]]:
                 found.append((str(rel), node.lineno, first.value))
             elif isinstance(first, ast.JoinedStr) and first.values:
                 head = first.values[0]
-                if isinstance(head, ast.Constant):  # f"domain.{reason}": judge the prefix
+                if isinstance(
+                    head, ast.Constant
+                ):  # f"domain.{reason}": judge the prefix
                     found.append((str(rel), node.lineno, str(head.value) + "x"))
     return found
 
 
 def test_the_contract_lists_the_generic_codes():
     codes = generic_codes()
-    assert {"validation_error", "unauthenticated", "not_found", "internal_error"} <= codes
+    assert {
+        "validation_error",
+        "unauthenticated",
+        "not_found",
+        "internal_error",
+    } <= codes
     assert not any("." in code for code in codes)
 
 

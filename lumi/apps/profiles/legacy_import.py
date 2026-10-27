@@ -6,6 +6,8 @@ from collections.abc import Iterable
 from datetime import datetime
 from typing import Any
 
+from django.db import connection
+
 from apps.core.choices import IngestSource, Platform, PostKind
 from apps.core.legacy_import import (
     ImportContext,
@@ -504,6 +506,26 @@ def import_metrics(ctx: ImportContext) -> None:
         ctx.warn(f"metric_snapshots: {negatives} métricas negativas pasaron a NULL")
 
 
+def stamp_last_checked(ctx: ImportContext) -> None:
+    """Fill ``posts.last_checked_at`` from the newest metric snapshot of each post.
+
+    The legacy code has no "last checked" column. It appended a snapshot every 6 hours even when
+    nothing changed, so its newest snapshot is the best record of the last check. Posts without
+    snapshots stay NULL (nobody checked them). Never lowers a stamp: idempotent.
+    """
+    with connection.cursor() as cursor:
+        cursor.execute(
+            "UPDATE posts SET last_checked_at = s.newest FROM ("
+            " SELECT post_id, max(captured_at) AS newest FROM metric_snapshots GROUP BY post_id"
+            ") s WHERE posts.id = s.post_id"
+            " AND (posts.last_checked_at IS NULL OR posts.last_checked_at < s.newest)"
+        )
+        if cursor.rowcount:
+            ctx.warn(
+                f"posts: last_checked_at tomado de la última lectura en {cursor.rowcount} posts"
+            )
+
+
 # ------------------------------------------------------------------------- user activity
 
 
@@ -732,6 +754,7 @@ for _importer in (
     Importer("metrics", ("metric_snapshots",), 40, import_metrics),
     Importer("activity", ("user_activity",), 50, import_activity),
     Importer("listening", ("listening_matches",), 60, import_listening),
+    Importer("last_checked", (), 65, stamp_last_checked),
     Importer("poll_config", ("poll_config",), 70, import_poll_config),
 ):
     register(_importer)

@@ -90,6 +90,12 @@ def test_row_25_a_snapshot_is_appended_only_when_a_metric_changed(handle_id):
     for _ in range(3):  # repeated fetches with the same numbers
         services.upsert_posts(handle_id, [first])
     assert MetricSnapshot.objects.filter(post__platform_post_id="301").count() == 1
+    stamp = Post.objects.get(platform_post_id="301").last_checked_at
+    assert (
+        stamp is not None
+    )  # the condition on row 25: an unchanged check is still recorded
+    services.upsert_posts(handle_id, [first])
+    assert Post.objects.get(platform_post_id="301").last_checked_at > stamp
     services.upsert_posts(
         handle_id, [_typed("301", metrics=PostMetrics(likes=11, views=100))]
     )

@@ -280,6 +280,9 @@ class Post(TimestampedModel):
     text_truncated = models.BooleanField(db_default=False)
     is_deleted_suspect = models.BooleanField(db_default=False)
     last_seen_at = models.DateTimeField(null=True, blank=True)
+    # Last time a check read this post's metrics, whether or not a snapshot was stored. A post
+    # whose numbers did not move still gets a fresh stamp; NULL means nobody has checked it.
+    last_checked_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         db_table = "posts"
