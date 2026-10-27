@@ -187,3 +187,20 @@ test("disconnect Facebook, then sign out and back in", async () => {
   await page.getByRole("button", { name: "Entrar" }).click();
   await expect(page.getByLabel("Prompt")).toBeVisible();
 });
+
+test("a ?say= link never sends a chat turn on its own", async () => {
+  // Opening the app only reads. Any write (a chat turn is a POST) means the query string drove it.
+  const writes: string[] = [];
+  const watch = (request: { url(): string; method(): string }) => {
+    if (request.method() !== "GET") writes.push(`${request.method()} ${request.url()}`);
+  };
+  page.on("request", watch);
+  await page.goto("/?say=hola-no-debe-enviarse");
+  await page.waitForTimeout(2500);
+  page.off("request", watch);
+  expect(writes).toEqual([]);
+  // The old handler also yanked the app to Settings while the profile was still loading.
+  await expect(page.getByLabel("Prompt")).toBeVisible();
+  await expect(page.getByLabel("Prompt")).toHaveValue("");
+  await expect(page.getByText(/hola-no-debe-enviarse/)).toHaveCount(0);
+});

@@ -1048,14 +1048,6 @@ export default function App() {
     .reverse()
     .map((c) => ({ id: String(c.id), label: c.title || "Untitled" }));
 
-  useLayoutEffect(() => {
-    const say = new URLSearchParams(window.location.search).get(
-      "say",
-    );
-    if (say && messages.length === 0 && !busy) send(say);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   return (
     <div className={styles.page}>
       <AmbientBackground />
