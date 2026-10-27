@@ -28,7 +28,24 @@ export type StreamEvent =
   | { type: "tool_start"; tool: string; arguments: Record<string, unknown>; reason?: string }
   | { type: "tool_done"; tool: string; sample_posts: SamplePost[] }
   | { type: "done"; content: string; tool_executions: ToolExecution[] }
-  | { type: "error"; error: string };
+  | { type: "error"; error: string; code?: string };
+
+/** Spanish text for the error codes the agent stream can send; the server text is English. */
+const AGENT_ERROR_MESSAGES: Record<string, string> = {
+  llm_unavailable:
+    "El agente no está disponible ahora mismo: los modelos de lenguaje no responden. Inténtalo de nuevo en un momento.",
+};
+
+export function agentErrorMessage(code: string | undefined, fallback?: string): string {
+  return (
+    (code && AGENT_ERROR_MESSAGES[code]) ||
+    fallback ||
+    "El agente falló antes de terminar. Inténtalo de nuevo."
+  );
+}
+
+/** No byte at all (the server pings every 15 s) for this long means the agent is gone. */
+export const STREAM_IDLE_MS = 45_000;
 
 export function sendChatMessage(profileId: number, message: string): Promise<AgentResponse> {
   return request<AgentResponse>("/chat", {
@@ -55,17 +72,29 @@ export async function streamChatMessage(
   profileId: number,
   message: string,
   onEvent: (event: StreamEvent) => void,
-  opts?: { signal?: AbortSignal },
+  opts?: { signal?: AbortSignal; idleMs?: number },
 ): Promise<{ content: string; tool_executions: ToolExecution[] }> {
   const response = await openStream("/chat/stream", {
     method: "POST",
     body: { profile_id: profileId, message },
     signal: opts?.signal,
   });
+  // A proxy or a wrong server can answer 200 with an HTML page; it is not the agent.
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("text/event-stream")) {
+    void response.body?.cancel().catch(() => undefined);
+    throw new ApiError(
+      502,
+      "bad_response",
+      "El servidor respondió algo que no es el agente (¿un proxy o el servidor equivocado?). Inténtalo de nuevo.",
+    );
+  }
+  const idleMs = opts?.idleMs ?? STREAM_IDLE_MS;
   const reader = response.body!.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
   let finalResult = { content: "", tool_executions: [] as ToolExecution[] };
+  let sawEnd = false;
 
   const handle = (payload: string) => {
     let parsed: StreamEvent;
@@ -75,13 +104,29 @@ export async function streamChatMessage(
       return; // a malformed event is skipped, never fatal
     }
     onEvent(parsed);
+    if (parsed.type === "done" || parsed.type === "error") sawEnd = true;
     if (parsed.type === "done") {
       finalResult = { content: parsed.content, tool_executions: parsed.tool_executions || [] };
     }
   };
 
   while (true) {
-    const { done, value } = await reader.read();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const idle = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        reject(
+          new ApiError(0, "agent_timeout", "El agente no respondió a tiempo. Inténtalo de nuevo."),
+        );
+        void reader.cancel().catch(() => undefined);
+      }, idleMs);
+    });
+    let chunk: ReadableStreamReadResult<Uint8Array>;
+    try {
+      chunk = await Promise.race([reader.read(), idle]);
+    } finally {
+      clearTimeout(timer);
+    }
+    const { done, value } = chunk;
     if (done) break;
     buffer += decoder.decode(value, { stream: true });
     const { payloads, rest } = parseSseChunk(buffer);
@@ -89,6 +134,13 @@ export async function streamChatMessage(
     payloads.forEach(handle);
   }
   if (buffer.trim()) parseSseChunk(`${buffer}\n`).payloads.forEach(handle);
+  if (!sawEnd) {
+    throw new ApiError(
+      0,
+      "stream_incomplete",
+      "La respuesta del agente se cortó antes de terminar. Inténtalo de nuevo.",
+    );
+  }
   return finalResult;
 }
 

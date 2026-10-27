@@ -42,7 +42,10 @@ test("errorFromBody reads the contract error envelope", () => {
 test("errorFromBody survives a body that is not JSON", () => {
   const err = errorFromBody(502, "<html>Bad gateway</html>");
   assert.equal(err.code, "http_error");
-  assert.equal(err.message, "Error 502");
+  assert.equal(err.message, "El servidor de Lumi no está respondiendo. Inténtalo de nuevo en un momento.");
+  assert.ok(!err.message.includes("<"), "an HTML page never reaches the user");
+  assert.equal(errorFromBody(500, "<h1>Server Error</h1>").message, "El servidor de Lumi tuvo un problema. Inténtalo de nuevo en un momento.");
+  assert.equal(errorFromBody(404, "<html>").message, "Error 404");
   assert.equal(errorFromBody(401, "").code, "unauthenticated");
 });
 

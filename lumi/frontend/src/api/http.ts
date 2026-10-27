@@ -85,10 +85,21 @@ export class ApiError extends Error {
   }
 }
 
+/** What the user reads when a failed response carries no usable message (an HTML error page, say). */
+export function statusMessage(status: number): string {
+  if (status === 502 || status === 503 || status === 504) {
+    return "El servidor de Lumi no está respondiendo. Inténtalo de nuevo en un momento.";
+  }
+  if (status >= 500) {
+    return "El servidor de Lumi tuvo un problema. Inténtalo de nuevo en un momento.";
+  }
+  return `Error ${status}`;
+}
+
 /** Build an `ApiError` from a response status and its (already read) body text. */
 export function errorFromBody(status: number, bodyText: string): ApiError {
   let code = status === 401 ? "unauthenticated" : "http_error";
-  let message = `Error ${status}`;
+  let message = statusMessage(status);
   let details: Record<string, unknown> = {};
   try {
     const parsed = JSON.parse(bodyText) as {

@@ -40,6 +40,7 @@ import {
   parseCallbackLanding,
   sendChatMessage,
   streamChatMessage,
+  agentErrorMessage,
   CALLBACK_DONE_URL,
   type CallbackLanding,
   type ConnectLink,
@@ -711,7 +712,7 @@ export default function App() {
             // Agent failures arrive as a normal SSE event, not a rejected HTTP
             // request. Dropping them makes a crashed run look like a success
             // with an empty reply.
-            streamError = evt.error || "The agent run failed before it finished.";
+            streamError = agentErrorMessage(evt.code, evt.error);
             return;
           }
           if (evt.type === "tool_start") {
@@ -916,8 +917,13 @@ export default function App() {
         }
         console.warn("Live stream failed, falling back to direct chat:", err);
         const target = pendingChatIdRef.current;
-        if (err instanceof ApiError && err.status >= 400 && err.status < 500) {
-          // The server answered and refused: running the turn again would only repeat the refusal.
+        const noRetryCodes = ["agent_timeout", "stream_incomplete", "bad_response"];
+        if (
+          err instanceof ApiError &&
+          ((err.status >= 400 && err.status < 500) || noRetryCodes.includes(err.code))
+        ) {
+          // The server answered and refused, or the agent already started and went silent:
+          // running the turn again would only repeat the refusal or double the work.
           const refusedId = nextId++;
           setRevealingId(refusedId);
           setChats((prev) =>
@@ -968,7 +974,7 @@ export default function App() {
           const errorMsg =
             fallbackErr?.message ||
             err?.message ||
-            "Unable to reach the Lumi agent backend. Please check that the server is running on http://localhost:8000.";
+            "No se pudo contactar con el agente de Lumi. Revisa que el servidor esté en marcha en http://localhost:8000.";
 
           const errorId = nextId++;
           setRevealingId(errorId);
@@ -982,7 +988,7 @@ export default function App() {
                       {
                         id: errorId,
                         role: "agent",
-                        text: `⚠️ Connection error: ${errorMsg}`,
+                        text: `⚠️ ${errorMsg}`,
                       },
                     ],
                   }
