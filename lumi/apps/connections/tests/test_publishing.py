@@ -43,7 +43,7 @@ async def publish(publisher, provider, text="hola", **kwargs):
     kwargs.setdefault("confirm", True)
     kwargs.setdefault("idempotency_key", "k1")
     return await publisher.publish(
-        provider, TOKENS, ACCOUNT, PublishDraft(text=text), user_id=1, **kwargs
+        provider, TOKENS, ACCOUNT, PublishDraft(text=text), scope=1, **kwargs
     )
 
 
@@ -165,7 +165,7 @@ async def test_x_off_publish_is_refused_and_parks_nothing_as_unknown() -> None:
             tokens,
             ACCOUNT,
             PublishDraft(text="hola"),
-            user_id=1,
+            scope=1,
             confirm=True,
             idempotency_key="k",
         )

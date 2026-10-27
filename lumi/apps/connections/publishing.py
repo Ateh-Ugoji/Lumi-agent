@@ -10,8 +10,11 @@ Rules enforced here, not left to each provider:
 * If a publish ends in an ambiguous failure (timeout, 5xx), the post may exist. The key is
   parked as ``unknown`` and is not retried automatically.
 
+``scope`` is the owner of the idempotency key. SCHEMA.md makes ``publish_jobs`` unique on
+(``profile``, ``idempotency_key``), so Django passes the profile id.
+
 Django's ``PublishLedger`` implementation (T3) must make ``begin`` atomic, for example an
-``INSERT ... ON CONFLICT DO NOTHING`` on a unique ``(user_id, key)``.
+``INSERT ... ON CONFLICT DO NOTHING`` on a unique ``(scope, key)``.
 """
 
 from __future__ import annotations
@@ -59,18 +62,18 @@ class LedgerEntry:
 
 class PublishLedger(Protocol):
     async def begin(
-        self, user_id: int | str, key: str, fingerprint: str
+        self, scope: int | str, key: str, fingerprint: str
     ) -> tuple[LedgerEntry, bool]:
         """Insert a ``pending`` entry, or return the existing one. The bool is ``created``."""
         ...
 
-    async def restart(self, user_id: int | str, key: str) -> None:
+    async def restart(self, scope: int | str, key: str) -> None:
         """Move a ``failed`` entry back to ``pending``, atomically."""
         ...
 
     async def finish(
         self,
-        user_id: int | str,
+        scope: int | str,
         key: str,
         status: LedgerStatus,
         result: PublishResult | None = None,
@@ -99,7 +102,7 @@ class Publisher:
         account: AccountInfo,
         draft: PublishDraft,
         *,
-        user_id: int | str,
+        scope: int | str,
         confirm: bool = False,
         idempotency_key: str | None = None,
         dry_run: bool = False,
@@ -121,7 +124,7 @@ class Publisher:
         await provider.publish(tokens, account, draft, dry_run=True)
 
         fp = fingerprint(provider.name, account, draft)
-        entry, created = await self._ledger.begin(user_id, key, fp)
+        entry, created = await self._ledger.begin(scope, key, fp)
         if not created:
             if entry.fingerprint != fp:
                 raise IdempotencyConflict(
@@ -131,7 +134,7 @@ class Publisher:
             if entry.status == "done" and entry.result is not None:
                 return Published(result=entry.result, replayed=True)
             if entry.status == "failed":
-                await self._ledger.restart(user_id, key)
+                await self._ledger.restart(scope, key)
             else:
                 raise PublishInProgress(
                     "this post is pending or its outcome is unknown; check the platform",
@@ -140,15 +143,15 @@ class Publisher:
         try:
             result = await provider.publish(tokens, account, draft, dry_run=False)
         except ProviderUnavailable:
-            await self._ledger.finish(user_id, key, "unknown")
+            await self._ledger.finish(scope, key, "unknown")
             raise
         except SocialDataError:
             # Typed refusals (auth, rate limit, validation, live switch) mean nothing was posted.
-            await self._ledger.finish(user_id, key, "failed")
+            await self._ledger.finish(scope, key, "failed")
             raise
         except BaseException:
             # A bug or a cancelled task: the request may have gone out.
-            await self._ledger.finish(user_id, key, "unknown")
+            await self._ledger.finish(scope, key, "unknown")
             raise
-        await self._ledger.finish(user_id, key, "done", result)
+        await self._ledger.finish(scope, key, "done", result)
         return Published(result=result, replayed=False)

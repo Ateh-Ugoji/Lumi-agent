@@ -78,27 +78,27 @@ class MemoryLedger:
         self.entries: dict[tuple, object] = {}
         self.log: list[tuple] = []
 
-    async def begin(self, user_id, key, fingerprint):
+    async def begin(self, scope, key, fingerprint):
         from apps.connections.publishing import LedgerEntry
 
-        existing = self.entries.get((user_id, key))
+        existing = self.entries.get((scope, key))
         if existing is not None:
             return existing, False
         entry = LedgerEntry(key=key, fingerprint=fingerprint, status="pending")
-        self.entries[(user_id, key)] = entry
+        self.entries[(scope, key)] = entry
         return entry, True
 
-    async def restart(self, user_id, key):
+    async def restart(self, scope, key):
         from dataclasses import replace
 
-        self.entries[(user_id, key)] = replace(
-            self.entries[(user_id, key)], status="pending"
+        self.entries[(scope, key)] = replace(
+            self.entries[(scope, key)], status="pending"
         )
 
-    async def finish(self, user_id, key, status, result=None):
+    async def finish(self, scope, key, status, result=None):
         from dataclasses import replace
 
         self.log.append((key, status))
-        self.entries[(user_id, key)] = replace(
-            self.entries[(user_id, key)], status=status, result=result
+        self.entries[(scope, key)] = replace(
+            self.entries[(scope, key)], status=status, result=result
         )

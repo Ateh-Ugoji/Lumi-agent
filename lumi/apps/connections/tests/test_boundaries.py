@@ -34,6 +34,10 @@ def _sources() -> list[Path]:
 def test_core_does_not_import_a_web_framework_or_the_legacy_backend() -> None:
     offenders = []
     for path in _sources():
+        if (
+            path.name == "apps.py"
+        ):  # the only Django glue in the core, loaded by Django itself
+            continue
         for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
             roots: list[str] = []
             if isinstance(node, ast.Import):

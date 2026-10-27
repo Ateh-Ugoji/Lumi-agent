@@ -97,6 +97,26 @@ class MetaProvider(SocialProvider):
         url = f"https://www.facebook.com/{self._config.meta_graph_version}/dialog/oauth?{query}"
         return AuthorizationRequest(url=url, state=state)
 
+    async def check_app_credentials(self) -> None:
+        """Free credential check: ask Meta for an app access token (``client_credentials``).
+
+        Needs only the app id and secret, no user. Raises a typed error when they are wrong.
+        Documented at https://developers.facebook.com/docs/facebook-login/access-tokens
+        (checked 2026-10-27).
+        """
+        app_id, secret = self._require_credentials()
+        body = await self._token_request(
+            {
+                "client_id": app_id,
+                "client_secret": secret,
+                "grant_type": "client_credentials",
+            }
+        )
+        if not body.get("access_token"):
+            raise ProviderUnavailable(
+                "app token response without access_token", provider=self.name
+            )
+
     async def _token_request(self, params: dict[str, str]) -> dict[str, Any]:
         response = await self._http.request(
             "GET", f"{self._graph}/oauth/access_token", params=params, retries=0
