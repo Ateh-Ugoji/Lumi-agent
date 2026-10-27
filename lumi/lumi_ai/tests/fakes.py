@@ -9,6 +9,7 @@ from typing import Any
 from lumi_ai.ports import (
     ActivityOut,
     AlertOut,
+    AttemptOut,
     ChatMessageIn,
     ChatMessageOut,
     ConnectLink,
@@ -208,9 +209,45 @@ class FakeRepurpose:
     def __init__(self, known: set[int] | None = None):
         self.known = known or {7}
         self.actions: list[tuple[int, int, str, str | None]] = []
+        self.requests: list[dict] = []
 
-    async def create_request_with_attempts(self, *a, **k):
-        raise NotImplementedError
+    async def create_request_with_attempts(
+        self,
+        profile_id,
+        source_text,
+        route_label,
+        attempts,
+        *,
+        mode="repurpose",
+        brief=None,
+    ):
+        request_id = len(self.requests) + 1
+        self.requests.append(
+            {
+                "profile_id": profile_id,
+                "source_text": source_text,
+                "route_label": route_label,
+                "attempts": list(attempts),
+                "mode": mode,
+                "brief": brief,
+            }
+        )
+        out = [
+            AttemptOut(
+                id=100 * request_id + a.attempt_no,
+                request_id=request_id,
+                platform=a.platform,
+                output=a.output,
+                attempt_no=a.attempt_no,
+                must_keep_passed=a.must_keep_passed,
+                judge_verdict=a.judge_verdict,
+                judge_confidence=a.judge_confidence,
+                created_at=NOW,
+            )
+            for a in attempts
+        ]
+        self.known.update(o.id for o in out)
+        return request_id, out
 
     async def record_user_action(
         self, profile_id, attempt_id, action, edited_text=None

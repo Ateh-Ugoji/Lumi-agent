@@ -121,6 +121,17 @@ class AIConfig:
     peer_discovery_posts: int = 100  # posts a keyword search may read to find handles
     peer_advice_max_items: int = 4
 
+    # --- generation (the prompt must stay far below the ~7000-token request wall of Groq) ---
+    generation_max_regenerations: int = 2  # guided retries after the first draft
+    generation_examples: int = 3  # the user's own similar posts shown to the writer
+    generation_example_chars: int = 400
+    generation_frameworks: int = (
+        2  # winning structures of the niche shown to the writer
+    )
+    generation_judge_confidence: float = (
+        0.8  # a "yes" below this confidence is regenerated
+    )
+
     # --- providers ---
     provider_cooldown_seconds: float = (
         300.0  # after a 401/402/403/429 a candidate rests this long
