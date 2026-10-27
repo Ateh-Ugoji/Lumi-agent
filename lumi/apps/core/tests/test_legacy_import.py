@@ -222,8 +222,19 @@ def test_user_option_names_the_owner(legacy):
     assert SocialProfile.objects.get(pk=1).user.email == "maria@example.com"
 
 
-def test_verify_fails_for_a_table_nobody_imports(legacy, tmp_path):
+def test_verify_fails_for_a_table_nobody_imports(legacy, tmp_path, monkeypatch):
     from sqlalchemy import create_engine, text
+
+    from apps.core.legacy_import import engine
+
+    # Another app may import style_answers; take its importers out so the table is unclaimed.
+    engine.discover()
+    kept = {
+        name: imp
+        for name, imp in engine._REGISTRY.items()
+        if "style_answers" not in imp.tables
+    }
+    monkeypatch.setattr(engine, "_REGISTRY", kept)
 
     engine = create_engine(f"sqlite:///{legacy}")
     with engine.begin() as c:
