@@ -1,16 +1,64 @@
 """AIConfig: every model id, limit and threshold of the AI package, in one place.
 
-Django builds it from settings with :meth:`AIConfig.from_mapping`; nothing in ``lumi_ai`` reads
-the environment by itself. Defaults are the values the legacy code used (``lumi/app/agent``).
+Django builds it once with :meth:`AIConfig.from_env` (T4, from ``settings``/``os.environ``);
+``from_mapping`` takes already-typed values. Nothing else in ``lumi_ai`` reads the environment. Defaults are the values the legacy code used (``lumi/app/agent``).
 Model ids are configuration, not code: ``check_keys`` validates them against each provider's
 real model list.
 """
 
 from __future__ import annotations
 
+import os
 from collections.abc import Mapping
 from dataclasses import dataclass, fields
 from typing import Any
+
+#: Fields that ``.env`` may set. The variable is the field name upper-cased (``groq_model_large`` ->
+#: ``GROQ_MODEL_LARGE``). Loop/RAG thresholds are tuning, not deployment, so they stay in code.
+ENV_FIELDS: tuple[str, ...] = (
+    "groq_model_large",
+    "groq_model_small",
+    "groq_model_fallback",
+    "openrouter_model",
+    "openlux_model",
+    "whisper_model",
+    "groq_api_key",
+    "openrouter_api_key",
+    "openlux_api_key",
+    "typesafe_api_key",
+    "neatlogs_api_key",
+    "chroma_api_key",
+    "chroma_tenant",
+    "chroma_database",
+    "chroma_path",
+    "video_provider",
+    "video_api_key",
+    "provider_cooldown_seconds",
+    "provider_cooldown_max_seconds",
+    "llm_timeout_seconds",
+)
+
+
+def _convert(name: str, raw: str, default: object) -> object:
+    """Env strings are text: parse by the type of the field's default."""
+    text = raw.strip()
+    try:
+        if isinstance(default, bool):
+            lowered = text.lower()
+            if lowered in {"1", "true", "yes", "on"}:
+                return True
+            if lowered in {"0", "false", "no", "off"}:
+                return False
+            raise ValueError(text)
+        if isinstance(default, int):
+            return int(text)
+        if isinstance(default, float):
+            return float(text)
+    except ValueError:
+        raise ValueError(
+            f"{name.upper()}={raw!r} is not a valid {type(default).__name__}"
+        ) from None
+    return text
 
 
 @dataclass(frozen=True, slots=True)
@@ -94,3 +142,20 @@ class AIConfig:
             raise ValueError(f"unknown AIConfig keys: {', '.join(unknown)}")
         cleaned = {k: v for k, v in values.items() if v is not None and v != ""}
         return cls(**cleaned)
+
+    @classmethod
+    def from_env(cls, environ: Mapping[str, str] | None = None) -> AIConfig:
+        """Build from environment variables (``os.environ`` by default).
+
+        Reads exactly the names in ``ENV_FIELDS`` (upper-cased). Unset or empty means "use the
+        default"; a malformed number is an error that names the variable.
+        """
+        env = os.environ if environ is None else environ
+        defaults = {f.name: f.default for f in fields(cls)}
+        values: dict[str, Any] = {}
+        for name in ENV_FIELDS:
+            raw = env.get(name.upper())
+            if raw is None or raw.strip() == "":
+                continue
+            values[name] = _convert(name, raw, defaults[name])
+        return cls(**values)
