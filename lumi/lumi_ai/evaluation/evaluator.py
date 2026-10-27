@@ -7,6 +7,7 @@ A draft that already breaks a hard rule is not sent to any judge: it will be reg
 
 from __future__ import annotations
 
+import dataclasses
 from collections.abc import Sequence
 
 from lumi_ai.config import AIConfig
@@ -17,7 +18,7 @@ from lumi_ai.evaluation.style import StyleReference, StyleReferencer
 from lumi_ai.evaluation.types import Evaluation
 from lumi_ai.generation.platforms import rules_for
 from lumi_ai.generation.types import GenerationBrief
-from lumi_ai.ports import EvaluationRecord
+from lumi_ai.ports import EvaluationIn, EvaluationRecord
 
 NO_JUDGE = "no semantic judge answered; only the deterministic checks ran"
 
@@ -100,10 +101,10 @@ class Evaluator:
         )
 
 
-def to_record(
-    brief: GenerationBrief, draft: str, evaluation: Evaluation, attempt_id: int
-) -> EvaluationRecord:
-    return EvaluationRecord(
+def to_evaluation_in(
+    brief: GenerationBrief, draft: str, evaluation: Evaluation
+) -> EvaluationIn:
+    return EvaluationIn(
         profile_id=brief.profile_id,
         platform=brief.platform,
         draft=draft,
@@ -114,5 +115,14 @@ def to_record(
         style_similarity=evaluation.style_similarity,
         judge=evaluation.judge,
         config_version=evaluation.config_version,
-        attempt_id=attempt_id,
     )
+
+
+def to_record(
+    brief: GenerationBrief, draft: str, evaluation: Evaluation, attempt_id: int
+) -> EvaluationRecord:
+    fields = {
+        f.name: getattr(to_evaluation_in(brief, draft, evaluation), f.name)
+        for f in dataclasses.fields(EvaluationIn)
+    }
+    return EvaluationRecord(**fields, attempt_id=attempt_id)

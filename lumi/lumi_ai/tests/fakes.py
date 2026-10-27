@@ -206,8 +206,9 @@ class FakeLinks:
 
 
 class FakeRepurpose:
-    def __init__(self, known: set[int] | None = None):
+    def __init__(self, known: set[int] | None = None, fail: Exception | None = None):
         self.known = known or {7}
+        self.fail = fail
         self.actions: list[tuple[int, int, str, str | None]] = []
         self.requests: list[dict] = []
 
@@ -221,7 +222,10 @@ class FakeRepurpose:
         mode="repurpose",
         brief=None,
         source_post_id=None,
+        evaluations=None,
     ):
+        if self.fail is not None:
+            raise self.fail
         request_id = len(self.requests) + 1
         self.requests.append(
             {
@@ -232,6 +236,7 @@ class FakeRepurpose:
                 "mode": mode,
                 "brief": brief,
                 "source_post_id": source_post_id,
+                "evaluations": dict(evaluations or {}),
             }
         )
         out = [

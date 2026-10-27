@@ -7,7 +7,7 @@ from lumi_ai.generation.context import ContextBuilder
 from lumi_ai.generation.enforcement import EnforcementReviewer
 from lumi_ai.generation.flow import GenerationService
 from lumi_ai.generation.tools import build
-from lumi_ai.tests.evaluation.support import FakeEvalStore, ScriptedScorer, result
+from lumi_ai.tests.evaluation.support import ScriptedScorer, result
 from lumi_ai.tests.fakes import FakeRepurpose, FakeVoice
 from lumi_ai.tests.generation.support import FakeJudge, TierLLM, brief, reply
 from lumi_ai.tools import ToolDeps, build_registry
@@ -18,11 +18,25 @@ GOOD = "Our new dashboard is live. https://acme.io/new @acme"
 JUDGE_OK = {"preserves_meaning": 0.95}
 
 
-def rig(script, scorers, *, judge=None, evals=None):
+class _Evals:
+    """The evaluations the flow handed to the store, as ``(attempt_no, record)`` pairs."""
+
+    def __init__(self, store):
+        self._store = store
+
+    @property
+    def records(self):
+        return [
+            rec
+            for request in self._store.requests
+            for _no, rec in sorted(request["evaluations"].items())
+        ]
+
+
+def rig(script, scorers, *, judge=None):
     judge = judge or FakeJudge(choice=["standard"], noul=[JUDGE_OK] * 4)
     llm = TierLLM(script)
     store = FakeRepurpose()
-    evals = evals if evals is not None else FakeEvalStore()
     reviewer = QualityReviewer(EnforcementReviewer(judge), Evaluator(scorers))
     service = GenerationService(
         llm,
@@ -30,23 +44,17 @@ def rig(script, scorers, *, judge=None, evals=None):
         reviewer,
         store,
         judge=judge,
-        evaluations=evals,
     )
-    return service, llm, store, evals
+    return service, llm, store, _Evals(store)
 
 
 @pytest.mark.asyncio
-async def test_a_passing_draft_saves_one_evaluation_keyed_by_its_attempt() -> None:
-    service, llm, _store, evals = rig(
-        [reply(GOOD)], [ScriptedScorer("jev", [result()])]
-    )
+async def test_a_passing_draft_hands_one_evaluation_keyed_by_its_attempt_no() -> None:
+    service, llm, store, evals = rig([reply(GOOD)], [ScriptedScorer("jev", [result()])])
     out = await service.run(brief(source_text=SRC), AIConfig())
     [rec] = evals.records
-    assert (
-        rec.attempt_id == out.attempt.id
-        and rec.decision == "pass"
-        and rec.judge == "jev"
-    )
+    assert list(store.requests[0]["evaluations"]) == [out.attempt.attempt_no]
+    assert rec.decision == "pass" and rec.judge == "jev" and rec.draft == GOOD
     assert out.draft.text == GOOD and out.warnings == () and len(llm.tiers) == 1
 
 
@@ -60,7 +68,8 @@ async def test_a_weak_criterion_triggers_a_regeneration_guided_by_the_critique()
     retry_prompt = llm.seen[1][-1]["content"]
     assert "hook scored 0.20" in retry_prompt
     assert [r.decision for r in evals.records] == ["regenerate", "pass"]
-    assert [r.attempt_id for r in evals.records] == [s.id for s in out.saved]
+    assert [s.attempt_no for s in out.saved] == [1, 2]
+    assert [r.draft for r in evals.records] == [GOOD, GOOD + " Now."]
     assert out.attempt.attempt_no == 2  # the passing attempt wins
 
 
@@ -98,21 +107,28 @@ async def test_no_semantic_judge_is_visible_in_the_result_not_hidden() -> None:
 
 
 @pytest.mark.asyncio
-async def test_an_evaluation_that_cannot_be_saved_is_a_warning_and_the_draft_survives() -> (
-    None
-):
-    evals = FakeEvalStore(fail=RuntimeError("db down"))
-    service, _llm, store, _ = rig(
-        [reply(GOOD)], [ScriptedScorer("jev", [result()])], evals=evals
+async def test_a_store_that_rejects_the_request_fails_the_whole_generation() -> None:
+    """Evaluations travel with the attempts: there is no half-saved state to warn about."""
+    judge = FakeJudge(choice=["standard"], noul=[JUDGE_OK] * 4)
+    store = FakeRepurpose(fail=RuntimeError("db down"))
+    service = GenerationService(
+        TierLLM([reply(GOOD)]),
+        ContextBuilder(FakeVoice()),
+        QualityReviewer(
+            EnforcementReviewer(judge),
+            Evaluator([ScriptedScorer("jev", [result()])]),
+        ),
+        store,
+        judge=judge,
     )
-    out = await service.run(brief(source_text=SRC), AIConfig())
-    assert len(store.requests) == 1 and out.draft.text == GOOD
-    assert "was not saved: db down" in out.warnings[0]
+    with pytest.raises(RuntimeError, match="db down"):
+        await service.run(brief(source_text=SRC), AIConfig())
+    assert store.requests == []
 
 
 @pytest.mark.asyncio
-async def test_without_an_eval_store_nothing_is_saved_but_the_flow_runs() -> None:
-    service, *_ = rig([reply(GOOD)], [ScriptedScorer("jev", [result()])])
-    service._evaluations = None
-    out = await service.run(brief(source_text=SRC), AIConfig())
-    assert out.warnings == ()
+async def test_every_attempt_of_a_request_carries_its_evaluation() -> None:
+    scorer = ScriptedScorer("jev", [result("jev", 0.9, hook=0.2), result("jev", 0.9)])
+    service, _llm, store, _ = rig([reply(GOOD), reply(GOOD + " Now.")], [scorer])
+    await service.run(brief(source_text=SRC), AIConfig())
+    assert sorted(store.requests[0]["evaluations"]) == [1, 2]

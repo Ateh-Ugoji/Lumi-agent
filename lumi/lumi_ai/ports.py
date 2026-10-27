@@ -818,11 +818,20 @@ class RepurposeStore(Protocol):
         mode: Literal["repurpose", "topic"] = "repurpose",
         brief: str | None = None,
         source_post_id: int | None = None,
+        evaluations: Mapping[int, EvaluationIn] | None = None,
     ) -> tuple[int, list[AttemptOut]]:
-        """Store a request and its attempts in ONE transaction; return ``(request_id, attempts)``.
+        """Store a request, its attempts and their evaluations in ONE transaction.
+
+        Returns ``(request_id, attempts)``.
 
         ``source_post_id`` links the stored post a repurpose started from (1.7); it must belong
         to ``profile_id``.
+
+        ``evaluations`` (1.8) are the already computed evaluations keyed by ``attempt_no``. The
+        ids of the attempts only exist after the insert, so the store writes the evaluations
+        inside the same transaction with the ids it just got. A key with no matching attempt is
+        a ``ValueError`` and nothing is stored. An evaluation that cannot be stored fails the
+        whole call: there are no attempts without their evaluation.
 
         The old code saved the request before doing the work, so a failure left orphans.
         """
@@ -927,12 +936,8 @@ class MatchStore(Protocol):
 
 
 @dataclass(frozen=True, slots=True)
-class EvaluationRecord:
-    """Automatic quality evaluation of one generated draft.
-
-    1.3: ``attempt_id`` is required (the schema's ``generation_evaluations.attempt_id`` is a
-    non-null FK). It is keyword-only, so the position of every other argument is unchanged.
-    """
+class EvaluationIn:
+    """Automatic quality evaluation of one generated draft, before it has an attempt id (1.8)."""
 
     profile_id: int
     platform: Platform
@@ -944,6 +949,16 @@ class EvaluationRecord:
     style_similarity: float | None = None
     judge: str | None = None  # "jev" | "groq-small" | "rules"
     config_version: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class EvaluationRecord(EvaluationIn):
+    """A stored evaluation.
+
+    1.3: ``attempt_id`` is required (the schema's ``generation_evaluations.attempt_id`` is a
+    non-null FK). It is keyword-only, so the position of every other argument is unchanged.
+    """
+
     attempt_id: int = field(kw_only=True)
 
 

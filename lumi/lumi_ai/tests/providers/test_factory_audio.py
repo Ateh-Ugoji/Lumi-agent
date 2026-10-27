@@ -90,3 +90,40 @@ async def test_transcribe_failure_is_typed_and_keeps_cause():
     with pytest.raises(AudioError) as info:
         await tr.transcribe(b"1")
     assert isinstance(info.value.__cause__, httpx.ConnectError)
+
+
+class TestLoopLocalClient:
+    def test_each_event_loop_gets_its_own_client_and_reuses_it(self):
+        import asyncio
+
+        from lumi_ai.providers.factory import loop_local
+
+        made: list[object] = []
+
+        def factory(api_key, base_url, timeout):
+            client = type("C", (), {"id": len(made), "key": api_key})()
+            made.append(client)
+            return client
+
+        client = loop_local(factory)("k", "https://x", 1.0)
+
+        async def two_reads():
+            return client.id, client.id, client.key
+
+        first = asyncio.run(two_reads())
+        second = asyncio.run(two_reads())
+        assert first == (0, 0, "k")
+        assert second == (1, 1, "k")
+        assert len(made) == 2
+
+    def test_a_missing_attribute_is_an_attribute_error(self):
+        import asyncio
+
+        from lumi_ai.providers.factory import loop_local
+
+        client = loop_local(lambda *_: object())("k", "u", 1.0)
+
+        async def probe():
+            return hasattr(client, "nope")
+
+        assert asyncio.run(probe()) is False

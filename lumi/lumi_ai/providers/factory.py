@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
+import weakref
 from collections.abc import Callable
+from typing import Any
 
 from openai import AsyncOpenAI
 
@@ -19,6 +22,43 @@ def _openai_client(api_key: str, base_url: str, timeout: float) -> object:
     return AsyncOpenAI(
         api_key=api_key, base_url=base_url, timeout=timeout, max_retries=0
     )
+
+
+class _LoopLocalClient:
+    """One real client per running event loop, behind the attribute path the chain uses.
+
+    An async HTTP client keeps pooled connections tied to the loop that opened them. A sync Django
+    view that runs a turn with ``async_to_sync`` gets a NEW loop per request, so a single shared
+    client would reuse sockets of a closed loop ("Event loop is closed"). The chain (and its
+    cooldown memory) stays one object; only the transport is per loop.
+    """
+
+    def __init__(self, make: Callable[[], object]) -> None:
+        self._make = make
+        self._by_loop: weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, object] = (
+            weakref.WeakKeyDictionary()
+        )
+
+    def _current(self) -> object:
+        loop = asyncio.get_running_loop()
+        client = self._by_loop.get(loop)
+        if client is None:
+            client = self._by_loop[loop] = self._make()
+        return client
+
+    def __getattr__(self, name: str) -> Any:
+        if name.startswith("_"):
+            raise AttributeError(name)
+        return getattr(self._current(), name)
+
+
+def loop_local(factory: ClientFactory = _openai_client) -> ClientFactory:
+    """A ``client_factory`` for ``build_chain`` that is safe across event loops."""
+
+    def make(api_key: str, base_url: str, timeout: float) -> object:
+        return _LoopLocalClient(lambda: factory(api_key, base_url, timeout))
+
+    return make
 
 
 def build_provider_specs(

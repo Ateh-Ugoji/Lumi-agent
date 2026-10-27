@@ -32,6 +32,7 @@ from lumi_ai import ports
 from lumi_ai.ports import (
     AttemptIn,
     ChatMessageIn,
+    EvaluationIn,
     EvaluationRecord,
     FrameworkIn,
     ListeningConfig,
@@ -460,6 +461,67 @@ class TestEvaluations:
         assert call(repo.list_evaluations, profile.pk) == [
             self.record(profile, attempt.id)
         ]
+
+    def evaluation_in(self, profile, draft="draft 1"):
+        return EvaluationIn(
+            profile_id=profile.pk,
+            platform="x",
+            draft=draft,
+            decision="pass",
+            scores={"voice": 0.9},
+            reasons={},
+            style_similarity=0.8,
+            judge="jev",
+        )
+
+    def test_evaluations_are_stored_with_their_attempts_in_one_transaction(
+        self, profile
+    ):
+        attempts = [AttemptIn("x", "a", 1, True), AttemptIn("x", "b", 2, True)]
+        _, out = call(
+            RepurposeRepo().create_request_with_attempts,
+            profile.pk,
+            "s",
+            None,
+            attempts,
+            evaluations={
+                1: self.evaluation_in(profile),
+                2: self.evaluation_in(profile, "b"),
+            },
+        )
+        rows = m.GenerationEvaluation.objects.order_by("attempt__attempt_no")
+        assert [r.attempt_id for r in rows] == [o.id for o in out]
+        assert [e.draft for e in call(EvalRepo().list_evaluations, profile.pk)] == [
+            "b",
+            "a",
+        ]
+
+    def test_a_failing_evaluation_leaves_neither_request_nor_attempts(self, profile):
+        broken = self.evaluation_in(profile)
+        object.__setattr__(broken, "decision", "x" * 100)  # does not fit the column
+        with pytest.raises(Exception):  # noqa: B017 - any database error will do
+            call(
+                RepurposeRepo().create_request_with_attempts,
+                profile.pk,
+                "s",
+                None,
+                [AttemptIn("x", "a", 1, True)],
+                evaluations={1: broken},
+            )
+        assert m.RepurposeRequest.objects.count() == 0
+        assert m.RepurposeAttempt.objects.count() == 0
+
+    def test_an_evaluation_for_an_attempt_that_does_not_exist_is_refused(self, profile):
+        with pytest.raises(ValueError, match="unknown attempts"):
+            call(
+                RepurposeRepo().create_request_with_attempts,
+                profile.pk,
+                "s",
+                None,
+                [AttemptIn("x", "a", 1, True)],
+                evaluations={2: self.evaluation_in(profile)},
+            )
+        assert m.RepurposeRequest.objects.count() == 0
 
     def test_an_attempt_of_another_profile_is_refused(
         self, profile, owner, make_profile

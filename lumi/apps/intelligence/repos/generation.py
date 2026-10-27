@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Literal
 
 from django.db import transaction
@@ -25,6 +25,7 @@ from apps.profiles.models import HandleOrigin, Post, SocialProfile
 from lumi_ai.ports import (
     AttemptIn,
     AttemptOut,
+    EvaluationIn,
     EvaluationRecord,
     TurnRecord,
     UserRequestOut,
@@ -45,6 +46,21 @@ def _attempt_out(row: RepurposeAttempt) -> AttemptOut:
     )
 
 
+def _evaluation_row(attempt_id: int, ev: EvaluationIn) -> GenerationEvaluation:
+    return GenerationEvaluation(
+        attempt_id=attempt_id,
+        style_score=ev.style_similarity,
+        decision=ev.decision,
+        evaluation={
+            "scores": dict(ev.scores),
+            "reasons": dict(ev.reasons),
+            "deterministic_failures": list(ev.deterministic_failures),
+            "judge": ev.judge,
+            "config_version": ev.config_version,
+        },
+    )
+
+
 class RepurposeRepo:
     """``RepurposeStore``. A request and ALL its attempts are written in one transaction."""
 
@@ -59,7 +75,17 @@ class RepurposeRepo:
         mode: Literal["repurpose", "topic"] = "repurpose",
         brief: str | None = None,
         source_post_id: int | None = None,
+        evaluations: Mapping[int, EvaluationIn] | None = None,
     ) -> tuple[int, list[AttemptOut]]:
+        evaluations = evaluations or {}
+        numbers = [a.attempt_no for a in attempts]
+        unknown = set(evaluations) - set(numbers)
+        if unknown:
+            raise ValueError(f"evaluations for unknown attempts: {sorted(unknown)}")
+        if evaluations and len(set(numbers)) != len(numbers):
+            raise ValueError(
+                "evaluations are keyed by attempt_no, which repeats across platforms here"
+            )
         with transaction.atomic():
             if source_post_id is not None:
                 owns = Post.objects.filter(
@@ -98,6 +124,14 @@ class RepurposeRepo:
                     for a in attempts
                 ]
             )
+            by_no = {r.attempt_no: r for r in rows}
+            if evaluations:
+                GenerationEvaluation.objects.bulk_create(
+                    [
+                        _evaluation_row(by_no[no].pk, ev)
+                        for no, ev in sorted(evaluations.items())
+                    ]
+                )
             # ``db_default=Now()`` is not echoed back by ``bulk_create``; read the stored rows.
             stored = RepurposeAttempt.objects.filter(pk__in=[r.pk for r in rows])
             by_id = {r.pk: r for r in stored}
@@ -137,18 +171,8 @@ class EvalRepo:
             raise LookupError(
                 f"attempt {record.attempt_id} not found for profile {record.profile_id}"
             )
-        row = GenerationEvaluation.objects.create(
-            attempt_id=record.attempt_id,
-            style_score=record.style_similarity,
-            decision=record.decision,
-            evaluation={
-                "scores": dict(record.scores),
-                "reasons": dict(record.reasons),
-                "deterministic_failures": list(record.deterministic_failures),
-                "judge": record.judge,
-                "config_version": record.config_version,
-            },
-        )
+        row = _evaluation_row(record.attempt_id, record)
+        row.save()
         return row.pk
 
     @aio

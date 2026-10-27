@@ -12,7 +12,7 @@ from dataclasses import dataclass
 
 from lumi_ai.agent.support import Completer
 from lumi_ai.config import AIConfig
-from lumi_ai.evaluation.evaluator import to_record
+from lumi_ai.evaluation.evaluator import to_evaluation_in
 from lumi_ai.generation.context import ContextBuilder
 from lumi_ai.generation.difficulty import ROUTE_TIERS, classify_difficulty
 from lumi_ai.generation.platforms import rules_for
@@ -28,7 +28,6 @@ from lumi_ai.generation.writer import DraftUnusable, Revision, Writer
 from lumi_ai.ports import (
     AttemptIn,
     AttemptOut,
-    EvalStore,
     RepurposeStore,
     SemanticJudge,
     Tier,
@@ -92,14 +91,12 @@ class GenerationService:
         store: RepurposeStore,
         *,
         judge: SemanticJudge | None = None,
-        evaluations: EvalStore | None = None,
     ) -> None:
         self._writer = Writer(llm)
         self._context = context
         self._reviewer = reviewer
         self._store = store
         self._judge = judge
-        self._evaluations = evaluations
 
     async def run(self, brief: GenerationBrief, config: AIConfig) -> GenerationResult:
         rules = rules_for(brief.platform)
@@ -162,6 +159,11 @@ class GenerationService:
             mode=brief.mode,
             brief=_brief_text(brief) if brief.mode == "topic" else None,
             source_post_id=brief.source_post_id,
+            evaluations={
+                a.attempt_no: to_evaluation_in(brief, a.output, r.evaluation)
+                for a, r in zip(attempts, reviews, strict=True)
+                if r.evaluation is not None
+            },
         )
         outcome = GenerationOutcome(
             brief=brief,
@@ -172,33 +174,7 @@ class GenerationService:
             chosen=best_attempt(reviews),
             context=used,
         )
-        warnings = await self._save_evaluations(brief, drafts, reviews, saved)
-        return GenerationResult(request_id, tuple(saved), outcome, tuple(warnings))
-
-    async def _save_evaluations(
-        self,
-        brief: GenerationBrief,
-        drafts: list[Draft],
-        reviews: list[Review],
-        saved: list[AttemptOut],
-    ) -> list[str]:
-        """Evaluations need the attempt ids, so they are saved right after the attempts."""
-        if self._evaluations is None:
-            return []
-        warnings: list[str] = []
-        for draft, review, row in zip(drafts, reviews, saved, strict=True):
-            if review.evaluation is None:
-                continue
-            try:
-                await self._evaluations.save_evaluation(
-                    to_record(brief, draft.text, review.evaluation, row.id)
-                )
-            except Exception as exc:
-                log.exception("evaluation of attempt %s was not saved", row.id)
-                warnings.append(
-                    f"evaluation of attempt {row.attempt_no} was not saved: {exc}"
-                )
-        return warnings
+        return GenerationResult(request_id, tuple(saved), outcome, ())
 
     async def _route(self, brief: GenerationBrief) -> Difficulty:
         if brief.mode == "topic" or not brief.source_text:
