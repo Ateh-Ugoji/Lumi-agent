@@ -88,11 +88,19 @@ test("connect Facebook from Settings: authorize, callback, return banner, status
   await expect(card).not.toContainText("meta-page1-FAKE"); // no token ever reaches the browser
 });
 
-test("connect Post for Me: the status call on return mirrors the account", async () => {
+test("connect Post for Me: the sync on return mirrors the account", async () => {
   await openSettings("Connected Accounts");
   await page.getByLabel("Red social a conectar").selectOption("instagram");
   await page.getByTestId("connect-pfm").click();
   await expect(page.getByTestId("connect-return")).toContainText("Post for Me conectado");
+  await expect(page.getByTestId("status-pfm")).toHaveText("Conectado");
+  await expect(page.getByTestId("provider-pfm")).toContainText("instagram");
+  // "Actualizar" on PFM is the POST sync. The account is still there afterwards.
+  const sync = page.waitForRequest(
+    (r) => r.method() === "POST" && r.url().endsWith("/connections/pfm/sync"),
+  );
+  await page.getByTestId("refresh-pfm").click();
+  await sync;
   await expect(page.getByTestId("status-pfm")).toHaveText("Conectado");
   await expect(page.getByTestId("provider-pfm")).toContainText("instagram");
 });

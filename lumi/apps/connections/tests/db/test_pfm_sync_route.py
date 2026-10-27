@@ -97,12 +97,19 @@ def test_sync_never_attaches_an_account_that_pfm_files_under_someone_else(
     api, linked, providers, other_user
 ) -> None:
     ConnectedAccount.objects.create(
-        user=other_user, provider="pfm", external_account_id="sa_1", platform="x"
+        user=other_user,
+        provider="pfm",
+        external_account_id="sa_1",
+        platform="x",
+        display_name="theirs",
+        handle="theirs-h",
     )
     body = api.post("/api/v1/connections/pfm/sync").json()
     assert body["accounts"] == []
-    mine = ConnectedAccount.objects.get(external_account_id="sa_1")
-    assert mine.user_id == other_user.pk
+    theirs = ConnectedAccount.objects.get(external_account_id="sa_1")
+    assert theirs.user_id == other_user.pk
+    assert (theirs.display_name, theirs.handle) == ("theirs", "theirs-h")
+    assert theirs.status == AccountStatus.ACTIVE
 
 
 def test_sync_needs_a_login_and_pfm_keys(api, env, providers) -> None:

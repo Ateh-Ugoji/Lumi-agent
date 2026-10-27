@@ -31,8 +31,18 @@ export type ConnectionStatus = {
 
 export const PFM_PLATFORMS = ["x", "linkedin", "facebook", "instagram", "tiktok"] as const;
 
+/** Read what the server stores. It never calls the provider and never writes. */
 export function getConnectionStatus(provider: Provider): Promise<ConnectionStatus> {
   return request<ConnectionStatus>(`/connections/${provider}/status`);
+}
+
+/**
+ * Ask the server to read this user's accounts from Post for Me and store them. Post for Me sends
+ * no `state`, so this call is how the accounts reach Lumi. It is a POST because it writes, and
+ * the server limits how often it can run.
+ */
+export function syncPfm(): Promise<ConnectionStatus> {
+  return request<ConnectionStatus>("/connections/pfm/sync", { method: "POST" });
 }
 
 /**
@@ -109,8 +119,8 @@ export type ConnectResult = { provider: string; connected: boolean };
 export async function finishConnect(landing: CallbackLanding): Promise<ConnectResult> {
   if (landing.kind === "pfm") {
     if (!landing.success) throw new ApiError(400, "connections.pfm_failed", "pfm");
-    // The status call is what syncs the accounts Post for Me now holds for this user.
-    const status = await getConnectionStatus("pfm");
+    // The sync call reads the accounts Post for Me now holds for this user and stores them.
+    const status = await syncPfm();
     return { provider: "pfm", connected: status.connected };
   }
   const body =

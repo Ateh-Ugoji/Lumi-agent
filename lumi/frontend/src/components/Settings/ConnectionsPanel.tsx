@@ -10,6 +10,7 @@ import {
   isLiveDisabled,
   startConnect,
   startConnectMessage,
+  syncPfm,
   type ConnectReturn,
   type ConnectionStatus,
   type Provider,
@@ -71,7 +72,8 @@ export default function ConnectionsPanel({
     [patch],
   );
 
-  // Post for Me sync its accounts when its status is read, so the return from PFM needs this call.
+  // Reading a status never calls the provider. Post for Me accounts are stored by the sync that
+  // the callback page runs, or by "Actualizar".
   const providerKey = providers.join(",");
   useEffect(() => {
     for (const provider of providers) void load(provider);
@@ -89,6 +91,17 @@ export default function ConnectionsPanel({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [returned]);
+
+  const refresh = async (provider: Provider) => {
+    if (provider !== "pfm") return load(provider);
+    patch(provider, { loading: true, error: null });
+    try {
+      patch(provider, { status: await syncPfm(), loading: false });
+      onChanged?.();
+    } catch (err) {
+      patch(provider, { loading: false, error: errorMessage(err, "No se pudo actualizar.") });
+    }
+  };
 
   const connect = async (provider: Provider) => {
     patch(provider, { busy: true, error: null, note: null });
@@ -256,7 +269,13 @@ export default function ConnectionsPanel({
                   Desconectar
                 </button>
               )}
-              <button type="button" className={styles.textBtn} onClick={() => void load(provider)}>
+              <button
+                type="button"
+                className={styles.textBtn}
+                data-testid={`refresh-${provider}`}
+                disabled={card.busy || card.loading}
+                onClick={() => void refresh(provider)}
+              >
                 Actualizar
               </button>
             </div>

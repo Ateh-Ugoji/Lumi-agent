@@ -1,11 +1,14 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { afterEach, test } from "node:test";
 import {
   connectErrorMessage,
+  finishConnect,
+  getConnectionStatus,
   googleScopeLabels,
   isLiveDisabled,
   parseCallbackLanding,
   startConnectMessage,
+  syncPfm,
 } from "../src/api/connections.ts";
 import { ApiError } from "../src/api/http.ts";
 
@@ -98,5 +101,48 @@ test("a state started by another account has its own sentence", () => {
   assert.notEqual(
     connectErrorMessage("connections.state_mismatch"),
     connectErrorMessage("whatever"),
+  );
+});
+
+const realFetch = globalThis.fetch;
+afterEach(() => {
+  globalThis.fetch = realFetch;
+});
+
+function record(body: unknown = { provider: "pfm", connected: true, accounts: [] }) {
+  const calls: { url: string; method: string }[] = [];
+  globalThis.fetch = (async (url: string, init: RequestInit = {}) => {
+    calls.push({ url: String(url), method: init.method ?? "GET" });
+    return new Response(JSON.stringify(body), { status: 200 });
+  }) as typeof fetch;
+  return calls;
+}
+
+test("the PFM landing syncs with a POST, never with the status GET", async () => {
+  const calls = record();
+  const result = await finishConnect({ kind: "pfm", success: true });
+  assert.deepEqual(result, { provider: "pfm", connected: true });
+  assert.deepEqual(
+    calls.map((c) => [c.method, new URL(c.url).pathname]),
+    [["POST", "/api/v1/connections/pfm/sync"]],
+  );
+});
+
+test("a failed PFM landing asks the server nothing", async () => {
+  const calls = record();
+  await assert.rejects(finishConnect({ kind: "pfm", success: false }), { code: "connections.pfm_failed" });
+  assert.equal(calls.length, 0);
+});
+
+test("syncPfm is a POST and reading a status is a GET", async () => {
+  const calls = record();
+  await syncPfm();
+  await getConnectionStatus("pfm");
+  assert.deepEqual(
+    calls.map((c) => [c.method, new URL(c.url).pathname]),
+    [
+      ["POST", "/api/v1/connections/pfm/sync"],
+      ["GET", "/api/v1/connections/pfm/status"],
+    ],
   );
 });
