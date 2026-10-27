@@ -11,6 +11,7 @@
 }
 
 :root {
+  color-scheme: dark; /* native controls (select lists, scrollbars) follow the theme */
   --black: #0a0a0a;
   --bg: #0a0a0a;
   --cream: #f5f4f0;
