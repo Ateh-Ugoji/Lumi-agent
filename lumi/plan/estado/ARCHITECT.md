@@ -33,7 +33,7 @@ Rama: `lumi-orquestador`. Registro de decisiones: `ARCHITECT-decisiones.tsv`.
 | `AGENT_KEYS_SETUP.md` | El paso 3 usa `scripts/dev_postgres.py` (se entrega en el resto de T1). |
 | `how-to-setup.md` | Se actualiza tras el port. |
 
-## Lista de T12 (al borrar `lumi/app/`)
+## Lista de T12 (al borrar `lumi/legacy/`)
 
 - Actualizar `docs/how-to-setup.md`: Postgres obligatorio (la línea 14 aún habla de SQLite), `manage.py`, `check_keys`. CONNECT cubre la parte del frontend.
 - [x] Quitar el plugin `lumi_pytest_env` y su `addopts` (hecho: `DJANGO_SETTINGS_MODULE` en `pyproject.toml`, `conftest.py` omite `live` salvo `LUMI_RUN_LIVE=1`).
@@ -95,6 +95,6 @@ Nota sobre la fila 18: `reach_series` y `saves_series` siguen recorriendo todas 
 
 | Tema | Detalle |
 | --- | --- |
-| Pytest y los tests legados | Sin plugin: `config.settings.test` va fijo en `pyproject.toml` y exige `DATABASE_URL` de PostgreSQL. Los 422 tests legados siguen pasando con Postgres más las cinco variables ficticias de `Settings`; con una URL SQLite ficticia ya no corren. Se borran con `lumi/app/`. |
+| Pytest y los tests legados | Sin plugin: `config.settings.test` va fijo en `pyproject.toml` y exige `DATABASE_URL` de PostgreSQL. Los 422 tests legados viven en `lumi/legacy/tests/` (desde R10), con su propio `pytest.ini` y `conftest.py`: corren a mano desde `lumi/legacy`, sin Postgres y con las cinco variables ficticias de `Settings` que pone su conftest. El `pytest` normal no los recoge. Se borran con `lumi/legacy/`. |
 | `.env.example` | `DATABASE_URL` pasa al formato Django. El backend FastAPI viejo ya no arranca con esta plantilla; vale hasta T12 solo para los tests. |
 | Arranque | `manage.py` imprime un error limpio si falta `DATABASE_URL` o `SECRET_KEY`. `check_keys`, `help` y `version` corren con el entorno vacío. |

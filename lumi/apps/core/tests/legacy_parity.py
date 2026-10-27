@@ -1,7 +1,7 @@
 """Parity of the new test suite against the 422 legacy tests.
 
-The legacy tests live in ``lumi/tests`` and go away with ``lumi/app``. Their names are frozen in
-``legacy_tests.tsv`` so the matrix survives the deletion. ``legacy_parity_map.tsv`` maps each
+The legacy tests live in ``lumi/legacy/tests`` (reference code, not collected by the default
+pytest). Their names are frozen in ``legacy_tests.tsv`` so the matrix survives if they are deleted. ``legacy_parity_map.tsv`` maps each
 legacy test (by file and name regex, first match wins) to a status:
 
 * ``covered``   a Django or ``lumi_ai`` test checks the same behavior.
@@ -31,7 +31,7 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[2]  # lumi/
 REPORT = ROOT / "plan" / "estado" / "PARIDAD-LEGADO.md"
 CONTRATOS = ROOT / "docs" / "CONTRATOS.md"
-LEGACY_TESTS_DIR = ROOT / "tests"
+LEGACY_TESTS_DIR = ROOT / "legacy" / "tests"
 STATUSES = ("covered", "replaced", "deviation", "retired", "gap")
 MIN_REASON_LENGTH = 20
 EXPECTED_TOTAL = 422
@@ -233,7 +233,7 @@ def unused_rules(verdicts: list[Verdict]) -> list[Rule]:
 
 
 def legacy_names_on_disk() -> dict[str, set[str]] | None:
-    """Test names found in ``lumi/tests`` right now, or ``None`` once it is deleted."""
+    """Test names found in ``lumi/legacy/tests`` right now, or ``None`` once it is deleted."""
     if not LEGACY_TESTS_DIR.is_dir():
         return None
     return {p.stem: _test_names(p) for p in sorted(LEGACY_TESTS_DIR.glob("test_*.py"))}

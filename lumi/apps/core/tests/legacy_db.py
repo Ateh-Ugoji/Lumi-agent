@@ -2,7 +2,7 @@
 
 ``legacy_schema.sql`` is the legacy schema and ``legacy_rows.sql`` a small set of rows
 that cover every merge and skip rule of the importer. Loading them needs no legacy code,
-so these tests survive the removal of ``lumi/app/``. ``legacy_regen.py`` rebuilds both
+so these tests survive the removal of ``lumi/legacy/app/``. ``legacy_regen.py`` rebuilds both
 files from the legacy models while those still exist.
 """
 

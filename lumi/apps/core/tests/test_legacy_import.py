@@ -2,6 +2,7 @@ import hashlib
 import json
 import sqlite3
 from io import StringIO
+from pathlib import Path
 
 import pytest
 from django.core.management import CommandError, call_command
@@ -477,11 +478,16 @@ def test_skip_accepts_a_bare_legacy_id_and_still_keeps_the_row(legacy):
     assert json.loads(entry.payload)["id"] == 11
 
 
-def test_frozen_fixtures_still_match_the_legacy_models(tmp_path):
-    """While lumi/app/ exists, the frozen SQL must describe the same schema and rows.
+def test_frozen_fixtures_still_match_the_legacy_models(tmp_path, monkeypatch):
+    """While lumi/legacy/app/ exists, the frozen SQL must describe the same schema and rows.
 
-    After lumi/app/ is removed this test skips and the SQL files are the only source.
+    After lumi/legacy/app/ is removed this test skips and the SQL files are the only source.
+    ``app`` is not on the default path, so the legacy folder is added for this test only.
     """
+    legacy_root = Path(__file__).resolve().parents[3] / "legacy"
+    if not (legacy_root / "app" / "models").is_dir():
+        pytest.skip("lumi/legacy/app is gone: the frozen SQL files are the only source")
+    monkeypatch.syspath_prepend(str(legacy_root))
     pytest.importorskip("app.models")
     import sqlite3
 

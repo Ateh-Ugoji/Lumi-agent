@@ -1,5 +1,7 @@
 # Lumi
 
+> **Nota:** el backend actual es Django (`apps/`, `config/`, `manage.py`, `lumi_ai/`). El código FastAPI que describe este archivo se movió a `lumi/legacy/` como referencia (no se despliega ni se mantiene; ver `legacy/README.md`). Las rutas de abajo son relativas a `lumi/legacy/`.
+
 Chat-based agent that listens for trending X posts and repurposes captions in the user's voice.
 
 MVP scope: **X (Twitter) only**. All demo profiles are X accounts, and repurposed output targets X's 280-character format. Multi-platform support is a future extension, not an MVP goal.
@@ -36,7 +38,7 @@ Both the chat agent path and the HTTP router path reuse the same `services/` lay
 ### Directory layout
 
 ```
-app/
+legacy/app/
 ├── main.py              FastAPI app, lifespan (seed + background poller), CORS
 ├── config.py            Settings from env vars (pydantic-settings)
 ├── database.py          Async engine/session; schema is Alembic-managed, not create_all()
@@ -49,13 +51,13 @@ app/
 ├── services/            pfm.py, metrics.py, enforcement.py
 └── background/          poller.py — asyncio loop started from lifespan, drives check_trending
 
-alembic/                 migrations (async template, autogenerate against SQLModel.metadata)
+legacy/alembic/          migrations (async template, autogenerate against SQLModel.metadata)
 .agents/                 the planning specs this build follows (setup, API, database, external services)
 ```
 
 ### Database
 
-11 tables, defined in `app/models/` and managed by Alembic (`alembic/versions/`):
+11 tables, defined in `legacy/app/models/` and managed by Alembic (`legacy/alembic/versions/`):
 
 | Table | Purpose |
 |---|---|
@@ -75,7 +77,7 @@ Full column-level spec: `.agents/database.md`.
 
 ### Agent tools
 
-Registered in `app/tools/registry.py`, callable by the LLM during the chat loop:
+Registered in `legacy/app/tools/registry.py`, callable by the LLM during the chat loop:
 
 `connect_account`, `extract_voice_profile`, `get_voice_profile`, `answer_style_questions`, `start_listening`, `stop_listening`, `check_trending`, `repurpose_caption`, `submit_action`, `dismiss_alert`, `get_posts`, plus **dynamic MCP connector tools** (`mcp__gdrive__*`, `mcp__gdocs__*`) — discovered per-turn from the connector registry when Google is connected, with every write gated behind explicit user confirmation (see "External services" and `docs/mcp-connectors.md`).
 
@@ -99,8 +101,8 @@ Details, rate limits, and model choices: `.agents/external-services.md`.
 
 - **Post for Me** — account connection is a real OAuth flow, not an API key the user provides. `connect_account` (an agent tool) calls PFM's `auth-url` endpoint and hands the user a link; PFM redirects back to `GET /pfm/callback` once they've authorized, which is where a `Profile` row actually gets created. Auth to PFM itself is one app-level JWT (`PFM_JWT_TOKEN`) — PFM holds the real platform tokens, we only ever store `pfm_account_id`. Post backfill and metrics both come from one endpoint (`GET /v1/social-account-feeds/{id}`), confirmed but not yet wired into any backfill/polling pipeline.
 - **Xpoz** — social listening (not yet integrated — tracked keywords/users/content across X broadly, not just our connected accounts). Different purpose from PFM: PFM only ever sees accounts a user has OAuth-connected; Xpoz reads public content generally, which is what "listen for trending posts in the niche" actually needs. See `.agents/external-services.md` for the confirmed endpoints and an open schema question (posts surfaced this way don't belong to any `profile_id`) that needs a decision before building.
-- **Groq** (primary) / **OpenRouter** (fallback) — both OpenAI-compatible, both go through `app/agent/providers.py` via the OpenAI SDK with a `base_url` override. Groq is tried first; any `openai.APIError` falls back to OpenRouter.
-- **Jev / TypeSafe AI** — the must-keep/meaning-preservation judge, called from `app/services/enforcement.py` via `typesafe-sdk`'s `system_one` API.
+- **Groq** (primary) / **OpenRouter** (fallback) — both OpenAI-compatible, both go through `legacy/app/agent/providers.py` via the OpenAI SDK with a `base_url` override. Groq is tried first; any `openai.APIError` falls back to OpenRouter.
+- **Jev / TypeSafe AI** — the must-keep/meaning-preservation judge, called from `legacy/app/services/enforcement.py` via `typesafe-sdk`'s `system_one` API.
 - **neatlogs** — wraps both provider clients and the agent loop (`@neatlogs.span(kind="WORKFLOW")`) so every chat request shows up as one trace with its nested LLM calls grouped underneath.
 - **Google (MCP connectors)** — Drive/Docs via Google's official MCP servers, called by Lumi's own in-backend MCP client (`mcp` SDK, Streamable HTTP) with a per-user OAuth token we obtain, store (`mcp_auth_accounts`), and refresh. Connector tools ride the same Groq tool-calling loop; writes require explicit user confirmation. Setup checklist + "add another connector" recipe: `docs/mcp-connectors.md`.
 
@@ -123,7 +125,8 @@ MCP_ENABLED / MCP_GDRIVE_ENABLED / MCP_GDOCS_ENABLED   connector switches (defau
 ## How to run
 
 ```
-cp .env.example .env   # fill in the keys
+cd legacy
+cp ../.env.example .env   # fill in the keys
 uv run alembic upgrade head
 uv run uvicorn app.main:app --reload
 ```
@@ -133,6 +136,7 @@ uv run uvicorn app.main:app --reload
 Schema changes go through Alembic, not `SQLModel.metadata.create_all`.
 
 ```
+cd legacy
 uv run alembic revision --autogenerate -m "describe the change"
 uv run alembic upgrade head
 ```

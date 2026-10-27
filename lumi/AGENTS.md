@@ -1,5 +1,7 @@
 ﻿# Lumi — Agent Guide
 
+> **Nota de rutas:** el backend FastAPI que describe este archivo (`app/`, `alembic/`, `alembic.ini`, sus 5 scripts y `tests/`) se movió a `lumi/legacy/` como referencia: no se despliega ni se mantiene (ver `legacy/README.md`). El backend actual es Django (`apps/`, `config/`, `manage.py`, `lumi_ai/`). Donde este archivo diga `app/`, `alembic/` o `tests/` sin más, léelo como `legacy/app/`, `legacy/alembic/` y `legacy/tests/`.
+
 > This file is the working map of the codebase **and** the mandatory working process.
 > Deep map generated 2026-10-12 from a full read of `lumi/` (backend, frontend, data layer, services, docs).
 > If anything here conflicts with the actual code, **the code wins** — then fix this file.

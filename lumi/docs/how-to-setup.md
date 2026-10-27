@@ -159,6 +159,7 @@ lumi/
 ├── config/         # ajustes de Django (base, dev, prod, test), urls, asgi
 ├── apps/           # apps de Django: accounts, core, profiles, chat, connections, intelligence
 ├── lumi_ai/        # motor del agente (proveedores, bucle, RAG, estilo), sin Django
+├── legacy/         # backend FastAPI anterior, solo referencia (ver legacy/README.md)
 ├── frontend/       # interfaz React + Vite
 ├── docs/           # este archivo, contratos, esquema y notas (docs/README.md es el índice)
 ├── plan/           # planes y estado de cada bot
@@ -166,4 +167,4 @@ lumi/
 └── .env.example    # plantilla de entorno: cópiala a .env
 ```
 
-`app/`, `alembic/` y `tests/` son el backend FastAPI anterior. Siguen en el árbol hasta que el equipo apruebe borrarlos; no son parte del backend nuevo.
+El backend FastAPI anterior (`app/`, `alembic/`, `alembic.ini`, sus 5 scripts y sus 422 tests) está en `legacy/`. Es código de referencia: no se despliega, no se mantiene y el `pytest` normal no lo recoge. Para correr sus tests, mira `legacy/README.md`.

@@ -2,7 +2,7 @@
 
 ``legacy_schema.sql`` and ``legacy_rows.sql`` are what the tests load (see
 ``legacy_db.py``), so the tests no longer import ``app``. This module is the only
-place that does, and only to rebuild those two files while ``lumi/app/`` still exists:
+place that does, and only to rebuild those two files while ``lumi/legacy/app/`` still exists:
 
     uv run python -m apps.core.tests.legacy_regen
 
@@ -12,6 +12,7 @@ Rows go through the legacy models, so the file holds the same text the old code 
 
 from __future__ import annotations
 
+import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -19,6 +20,7 @@ from sqlalchemy import create_engine
 from sqlmodel import Session, SQLModel
 
 HERE = Path(__file__).parent
+LEGACY_ROOT = HERE.parents[2] / "legacy"  # lumi/legacy
 DEFAULT_STAMP = "2026-01-15 12:00:00.000000"
 
 
@@ -27,6 +29,10 @@ def dt(day: int, hour: int = 12) -> datetime:
 
 
 def build_with_legacy_models(path: Path, *, populate=True) -> Path:
+    if str(LEGACY_ROOT) not in sys.path:
+        sys.path.insert(
+            0, str(LEGACY_ROOT)
+        )  # ``app`` lives in lumi/legacy, off the default path
     import app.models as m  # the legacy models
 
     engine = create_engine(f"sqlite:///{path}")

@@ -40,7 +40,9 @@ dependencies = [
 package = false
 
 [tool.ruff]
-extend-exclude = ["alembic/versions", "apps/*/migrations"]
+# ``app`` (the old FastAPI code) lives in legacy/, so isort must still see it as first party.
+src = [".", "legacy"]
+extend-exclude = ["legacy/alembic/versions", "apps/*/migrations"]
 
 [tool.ruff.lint.per-file-ignores]
 "apps/**/models.py" = ["RUF012"]  # Django Meta and class attributes
@@ -54,7 +56,10 @@ markers = [
     "live: llama a un servicio real y necesita keys en lumi/.env (se omite salvo LUMI_RUN_LIVE=1)",
 ]
 python_files = ["test_*.py"]
-testpaths = ["tests", "apps"]
+testpaths = ["apps"]
+# lumi/legacy is the old FastAPI backend, kept as reference. It has its own pytest.ini and is run by
+# hand (see legacy/README.md). These are pytest's default ignores plus legacy.
+norecursedirs = ["*.egg", ".*", "_darcs", "build", "CVS", "dist", "node_modules", "venv", "{arch}", "legacy"]
 
 [dependency-groups]
 dev = [

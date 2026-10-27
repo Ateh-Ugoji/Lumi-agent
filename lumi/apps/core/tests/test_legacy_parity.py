@@ -37,7 +37,7 @@ def test_the_committed_report_matches_the_map() -> None:
 def test_the_frozen_names_match_lumi_tests_while_it_exists() -> None:
     on_disk = parity.legacy_names_on_disk()
     if on_disk is None:
-        pytest.skip("lumi/tests is gone: the frozen list is the only record")
+        pytest.skip("lumi/legacy/tests is gone: the frozen list is the only record")
     frozen: dict[str, set[str]] = {}
     for legacy_file, test, _ in parity.legacy_tests():
         frozen.setdefault(legacy_file, set()).add(test)
