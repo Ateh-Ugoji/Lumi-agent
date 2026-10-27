@@ -155,7 +155,7 @@ Todos los datos salen como los dataclass de `lumi_ai.ports` o como `TypedDict`, 
 
 Los puertos `ProfileStore`, `PostStore`, `ListeningStore` y `ChatStore` los implementa INTELLIGENCE en `apps/intelligence/repos.py` encima de estas funciones. ARCHITECT no importa `lumi_ai` en ninguna vista salvo `runtime`.
 
-`ChatMessageIn` de `ports.py` no trae `tool_call_id`, que `SCHEMA.md` 6.4 añade a `chat_messages`. Petición a INTELLIGENCE: añadir `tool_call_id: str | None = None` en `ChatMessageIn` y `ChatMessageOut` (cambio aditivo, puertos 1.4). Hasta entonces la columna queda nula.
+`ChatMessageIn` de `ports.py` no trae `tool_call_id`, que `SCHEMA.md` 6.4 añade a `chat_messages`. Petición a INTELLIGENCE: añadir `tool_call_id: str | None = None` en `ChatMessageIn` y `ChatMessageOut` (cambio aditivo, puertos 1.5). Hasta entonces la columna queda nula.
 
 ## 6. Migraciones publicadas
 
