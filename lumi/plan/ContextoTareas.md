@@ -245,3 +245,9 @@ El orquestador eligió (c) mientras Christian decide. Entretanto, ARCHITECT comp
   - Esto cambia CONTRATOS §4 y §11: los callbacks dejan de ser públicos, y los `redirect_uri` registrados en cada proveedor pasan a `FRONTEND_URL`.
   - Hasta que esté arreglado, no se abre ninguna conexión social real a usuarios.
   - Cuando se suba el cambio, el orquestador tiene que actualizar las URLs de callback en `API_KEYS.md`, `AGENT_KEYS_SETUP.md` y las decisiones de Christian, incluido el callback de PFM.
+
+## Revisión horaria, 27 oct 2026, 08:10 UTC
+- main avanzó a `632217e` (fotos de perfil en el flujo de pensamiento, guardadas en la base). Se fusionó en `lumi-orquestador` sin force-push. Hubo un conflicto: `lumi/frontend/src/api/client.ts` lo borró CONNECT al partir el cliente en módulos. Los dos campos nuevos se pasaron a `api/chat.ts` (`SamplePost.avatar_url`) y `api/trends.ts` (`TrendMatch.author_avatar_url`), y `App.tsx` calcula `activeAvatarUrl` desde `activeProfile`. `tsc --noEmit` limpio.
+- Falta portar al backend Django lo que main añadió en el legado: columna `listening_matches.author_avatar_url` (migración alembic `b7f3a91c5d20`), avatar en `services/handle_db.py`, `tools/listening.py`, `routers/trends.py` y `agent/loop.py`, con su test `tests/test_handle_db.py`. Le toca a ARCHITECT (trends) y a CONNECT (handles). Esto suma tests legados al mapa de paridad.
+- Últimos commits: ARCHITECT 08:07, INTELLIGENCE 08:08, CONNECT 07:39 (tiene cambios sin subir en `CONNECT-decisiones.tsv`; está con la revisión de seguridad de OAuth). Ninguno lleva más de 2 horas sin commits.
+- Sigue sin aparecer `/workspace/lumi-data/lumi.db`.
