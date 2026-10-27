@@ -5,7 +5,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 from asgiref.sync import sync_to_async
-from django.db import connection, connections
+from django.db import IntegrityError, connection, connections, transaction
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
@@ -18,6 +18,7 @@ from apps.profiles.models import (
     MetricSnapshot,
     PollConfig,
     Post,
+    PostMedia,
     SocialHandle,
     SocialProfile,
 )
@@ -279,6 +280,35 @@ def test_media_is_replaced_by_position(handle_id):
         Post.objects.get().media.order_by("position").values_list("kind", "url")
     )
     assert media == [("gif", "n0"), ("video", "u1")]
+
+
+def test_media_with_unknown_kind_is_stored_as_null(handle_id, profile_id):
+    """Ports 1.9: ``MediaRef(kind=None)`` means "type unknown". It is stored, never guessed."""
+    services.upsert_posts(
+        handle_id,
+        [
+            post_in(
+                "1", media=(MediaRef(None, "https://x/a.jpg"), MediaRef("video", "v"))
+            )
+        ],
+    )
+    media = list(
+        Post.objects.get().media.order_by("position").values_list("kind", "url")
+    )
+    assert media == [(None, "https://x/a.jpg"), ("video", "v")]
+    out = services.list_posts(profile_id)[0]
+    assert [(m.kind, m.url) for m in out.media] == [
+        (None, "https://x/a.jpg"),
+        ("video", "v"),
+    ]
+
+
+def test_media_with_an_invalid_kind_is_still_rejected(handle_id):
+    with pytest.raises(IntegrityError), transaction.atomic():
+        services.upsert_posts(
+            handle_id, [post_in("1", media=(MediaRef("audio", "u"),))]
+        )
+    assert not PostMedia.objects.exists()
 
 
 def test_stub_becomes_a_post_on_upsert(handle_id):

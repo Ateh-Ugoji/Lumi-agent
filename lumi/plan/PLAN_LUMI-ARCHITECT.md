@@ -79,7 +79,7 @@ Regla de integración: `config/urls.py` incluye desde el día 1 `apps.accounts.u
 - ASGI: uvicorn. Las vistas de chat y streaming son vistas async de Django; el resto, DRF.
 - Tareas en segundo plano: evalúa Celery + Redis frente a una cola en Postgres (django-tasks) en `docs/ADR-0002-tareas.md` en la tarea T9. Recomendación inicial: Celery + Redis + Celery Beat, porque hay tareas periódicas (poller), reintentos y varios workers; en tests, ejecución síncrona (`CELERY_TASK_ALWAYS_EAGER`). Cualquier estado compartido (OAuth `state`, escrituras pendientes de MCP) va a Postgres o a la caché de Django respaldada por Redis, nunca a memoria del proceso.
 - Política de keys (aplícala en `apps/core/keys.py`):
-  - Obligatorias: `DATABASE_URL`, `SECRET_KEY`, `TOKEN_ENCRYPTION_KEY`, `GROQ_API_KEY`, `OPENROUTER_API_KEY`.
+  - Obligatorias: `DATABASE_URL`, `SECRET_KEY`, `TOKEN_ENCRYPTION_KEY`, `GROQ_API_KEY`. `OPENROUTER_API_KEY` es opcional (respaldo de Groq).
   - Opcionales con aviso `WARNING` al arrancar: `TYPESAFE_API_KEY`, `NEATLOGS_API_KEY` (hoy obligatorias; se relajan), `PFM_JWT_TOKEN`, `XPOZ_API_KEY`, `XPOZ_API_KEY_2`, `OPENLUX_*`, `CHROMA_*`, `META_*`, `LINKEDIN_*`, `X_*`, `VIDEO_*`, `GOOGLE_OAUTH_*`.
   - Con `DJANGO_SETTINGS_MODULE=config.settings.test` nada de eso es necesario salvo `DATABASE_URL`.
   - Nombres definitivos en `lumi/docs/API_KEYS.md` (lo mantiene el orquestador; avísale si añades o renombras alguna).

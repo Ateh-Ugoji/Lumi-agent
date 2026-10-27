@@ -56,6 +56,7 @@ Cada fila es un comportamiento donde el backend nuevo difiere del legado a prop�
 | 16 | Intentos y evaluaciones | Dos transacciones | Una (`evaluations=`, puertos 1.8) | Retirada | `apps/intelligence/tests/test_repos.py` (casos con `evaluations=`) |
 | 18 | Analytics: totales | Suma todas las lecturas de cada post, así que un post leído tres veces cuenta tres | Suma la lectura más reciente de cada post | **Aceptada por el orquestador** | `apps/profiles/tests/test_parity.py::test_row_18_analytics_adds_the_latest_reading_of_each_post_not_every_reading` (más `test_services.py::test_analytics_counts_the_latest_snapshot_of_each_post_once`) |
 | 19 | Importador | No existía | Una transacción, ids conservados solo en perfiles, posts y chat, cero pérdida | Aceptada (cero pérdida exigida) | `apps/core/tests/test_legacy_import.py::test_every_legacy_row_is_imported_or_kept_with_its_payload` y `::test_the_duplicate_metric_reading_of_post_12_is_not_lost` |
+| 21 | `post_media.kind` | Obligatorio | Admite NULL = tipo desconocido (puertos 1.9), nunca adivinado | Aceptada (orquestador y Christian) | `apps/profiles/tests/test_parity.py::test_row_21_media_of_unknown_type_is_stored_as_null_not_guessed` |
 
 Nota sobre la fila 18: `reach_series` y `saves_series` siguen recorriendo todas las lecturas en orden, como el legado. Solo los totales cambian.
 

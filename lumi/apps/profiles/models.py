@@ -329,7 +329,10 @@ class MediaKind(models.TextChoices):
 class PostMedia(models.Model):
     post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name="media")
     position = models.SmallIntegerField(db_default=0)
-    kind = models.CharField(max_length=8, choices=MediaKind.choices)
+    # NULL means "type unknown" (ports 1.9): some sources send a bare URL. Never guessed.
+    kind = models.CharField(
+        max_length=8, choices=MediaKind.choices, null=True, blank=True
+    )
     url = models.TextField()
     thumbnail_url = models.TextField(db_default="", blank=True)
     duration_seconds = models.DecimalField(
@@ -345,7 +348,7 @@ class PostMedia(models.Model):
                 fields=["post", "position"], name="uq_post_media_post_position"
             ),
             models.CheckConstraint(
-                condition=_in("kind", MediaKind), name="ck_post_media_kind"
+                condition=_nullable_in("kind", MediaKind), name="ck_post_media_kind"
             ),
             models.CheckConstraint(
                 condition=Q(duration_seconds__isnull=True) | Q(duration_seconds__gt=0),

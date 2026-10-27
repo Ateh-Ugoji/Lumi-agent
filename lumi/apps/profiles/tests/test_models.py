@@ -238,5 +238,6 @@ def test_baseline_and_media_and_match_rules(profile, post):
     fails(
         lambda: PostMedia.objects.create(post=post, position=1, kind="audio", url="u")
     )
+    PostMedia.objects.create(post=post, position=2, kind=None, url="u")  # unknown type
     ListeningMatch.objects.create(profile=profile, post=post)
     fails(lambda: ListeningMatch.objects.create(profile=profile, post=post))

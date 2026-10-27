@@ -174,6 +174,7 @@ Las apps ajenas declaran `dependencies = [("profiles", "0001_initial")]` (o la q
 | --- | --- | --- |
 | `accounts.0001_initial` | `User`, `AuthToken` (depende de `auth.0012`) | publicada |
 | `profiles.0001_initial` | `SocialHandle`, `HandleSnapshot`, `SocialProfile`, `ProfileBaseline`, `PollConfig`, `ListeningKeyword`, `Post`, `PostMedia`, `MetricSnapshot`, `Alert`, `ListeningMatch` | publicada |
+| `profiles.0002_post_media_kind_nullable` | `post_media.kind` admite NULL y `ck_post_media_kind` pasa a `kind IS NULL OR kind IN ('image','video','gif')` | publicada |
 | `core.0001_initial` | `BackgroundJob`, `LegacyImportMap` | T3 |
 | `chat.0001_initial` | `ChatMessage` | T3 |
 | `connections.0001` a `0005` | `0001_initial` (cuentas, estados OAuth, publicaciones, caché y libro de créditos), `0002_account_details_and_state_profile`, `0003_publish_job_attempt_fk`, `0004_mcp_pending_writes`, `0005_provider_google` (añade `google` al CHECK `ck_connected_accounts_provider`) | publicadas (CONNECT) |
@@ -200,7 +201,7 @@ Formato del cifrado: token Fernet estándar. El cifrado vive solo en `apps.core.
 
 Política (fija, ver `AGENTS.md`):
 
-1. Las variables **obligatorias** son `DATABASE_URL`, `SECRET_KEY`, `TOKEN_ENCRYPTION_KEY`, `GROQ_API_KEY` y `OPENROUTER_API_KEY`. Si falta alguna, el arranque falla con un solo error que las lista todas.
+1. Las variables **obligatorias** son `DATABASE_URL`, `SECRET_KEY`, `TOKEN_ENCRYPTION_KEY` y `GROQ_API_KEY`. Si falta alguna, el arranque falla con un solo error que las lista todas. `OPENROUTER_API_KEY` es opcional (respaldo de Groq), igual que en `.env.example` y en `check_keys`.
 2. Las **opcionales** desactivan su servicio y emiten un `WARNING` por variable. La ruta que lo necesita responde `503 not_configured`.
 3. Ningún valor aparece en logs, errores, commits ni documentos. Los documentos solo nombran variables.
 4. `python manage.py check_keys` hace una llamada mínima real por servicio. Códigos de salida: 0 todo bien, 1 falta una obligatoria o falló un servicio configurado, 2 id desconocido. Opciones `--only id1,id2` y `--json`. Funciona con el entorno vacío (muestra qué falta).
@@ -292,6 +293,7 @@ Pendiente de otros equipos, sin importador hoy (el `--verify` los marca `sin imp
 | 18 | Analytics | **Aceptado por el orquestador.** Los totales suman la lectura más reciente de cada post. El código legado sumaba todas las lecturas y contaba un post varias veces. Las series (`reach_series`, `saves_series`) siguen usando todas las lecturas. Está en la matriz de paridad (`plan/estado/ARCHITECT.md`) con test. | Orquestador |
 | 19 | Importador | **Aceptado**: todo en una transacción (un savepoint por importador) e ids conservados solo en perfiles, posts y chat (sección 10). **Rechazado** perder la lectura de métricas duplicada: cero pérdida verificable; `legacy_import_map` guarda `outcome` y el `payload` de cada fila fusionada u omitida (`SCHEMA.md` 10). | Orquestador |
 | 20 | `connected_accounts.external_account_id` de PFM | **Aceptado.** Va en texto plano, no cifrado. Es el identificador con el que se llama a PFM y la clave del único (`provider`, `external_account_id`), no una credencial: PFM guarda las credenciales. Cifrarlo impediría la restricción única y la búsqueda. Corrige cualquier texto anterior de ARCHITECT que dijera que se cifraba. Los tokens (`access_token`, `refresh_token`) siguen cifrados. | CONNECT |
+| 21 | `post_media.kind` | Obligatorio (`image`, `video`, `gif`) | Admite NULL = tipo desconocido (puertos 1.9, `MediaRef.kind` puede ser `None`). No se adivina por la URL. Un tipo inválido sigue rechazado por el CHECK. `lumi.db` no guarda medios, así que el importador no crea ninguno. | Aceptada (orquestador y Christian) | ARCHITECT, INTELLIGENCE |
 
 ## 12. Cómo se pide un cambio
 

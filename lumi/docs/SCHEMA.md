@@ -322,7 +322,7 @@ La plataforma y el handle viven en `social_handles`. La identidad externa de la 
 | `id` | bigint PK | |
 | `post_id` | FK `posts` NN | `CASCADE`. |
 | `position` | smallint NN | Defecto 0. |
-| `kind` | varchar(8) NN | `image`, `video`, `gif`. |
+| `kind` | varchar(8) | Nulo (tipo desconocido, puertos 1.9) o `image`, `video`, `gif`. Nunca se adivina por la URL. CHECK `ck_post_media_kind` (`profiles.0002`). |
 | `url` | text NN | |
 | `thumbnail_url` | text NN | Defecto `''`. |
 | `duration_seconds` | numeric(8,2) | Nulo o mayor que 0. |

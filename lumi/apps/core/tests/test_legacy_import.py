@@ -1,5 +1,6 @@
 import hashlib
 import json
+import sqlite3
 from io import StringIO
 
 import pytest
@@ -17,6 +18,7 @@ from apps.profiles.models import (
     MetricSnapshot,
     PollConfig,
     Post,
+    PostMedia,
     ProfileBaseline,
     SocialHandle,
     SocialProfile,
@@ -276,8 +278,6 @@ def test_missing_file_is_a_clear_error(tmp_path):
 
 
 def test_legacy_tables_list_matches_the_frozen_schema(legacy):
-    import sqlite3
-
     conn = sqlite3.connect(legacy)
     try:
         names = {
@@ -339,6 +339,21 @@ def test_every_legacy_row_is_imported_or_kept_with_its_payload(legacy):
                     assert json.loads(entry.payload) == row, (table, pk)
     outcomes = {e.outcome for es in entries.values() for e in es}
     assert outcomes == {"imported", "merged", "skipped"}
+
+
+def test_legacy_has_no_media_so_the_import_creates_none(legacy):
+    """``lumi.db`` has no media column or table, so ``post_media.kind`` never needs a guess."""
+    import sqlite3
+
+    db = sqlite3.connect(str(legacy))
+    names = [r[0] for r in db.execute("SELECT name FROM sqlite_master")]
+    columns = [r[1] for r in db.execute("PRAGMA table_info(posts)")]
+    db.close()
+    assert not [n for n in names if "media" in n.lower()]
+    assert not [c for c in columns if "media" in c.lower()]
+    run(legacy)
+    assert Post.objects.exists()
+    assert not PostMedia.objects.exists()
 
 
 def test_the_duplicate_metric_reading_of_post_12_is_not_lost(legacy):
