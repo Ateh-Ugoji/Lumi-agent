@@ -1,0 +1,18 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+.ruff_cache/
+.pytest_cache/
+*.db
+
+# Frontend
+node_modules/
+dist/
+*.local
+frontend/node_modules/
+frontend/dist/
+frontend/*.local
+
+# Agent runtime memory (rolling summary, regenerated)
+memory.md

@@ -1,0 +1,44 @@
+[project]
+name = "lumi"
+version = "0.1.0"
+description = "Chat-based social listening and caption repurpose agent for X"
+authors = [
+    { name = "gbemike", email = "gbemike2002@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "aiosqlite>=0.22.1",
+    "alembic>=1.20.0",
+    "asyncpg>=0.32.0",
+    "chromadb>=1.5.9",
+    "fastapi>=0.143.0",
+    "greenlet>=3.5.6",
+    "httpx>=0.28.1",
+    "mcp==2.3.0",
+    "neatlogs>=1.4.26",
+    "openai>=3.28.0",
+    "psycopg2-binary>=2.9.13",
+    "pydantic>=2.14.0",
+    "pydantic-settings>=2.15.0",
+    "python-multipart>=0.0.32",
+    "sqlmodel>=0.0.48",
+    "typesafe-sdk>=0.7.4",
+    "uvicorn[standard]>=0.54.0",
+]
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+extend-exclude = ["alembic/versions"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+pythonpath = ["."]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+    "ruff>=0.17.0",
+]
