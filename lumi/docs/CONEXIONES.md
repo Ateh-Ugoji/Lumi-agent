@@ -18,8 +18,8 @@ El orquestador debe copiarlas a `API_KEYS.md` y ARCHITECT a `.env.example`.
 
 | Variable | Valor por defecto | Para qué sirve |
 | --- | --- | --- |
-| `PUBLIC_BASE_URL` | `http://localhost:8000` | URL pública del backend. De ella salen las redirect URIs |
-| `FRONTEND_URL` | `http://localhost:3010` | Adónde vuelve el usuario tras conectar (`?connected=` o `?error=`) |
+| `PUBLIC_BASE_URL` | `http://localhost:8000` | URL pública del backend |
+| `FRONTEND_URL` | `http://localhost:3010` | Del frontend salen las redirect URIs: el proveedor devuelve al usuario a una página de esta app |
 | `X_LIVE_ENABLED` | `false` | Interruptor de toda llamada real a X |
 | `XPOZ_LIVE_ENABLED` | `false` | Interruptor de las llamadas reales a Xpoz (cada consulta gasta créditos) |
 | `XPOZ_DAILY_CREDIT_CAP_USER` | `60` | Créditos de Xpoz que un usuario puede gastar en 24 h. Se lee de `xpoz_credit_ledger`, así que aguanta reinicios y varios procesos. `0` bloquea el gasto |
@@ -35,21 +35,24 @@ Los valores por defecto de `XPOZ_RUN_CREDIT_BUDGET`, `HANDLE_CACHE_TTL_MINUTES` 
 
 ## Redirect URIs exactas
 
-Formato `{PUBLIC_BASE_URL}/api/v1/connections/<provider>/callback`. Cada consola compara la URI carácter por carácter, así que pega exactamente estas.
+Formato `{FRONTEND_URL}/connections/<provider>/callback`. **Es una página del frontend, no una ruta del backend.** El proveedor redirige ahí, la página lee `code` y `state` y los envía con el Token del usuario a `POST /api/v1/connections/<provider>/callback`. Cada consola compara la URI carácter por carácter, así que pega exactamente estas.
 
 | Proveedor | URI en local | URI en producción |
 | --- | --- | --- |
-| Meta | `http://localhost:8000/api/v1/connections/meta/callback` | `https://<tu-dominio>/api/v1/connections/meta/callback` |
-| LinkedIn | exige HTTPS, ver nota | `https://<tu-dominio>/api/v1/connections/linkedin/callback` |
-| X | `http://127.0.0.1:8000/api/v1/connections/x/callback` | `https://<tu-dominio>/api/v1/connections/x/callback` |
-| Google | `http://localhost:8000/api/v1/connections/google/callback` | `https://<tu-dominio>/api/v1/connections/google/callback` |
+| Meta | `http://localhost:3010/connections/meta/callback` | `https://<tu-frontend>/connections/meta/callback` |
+| LinkedIn | exige HTTPS, ver nota | `https://<tu-frontend>/connections/linkedin/callback` |
+| X | `http://127.0.0.1:3010/connections/x/callback` | `https://<tu-frontend>/connections/x/callback` |
+| Google | `http://localhost:3010/connections/google/callback` | `https://<tu-frontend>/connections/google/callback` |
+| Post for Me | `http://localhost:3010/connections/pfm/callback` | `https://<tu-frontend>/connections/pfm/callback` |
+
+Post for Me no tiene consola de redirect URI de OAuth. Esa URL va en su panel como "redirect URL" (ver más abajo). Si cambias `FRONTEND_URL`, cambia las cinco URIs a la vez. El hosting del frontend debe devolver `index.html` para `/connections/*` (en Vite ya lo hace).
 
 Notas.
 
-- X pide `127.0.0.1` y no acepta `localhost` en local. Fuente https://docs.x.com/resources/fundamentals/developer-apps (2026-10-27). Si usas `127.0.0.1` en la consola, `PUBLIC_BASE_URL` debe ser `http://127.0.0.1:8000` durante esa prueba.
-- LinkedIn dice "Add the redirect (callback) URL via HTTPS" y que la URL debe ser absoluta, sin `#`, y que los parámetros de consulta se ignoran. Fuente https://learn.microsoft.com/en-us/linkedin/shared/authentication/authorization-code-flow (2026-10-27). Si acepta `http://localhost` queda sin verificar. Para probar en local usa un túnel HTTPS (por ejemplo `cloudflared` o `ngrok`) y pon esa URL en `PUBLIC_BASE_URL`.
+- X pide `127.0.0.1` y no acepta `localhost` en local. Fuente https://docs.x.com/resources/fundamentals/developer-apps (2026-10-27). Si usas `127.0.0.1` en la consola, abre el frontend y pon `FRONTEND_URL` en `http://127.0.0.1:3010` durante esa prueba.
+- LinkedIn dice "Add the redirect (callback) URL via HTTPS" y que la URL debe ser absoluta, sin `#`, y que los parámetros de consulta se ignoran. Fuente https://learn.microsoft.com/en-us/linkedin/shared/authentication/authorization-code-flow (2026-10-27). Si acepta `http://localhost` queda sin verificar. Para probar en local usa un túnel HTTPS (por ejemplo `cloudflared` o `ngrok`) y pon esa URL en `FRONTEND_URL`.
 - Meta compara la URI contra "Valid OAuth Redirect URIs". Fuente https://developers.facebook.com/docs/facebook-login/guides/advanced/manual-flow (2026-10-27). Que `http://localhost` valga para apps en modo Development está sin verificar en la página oficial.
-- Post for Me no usa redirect URI de Lumi. Conecta las cuentas con su propio OAuth y Lumi solo guarda el id de cuenta de PFM.
+- Post for Me conecta las cuentas con su propio OAuth y Lumi solo guarda el id de cuenta de PFM.
 
 ## Meta (Facebook Pages)
 
@@ -176,7 +179,7 @@ El frontend vive en `lumi/frontend` (Vite, React 19, puerto 3010) y habla solo c
 
 - `src/api/http.ts` es el único cliente. Pone `Authorization: Token <key>`, entiende `{"error":{"code","message","details"}}` y abre el stream del chat. Pide `text/event-stream, application/json;q=0.5` porque DRF contesta 406 si solo se acepta `text/event-stream`.
 - `src/auth/` guarda el token y muestra el login o el registro antes de la app (`AuthGate` en `main.tsx`). Un 401 limpia el token y vuelve al login.
-- `src/api/connections.ts` pide `POST /connections/{provider}/connect`, abre `authorize_url` y, al volver, lee el fragmento `#connect=&code=&state=`, lo borra de la URL al instante y llama a `POST /connections/{provider}/complete` con el Token del usuario; luego muestra el aviso. Los errores del proveedor siguen llegando como `?error=`. Con Post for Me llama a `GET /connections/pfm/status` al volver, porque el callback de PFM no trae el estado de Lumi y esa llamada es la que sincroniza las cuentas.
+- `src/api/connections.ts` pide `POST /connections/{provider}/connect`, abre `authorize_url` y, al volver a `/connections/{provider}/callback` lee `code`, `state` o `error` de la consulta, reemplaza la URL por `/` al instante y llama a `POST /connections/{provider}/callback` con el Token del usuario; luego muestra el aviso. Si el usuario canceló, envía `{state, error}` para quemar el state. Con Post for Me lee `isSuccess` y llama a `GET /connections/pfm/status`, porque PFM no trae `state` y esa llamada es la que sincroniza las cuentas.
 - Los códigos de error del callback llegan con prefijo (`connections.access_denied`). El mapa de mensajes acepta también la forma sin prefijo que lista CONTRATOS.
 - Publicación: el borrador se revisa con `dry_run`, y la publicación real exige pulsar dos veces (iniciar y confirmar). Cada intento lleva su `Idempotency-Key`.
 - Ningún token de proveedor llega al navegador. Las pruebas lo comprueban en el DOM.
@@ -197,7 +200,7 @@ export DATABASE_URL=$(uv run python scripts/dev_postgres.py --test)   # Postgres
 cd e2e && npm install && npx playwright test
 ```
 
-Playwright abre el Chrome del equipo (`channel: "chrome"`), levanta `e2e/server.py` en el puerto 8000 y Vite en el 3010. El servidor e2e borra y recrea la base `lumi_e2e` en cada arranque y reconstruye el entorno desde cero, así que una clave de tu shell nunca llega a un proveedor. `e2e/sim.py` simula Meta y Post for Me con las respuestas grabadas de `tests/fixtures`, y las pantallas de consentimiento se contestan con redirecciones al callback real de Lumi. Por defecto el chat usa el agente real (`E2E_AGENT=real`); con `E2E_AGENT=fake` vuelve el doble anterior (`FakeRuntime`).
+Playwright abre el Chrome del equipo (`channel: "chrome"`), levanta `e2e/server.py` en el puerto 8000 y Vite en el 3010. El servidor e2e borra y recrea la base `lumi_e2e` en cada arranque y reconstruye el entorno desde cero, así que una clave de tu shell nunca llega a un proveedor. `e2e/sim.py` simula Meta y Post for Me con las respuestas grabadas de `tests/fixtures`, y las pantallas de consentimiento se contestan con redirecciones a la página de callback del frontend, como hacen los proveedores. Por defecto el chat usa el agente real (`E2E_AGENT=real`); con `E2E_AGENT=fake` vuelve el doble anterior (`FakeRuntime`).
 
 Qué es real y qué es un doble en el agente real, sin gastar nada:
 
@@ -213,7 +216,7 @@ Los nueve pasos: registro, perfil, estado de los proveedores, conectar Facebook,
 1. Poner las claves de cada proveedor en `lumi/.env` (orden de la sección anterior). No hay que tocar el frontend.
 2. `VITE_API_BASE` solo hace falta si el backend no está en `http://localhost:8000/api/v1`.
 3. Para desarrollar: `npm run dev:backend` y `npm run dev:frontend` desde `lumi/`. El backend usa uvicorn (ASGI) porque el stream del chat no funciona bien con `runserver`.
-4. En `FRONTEND_URL` va la URL del frontend (`http://localhost:3010`) y en `PUBLIC_BASE_URL` la del backend. Los redirect URI de cada app registran la del backend.
+4. En `FRONTEND_URL` va la URL del frontend (`http://localhost:3010`) y en `PUBLIC_BASE_URL` la del backend. Los redirect URI de cada app registran la del frontend.
 
 ### Huecos conocidos
 
@@ -234,7 +237,7 @@ Estado al 2026-10-27. Todo vive en `lumi/apps/connections/`. El núcleo funciona
 | Modelos | `models.py`, `migrations/0001_initial.py` | `ConnectedAccount`, `OAuthState`, `PublishJob`, `McpAuthAccount`, `HandleSearchCache`, `HandleSearchCacheEntry`, `XpozCreditLedger`. Las reglas viven en la base: UNIQUE, CHECK y FK. |
 | Almacenes | `stores.py` | Implementaciones Django de los puertos puros. `OAuthState.consume` es un único `UPDATE ... RETURNING`. `PublishJob` es el libro de idempotencia. |
 | Cliente HTTP | `http.py` | Transporte inyectable, lista de hosts permitidos, sin redirecciones, errores tipados sin URL ni cuerpo. Escrituras sin reintento. |
-| OAuth | `oauth.py` | `state` de un solo uso con caducidad de 10 minutos, PKCE solo para X, destino posterior validado, usuario esperado en el callback. |
+| OAuth | `oauth.py` | `state` de un solo uso con caducidad de 10 minutos, PKCE solo para X, destino posterior validado, el `state` solo lo consume el usuario que lo empezó (un solo `UPDATE ... WHERE user_id`). |
 | Proveedores | `providers/{meta,linkedin,x}.py` | Contrato común `SocialProvider`. X queda apagado con `X_LIVE_ENABLED=false`: cero peticiones. |
 | Publicación | `publishing.py` | `confirm` obligatorio, clave de idempotencia, un fallo ambiguo queda como `unknown` y no se reintenta solo. |
 | Claves | `keys.py`, `apps.py` | Registra `meta`, `linkedin` y `x` en `check_keys`. Meta se sonda con un token de app (gratis). X nunca se sonda. |
@@ -258,18 +261,18 @@ Todas bajo `/api/v1/connections/{provider}`, con `provider` en `pfm|meta|linkedi
 | Ruta | Qué hace |
 | --- | --- |
 | `POST .../connect` | Cuerpo opcional `profile_id`, `redirect_after`, `platform` (solo PFM). Responde `{"authorize_url"}`. Sin llaves de la app responde 503 `not_configured` con `details.env_vars`. X apagado responde 409 `connections.live_disabled`. |
-| `GET .../callback` | Pública. No intercambia nada. Con `code` y `state` responde 302 al frontend con `#connect=<provider>&code=...&state=...` en el fragmento; si el usuario canceló, 302 con `?error=connections.access_denied`. Nunca devuelve JSON ni repite el texto del proveedor. |
-| `POST .../complete` | Autenticada. Cuerpo `{code, state}`. Termina la autorización solo si el `state` lo empezó el usuario del Token (si no, 400 `connections.state_invalid`). Devuelve `{provider, connected, accounts, redirect_after}`. |
+| `POST .../callback` | Autenticada con el Token. Cuerpo `{state, code}` o `{state, error}`. Termina la autorización solo si el `state` lo empezó el usuario del Token. Si lo empezó otro usuario responde 409 `connections.state_mismatch` y **no** consume el state, así que su dueño aún puede usarlo. Un state desconocido, usado o caducado responde 400 `connections.state_invalid` o `state_expired`. `error` o falta de `code` queman el state del propio usuario (400 `connections.access_denied` o `state_invalid`). En PFM responde 400 `connections.unsupported`. Devuelve `{provider, connected, accounts, redirect_after}` con `Cache-Control: no-store`. |
 | `GET .../status` | `configured`, `connected`, `stale` y la lista de cuentas sin tokens. En PFM sincroniza antes con `GET /v1/social-accounts?external_id=lumi-user-<id>`. |
 | `DELETE .../{provider}` | Revoca en el proveedor (si falla, borra igual) y borra las filas con sus tokens. `?account_id=` limita a una cuenta. |
 
-Códigos de `?error=`: `connections.state_invalid`, `connections.state_expired`, `connections.access_denied`, `connections.account_taken`, `connections.no_accounts`, `connections.pfm_failed`, `connections.provider_rejected`, `upstream_error`, `internal_error`.
+Códigos de error del callback: `connections.state_invalid`, `connections.state_expired`, `connections.state_mismatch`, `connections.access_denied`, `connections.account_taken`, `connections.no_accounts`, `connections.pfm_failed`, `connections.provider_rejected`, `upstream_error`, `internal_error`.
 
 Decisiones:
 
 - Meta guarda una fila por Página, con el token de la Página y sin vencimiento. Solo se enlaza a un perfil si la concesión trae una única cuenta.
-- PFM guarda el id de cuenta de PFM y deja los tokens vacíos, porque PFM conserva los suyos. Usa `external_id = lumi-user-<id>`: PFM rechaza una cuenta que ya tiene otro `external_id`, así que dos usuarios de Lumi no pueden compartir una cuenta de red social. La redirección de PFM no trae `state` de Lumi, por eso el callback de PFM no identifica a nadie y el frontend llama a `status` justo después.
-- La URL de retorno de PFM se configura en su panel (`PUBLIC_BASE_URL/api/v1/connections/pfm/callback`). `redirect_url_override` existe en la API pero no se usa. Sin verificar contra una cuenta real.
+- PFM guarda el id de cuenta de PFM y deja los tokens vacíos, porque PFM conserva los suyos. Usa `external_id = lumi-user-<id>`: PFM rechaza una cuenta que ya tiene otro `external_id`, así que dos usuarios de Lumi no pueden compartir una cuenta de red social. La redirección de PFM no trae `state` de Lumi: la página del frontend llama a `status` justo después y esa llamada sincroniza.
+- La URL de retorno de PFM se configura en su panel (`FRONTEND_URL/connections/pfm/callback`). `redirect_url_override` existe en la API pero no se usa. Sin verificar contra una cuenta real.
+- Riesgo residual de PFM: como no hay `state`, quien abra el enlace de autorización de PFM de otra persona conecta su red social al `external_id` de esa persona. El `external_id` es aleatorio por usuario (`pfm_links`) y la interfaz muestra el handle conectado para que el usuario lo reconozca. Cerrarlo del todo necesita que PFM acepte un `state` propio.
 - Renovación: `accounts.refresh_due()` (cola `connections.refresh_expiring` en `tasks.py` y comando `refresh_connections`). Renueva lo que vence en 7 días. Bloquea la fila durante la llamada porque X rota el refresh token. X apagado no envía nada. Falta que ARCHITECT programe la tarea en Celery beat.
 - Sin verificar: `DELETE /me/permissions` de Meta con un token de Página (se guarda el token de Página, no el de usuario).
 

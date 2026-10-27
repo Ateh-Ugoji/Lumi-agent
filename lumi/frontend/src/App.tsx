@@ -35,15 +35,13 @@ import {
   connectLinksFrom,
   deleteChatHistory,
   generateChatTitle,
-  completeConnect,
+  finishConnect,
   getProfileAnalytics,
-  parseConnectHandoff,
-  parseConnectReturn,
+  parseCallbackLanding,
   sendChatMessage,
   streamChatMessage,
-  stripConnectHandoff,
-  stripConnectReturn,
-  type ConnectHandoff,
+  CALLBACK_DONE_URL,
+  type CallbackLanding,
   type ConnectLink,
   type ConnectReturn,
   type ProfileAnalytics,
@@ -387,40 +385,30 @@ export default function App() {
     };
   }, [activeProfileId]);
 
-  // The OAuth callback sends the browser back with ?connected= or ?error=. Show the result in
-  // Settings and clean the URL so a reload does not repeat it.
+  // The provider redirects the browser to /connections/<provider>/callback on this app. Finish the
+  // grant here with this user's Token: the server refuses a state that someone else started. The
+  // URL is replaced at once, so a reload or a shared link never repeats the grant.
+  const landingRef = useRef<CallbackLanding | null>(null);
+  const landingSentRef = useRef(false);
   useLayoutEffect(() => {
-    const found = parseConnectReturn(window.location.search);
+    const found = parseCallbackLanding(window.location.pathname, window.location.search);
     if (!found) return;
-    setConnectReturn(found);
-    setSettingsSection(
-      found.kind === "connected" && found.provider === "google" ? "connectors" : "social",
-    );
-    setView("settings");
-    window.history.replaceState(null, "", stripConnectReturn(window.location.href));
-  }, []);
-
-  // The public OAuth callback hands `code` and `state` over in the URL fragment because it cannot
-  // tell who is logged in. Finish the grant here, with this user's Token: the server refuses a
-  // state that someone else started. The fragment is stripped at once, so a reload or a shared
-  // URL never repeats it.
-  const handoffRef = useRef<ConnectHandoff | null>(null);
-  const handoffSentRef = useRef(false);
-  useLayoutEffect(() => {
-    const found = parseConnectHandoff(window.location.hash);
-    if (!found) return;
-    handoffRef.current = found;
-    window.history.replaceState(null, "", stripConnectHandoff(window.location.href));
-    setSettingsSection(found.provider === "google" ? "connectors" : "social");
+    landingRef.current = found;
+    window.history.replaceState(null, "", CALLBACK_DONE_URL);
+    setSettingsSection(found.kind !== "pfm" && found.provider === "google" ? "connectors" : "social");
     setView("settings");
   }, []);
   useEffect(() => {
-    const handoff = handoffRef.current;
-    if (!handoff || handoffSentRef.current) return;
-    handoffSentRef.current = true;
-    completeConnect(handoff)
-      .then(() => {
-        setConnectReturn({ kind: "connected", provider: handoff.provider });
+    const landing = landingRef.current;
+    if (!landing || landingSentRef.current) return;
+    landingSentRef.current = true;
+    finishConnect(landing)
+      .then((done) => {
+        setConnectReturn(
+          done.connected
+            ? { kind: "connected", provider: done.provider }
+            : { kind: "error", code: "connections.no_accounts" },
+        );
         refreshProfiles();
       })
       .catch((err: unknown) => {

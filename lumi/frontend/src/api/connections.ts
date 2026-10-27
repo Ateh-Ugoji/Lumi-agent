@@ -68,65 +68,71 @@ export function disconnect(
 }
 
 /**
- * What the public OAuth callback left in the URL fragment: the provider's `code` and our `state`.
- * The callback cannot tell who is logged in, so it only hands them over. We finish the grant here
- * with the user's own Token, which is what ties the state to this session.
+ * What the provider left in the URL of the frontend callback page
+ * (`/connections/<provider>/callback`). The provider redirects the browser here, and this page
+ * finishes the grant with the user's own Token. The server accepts a `state` only from the user
+ * who started it, so a link someone else crafted connects nothing.
  */
-export type ConnectHandoff = { provider: Provider; code: string; state: string };
+export type CallbackLanding =
+  | { kind: "grant"; provider: Provider; state: string; code: string }
+  | { kind: "denied"; provider: Provider; state: string; error: string }
+  | { kind: "pfm"; success: boolean };
 
-const PROVIDERS: readonly string[] = ["meta", "linkedin", "x", "google"];
+const GRANT_PROVIDERS: readonly string[] = ["meta", "linkedin", "x", "google"];
+const CALLBACK_PATH = /^\/connections\/([a-z]+)\/callback\/?$/;
 
-export function parseConnectHandoff(hash: string): ConnectHandoff | null {
-  if (!hash.startsWith("#")) return null;
-  const params = new URLSearchParams(hash.replace(/^#/, ""));
-  const provider = params.get("connect");
-  const code = params.get("code");
+export function parseCallbackLanding(pathname: string, search: string): CallbackLanding | null {
+  const match = CALLBACK_PATH.exec(pathname);
+  if (!match) return null;
+  const provider = match[1];
+  const params = new URLSearchParams(search);
+  if (provider === "pfm") {
+    // Post for Me sends no state: the grant was bound to the user when the link was minted.
+    return { kind: "pfm", success: params.get("isSuccess") === "true" };
+  }
+  if (!GRANT_PROVIDERS.includes(provider)) return null;
   const state = params.get("state");
-  if (!provider || !code || !state || !PROVIDERS.includes(provider)) return null;
-  return { provider: provider as Provider, code, state };
+  if (!state) return null;
+  const error = params.get("error");
+  if (error) return { kind: "denied", provider: provider as Provider, state, error: error.slice(0, 80) };
+  const code = params.get("code");
+  if (!code) return null;
+  return { kind: "grant", provider: provider as Provider, state, code };
 }
 
-/** The URL without the handoff, so a reload or a shared link never repeats the grant. */
-export function stripConnectHandoff(href: string): string {
-  const url = new URL(href);
-  const params = new URLSearchParams(url.hash.replace(/^#/, ""));
-  for (const key of ["connect", "code", "state"]) params.delete(key);
-  const rest = params.toString();
-  return `${url.pathname}${url.search}${rest ? `#${rest}` : ""}`;
-}
+/** Where the browser goes once the landing is handled: no code, no state, no way to replay it. */
+export const CALLBACK_DONE_URL = "/";
 
-export function completeConnect(handoff: ConnectHandoff): Promise<{ provider: string; connected: boolean }> {
-  return request(`/connections/${handoff.provider}/complete`, {
+export type ConnectResult = { provider: string; connected: boolean };
+
+/** Finish the grant. Every outcome is an `ApiError` code the panel can explain. */
+export async function finishConnect(landing: CallbackLanding): Promise<ConnectResult> {
+  if (landing.kind === "pfm") {
+    if (!landing.success) throw new ApiError(400, "connections.pfm_failed", "pfm");
+    // The status call is what syncs the accounts Post for Me now holds for this user.
+    const status = await getConnectionStatus("pfm");
+    return { provider: "pfm", connected: status.connected };
+  }
+  const body =
+    landing.kind === "grant"
+      ? { state: landing.state, code: landing.code }
+      : { state: landing.state, error: landing.error };
+  return request<ConnectResult>(`/connections/${landing.provider}/callback`, {
     method: "POST",
-    body: { code: handoff.code, state: handoff.state },
+    body,
   });
 }
 
-/** What the OAuth callback left in the URL when it sent the user back. */
+/** What the page shows once the landing is handled. */
 export type ConnectReturn =
   | { kind: "connected"; provider: string }
   | { kind: "error"; code: string };
 
-export function parseConnectReturn(search: string): ConnectReturn | null {
-  const params = new URLSearchParams(search);
-  const error = params.get("error");
-  if (error) return { kind: "error", code: error.slice(0, 80) };
-  const connected = params.get("connected");
-  if (connected) return { kind: "connected", provider: connected.slice(0, 20) };
-  return null;
-}
-
-/** The URL without `connected` and `error`, so a reload does not repeat the banner. */
-export function stripConnectReturn(href: string): string {
-  const url = new URL(href);
-  url.searchParams.delete("connected");
-  url.searchParams.delete("error");
-  return `${url.pathname}${url.search}${url.hash}`;
-}
-
 const RETURN_ERRORS: Record<string, string> = {
   "connections.state_invalid": "El enlace de conexión no es válido. Empieza de nuevo.",
   "connections.state_expired": "El enlace de conexión caducó. Empieza de nuevo.",
+  "connections.state_mismatch":
+    "Este enlace de conexión lo inició otra cuenta de Lumi. No se conectó nada.",
   "connections.access_denied": "Cancelaste la autorización. No se conectó nada.",
   "connections.account_taken": "Esa cuenta ya está conectada a otro usuario de Lumi.",
   "connections.no_accounts": "La autorización no incluyó ninguna cuenta.",

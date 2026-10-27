@@ -133,8 +133,10 @@ def pfm_consent(request):
     """Where the browser lands after "authorizing" on PFM: the account is now connected."""
     WORLD.connected = True
     WORLD.platform = request.GET.get("platform", "instagram")
+    # PFM redirects to the FRONTEND page registered in its dashboard, not to the API.
     return HttpResponseRedirect(
-        "/api/v1/connections/pfm/callback?isSuccess=true&platform=" + WORLD.platform
+        "http://localhost:3010/connections/pfm/callback?isSuccess=true&platform="
+        + WORLD.platform
     )
 
 

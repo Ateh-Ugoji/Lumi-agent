@@ -2,9 +2,9 @@ import { expect, test, type BrowserContext, type Page } from "@playwright/test";
 
 // One user, one browser, one run: register, add a profile, connect Facebook and PFM, chat, read
 // the status back, then sign out. Providers are simulated by e2e/sim.py; the consent screens are
-// answered here by redirecting the provider URL to the real Lumi callback.
+// answered here by redirecting the provider URL to the frontend callback page, as the real providers do.
 
-const API = "http://localhost:8000/api/v1";
+const FRONT = "http://localhost:3010";
 const EMAIL = `e2e-${Date.now()}@example.com`;
 const PASSWORD = "Passw0rd-e2e-long";
 
@@ -23,10 +23,10 @@ test.beforeAll(async ({ browser }) => {
     denyNextConsent = false;
     await route.fulfill({
       status: 302,
-      headers: { location: `${API}/connections/meta/callback?${outcome}&state=${state}` },
+      headers: { location: `${FRONT}/connections/meta/callback?${outcome}&state=${state}` },
     });
   });
-  // PFM consent: a simulated page flips the account on and redirects to the PFM callback.
+  // PFM consent: a simulated page flips the account on and redirects to the frontend PFM page.
   await context.route("https://api.postforme.dev/**", async (route) => {
     await route.fulfill({
       status: 302,
@@ -80,7 +80,7 @@ test("connect Facebook from Settings: authorize, callback, return banner, status
   await openSettings("Connected Accounts");
   await page.getByTestId("connect-meta").click();
   await expect(page.getByTestId("connect-return")).toContainText("Facebook conectado");
-  await expect(page).toHaveURL(/^http:\/\/localhost:3010\/?$/); // ?connected= was cleaned
+  await expect(page).toHaveURL(/^http:\/\/localhost:3010\/?$/); // the callback URL was cleaned
   await expect(page.getByTestId("status-meta")).toHaveText("Conectado");
   const card = page.getByTestId("provider-meta");
   await expect(card).toContainText("Pagina Uno");
@@ -97,7 +97,7 @@ test("connect Post for Me: the status call on return mirrors the account", async
   await expect(page.getByTestId("provider-pfm")).toContainText("instagram");
 });
 
-test("the user cancels on the provider: the real callback sends ?error= and the banner explains", async () => {
+test("the user cancels on the provider: the frontend page burns the state and the banner explains", async () => {
   await openSettings("Connected Accounts");
   denyNextConsent = true;
   await page.getByTestId("connect-meta").click();

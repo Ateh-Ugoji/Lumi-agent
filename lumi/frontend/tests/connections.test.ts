@@ -4,40 +4,16 @@ import {
   connectErrorMessage,
   googleScopeLabels,
   isLiveDisabled,
-  parseConnectHandoff,
-  parseConnectReturn,
+  parseCallbackLanding,
   startConnectMessage,
-  stripConnectHandoff,
-  stripConnectReturn,
 } from "../src/api/connections.ts";
 import { ApiError } from "../src/api/http.ts";
-
-test("parseConnectReturn reads ?connected= and ?error=", () => {
-  assert.deepEqual(parseConnectReturn("?connected=meta"), { kind: "connected", provider: "meta" });
-  assert.deepEqual(parseConnectReturn("?error=connections.access_denied"), {
-    kind: "error",
-    code: "connections.access_denied",
-  });
-  assert.equal(parseConnectReturn("?utm=1"), null);
-  assert.equal(parseConnectReturn(""), null);
-});
-
-test("an error wins over connected when both are present", () => {
-  assert.equal(parseConnectReturn("?connected=x&error=internal_error")?.kind, "error");
-});
-
-test("stripConnectReturn removes only the return params", () => {
-  assert.equal(
-    stripConnectReturn("http://localhost:3010/?connected=meta&tab=a#top"),
-    "/?tab=a#top",
-  );
-  assert.equal(stripConnectReturn("http://localhost:3010/?error=x"), "/");
-});
 
 test("every documented ?error= code has its own sentence", () => {
   const known = [
     "connections.state_invalid",
     "connections.state_expired",
+    "connections.state_mismatch",
     "connections.access_denied",
     "connections.account_taken",
     "connections.no_accounts",
@@ -77,29 +53,50 @@ test("connectErrorMessage reads a bare contract code the same as the prefixed on
   assert.notEqual(connectErrorMessage("access_denied"), connectErrorMessage("whatever"));
 });
 
-test("parseConnectHandoff reads the grant the public callback leaves in the fragment", () => {
-  assert.deepEqual(parseConnectHandoff("#connect=meta&code=abc%2F1&state=st_1"), {
+test("the callback page reads the code and state the provider put in the query", () => {
+  assert.deepEqual(parseCallbackLanding("/connections/meta/callback", "?code=abc%2F1&state=st_1"), {
+    kind: "grant",
     provider: "meta",
     code: "abc/1",
     state: "st_1",
   });
-  assert.equal(parseConnectHandoff("#connect=meta&code=abc"), null);
-  assert.equal(parseConnectHandoff("#connect=pfm&code=a&state=b"), null);
-  assert.equal(parseConnectHandoff("#connect=evil&code=a&state=b"), null);
-  assert.equal(parseConnectHandoff(""), null);
+  assert.equal(parseCallbackLanding("/connections/x/callback/", "?code=a&state=b")?.kind, "grant");
 });
 
-test("a handoff is never read from the query string, so a crafted ?code= is ignored", () => {
-  assert.equal(parseConnectHandoff("?connect=meta&code=a&state=b"), null);
-});
-
-test("stripConnectHandoff removes the grant and keeps unrelated fragment data", () => {
-  assert.equal(
-    stripConnectHandoff("http://localhost:3010/?tab=a#connect=meta&code=c&state=s"),
-    "/?tab=a",
+test("a denial keeps the state so the server can burn it", () => {
+  assert.deepEqual(
+    parseCallbackLanding("/connections/linkedin/callback", "?error=access_denied&state=s"),
+    { kind: "denied", provider: "linkedin", state: "s", error: "access_denied" },
   );
-  assert.equal(
-    stripConnectHandoff("http://localhost:3010/#connect=meta&code=c&state=s&x=1"),
-    "/#x=1",
+});
+
+test("a landing without state, without code, or for an unknown provider is ignored", () => {
+  assert.equal(parseCallbackLanding("/connections/meta/callback", "?code=a"), null);
+  assert.equal(parseCallbackLanding("/connections/meta/callback", "?state=a"), null);
+  assert.equal(parseCallbackLanding("/connections/evil/callback", "?code=a&state=b"), null);
+  assert.equal(parseCallbackLanding("/connections/meta/complete", "?code=a&state=b"), null);
+  assert.equal(parseCallbackLanding("/", "?code=a&state=b"), null);
+  assert.equal(parseCallbackLanding("/settings", ""), null);
+});
+
+test("a grant is never read from the fragment", () => {
+  assert.equal(parseCallbackLanding("/", "#connect=meta&code=a&state=b"), null);
+});
+
+test("Post for Me sends no state and only says whether it worked", () => {
+  assert.deepEqual(parseCallbackLanding("/connections/pfm/callback", "?isSuccess=true&accountIds=sa_1"), {
+    kind: "pfm",
+    success: true,
+  });
+  assert.deepEqual(parseCallbackLanding("/connections/pfm/callback", "?isSuccess=false&error=x"), {
+    kind: "pfm",
+    success: false,
+  });
+});
+
+test("a state started by another account has its own sentence", () => {
+  assert.notEqual(
+    connectErrorMessage("connections.state_mismatch"),
+    connectErrorMessage("whatever"),
   );
 });
