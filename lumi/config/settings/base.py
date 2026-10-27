@@ -149,7 +149,6 @@ else:
 # Names only; values are read when needed. Required-key policy lives in apps/core/keys.py.
 TOKEN_ENCRYPTION_KEY = env.get("TOKEN_ENCRYPTION_KEY")
 TOKEN_ENCRYPTION_KEY_PREVIOUS = env.get("TOKEN_ENCRYPTION_KEY_PREVIOUS")
-PUBLIC_BASE_URL = env.get("PUBLIC_BASE_URL")
 FRONTEND_URL = env.get("FRONTEND_URL")
 
 # Models, limits and AI keys come from lumi_ai.config.AIConfig, which reads its own variables
