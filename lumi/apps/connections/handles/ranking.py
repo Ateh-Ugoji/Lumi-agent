@@ -12,7 +12,9 @@ MIX_HALF = 5
 MIX_TOTAL = 10
 CONTEXT_WORDS = 3
 DEFAULT_PLATFORM = "x"
-PLATFORMS = ("x", "instagram", "tiktok", "reddit", "linkedin")
+# Same set as ``lumi_ai.ports.Platform`` and SCHEMA v2 (reddit left the schema, so a Reddit handle
+# could not be stored in ``social_handles``).
+PLATFORMS = ("x", "instagram", "tiktok", "linkedin", "facebook")
 
 
 def normalize_query(raw: str) -> str:

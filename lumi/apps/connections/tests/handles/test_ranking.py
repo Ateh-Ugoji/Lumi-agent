@@ -22,7 +22,8 @@ def test_normalize_strips_the_at_and_whitespace() -> None:
 def test_platforms_are_validated_deduped_and_default_to_x() -> None:
     assert parse_platforms("x, Instagram,x,bogus") == ["x", "instagram"]
     assert parse_platforms("") == ["x"] and parse_platforms(None) == ["x"]
-    assert parse_platforms(["TikTok", "reddit"]) == ["tiktok", "reddit"]
+    assert parse_platforms(["TikTok", "facebook"]) == ["tiktok", "facebook"]
+    assert parse_platforms("reddit,youtube") == ["x"]  # outside SCHEMA v2 Platform
     assert parse_platforms("bogus") == ["x"]
 
 
