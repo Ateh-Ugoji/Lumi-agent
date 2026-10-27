@@ -39,3 +39,12 @@ uv run python manage.py reindex_vectors   # regenera los vectores de Chroma desd
 ## 4. Después de importar
 - Prueba la app con `seed_demo` desactivado, para que el seed no sobrescriba los datos importados.
 - Anota en `lumi/plan/ContextoTareas.md` cuándo se importó, el origen, los conteos por tabla y el resultado de la verificación.
+
+
+## Opciones del importador y trabajos en segundo plano (actualizado 07:15 UTC)
+- `--dry-run`: lee y valida sin escribir nada.
+- `--verify`: compara los conteos por tabla y sale con código distinto de 0 si algo difiere. Las filas duplicadas que se fusionan cuentan como fusionadas, no como perdidas.
+- `--memory-md PATH`: importa también el archivo de memoria en markdown del agente legado.
+- `--user EMAIL`: asigna los datos a ese usuario. Si no se indica, crea un usuario "importado".
+- Hoy importa profiles y chat; los importadores de INTELLIGENCE y CONNECT se suman después.
+- `LUMI_JOB_DISPATCH`: con `none` (el valor por defecto), los trabajos que crea la importación quedan en `queued` hasta que un worker los procese. Con `eager` se ejecutan en el momento; úsalo solo en desarrollo.

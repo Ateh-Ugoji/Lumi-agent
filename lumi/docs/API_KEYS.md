@@ -226,3 +226,12 @@ uv run python manage.py runserver
 - `--only id1,id2`: solo esos servicios. Ids: `database`, `secret`, `token_encryption`, `groq`, `openrouter`, `openlux`, `meta`, `linkedin`, `x` y los demás que registren INTELLIGENCE y CONNECT (`pfm`, `xpoz`, `google` cuando CONNECT los añada).
 - `--json`: salida para scripts.
 - Código de salida: `0` todo bien; `1` falta una obligatoria o falló un servicio configurado; `2` id desconocido.
+
+
+## Variables de configuración que no son keys (actualizado 07:15 UTC)
+| Variable | Por defecto | Para qué sirve |
+|---|---|---|
+| `LUMI_CHAT_RUNTIME` | `apps.intelligence.runtime` | Módulo de IA que atiende `/chat` y `/chat/stream`. Si no existe, el chat responde `503 chat_unavailable`. |
+| `LUMI_JOB_DISPATCH` | `none` | `none` deja los trabajos en cola para un worker; `eager` los ejecuta en la misma petición (solo en desarrollo). |
+
+Para entrar a `/admin/` primero crea un superusuario: `uv run python manage.py createsuperuser`.
