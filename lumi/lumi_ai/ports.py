@@ -38,7 +38,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Literal, Protocol, get_args, runtime_checkable
 
-PORTS_VERSION = "1.4"  # 1.1: SemanticJudge, 1.2: OwnPostSync, 1.3: AttemptIn.is_fallback, EvaluationRecord.attempt_id required
+PORTS_VERSION = "1.5"  # 1.1: SemanticJudge, 1.2: OwnPostSync, 1.3: AttemptIn.is_fallback, EvaluationRecord.attempt_id required, 1.4: MemoryStore.touch_notes, save_voice model/prompt_version, 1.5: tool_call_id, report query/peers, repurpose mode/brief, user request platform
 
 # ---------------------------------------------------------------------------
 # Shared vocabulary
@@ -554,7 +554,13 @@ class TaggingRecord:
 
 @dataclass(frozen=True, slots=True)
 class FrameworkIn:
-    """A winning structure found in a niche."""
+    """A winning structure found in a niche.
+
+    Storage (``frameworks``): the column ``name`` holds ``title`` ("name es el título"), and
+    ``name`` (the stable key, e.g. ``pas``) travels inside ``payload["key"]``; the producer
+    always writes it there. ``evidence_post_refs`` are ``"<platform>:<external_id>"`` and become
+    ``framework_evidence`` rows, so those posts must already be stored (``PeerPostStore`` first).
+    """
 
     name: str
     title: str
@@ -588,6 +594,10 @@ class NicheReportIn:
     payload: Mapping[str, Any]  # validated model output, kept raw
     frameworks: tuple[FrameworkIn, ...] = ()
     detail: str | None = None  # honest reason when not "ok"
+    # 1.5: niche_reports.query / peers_analyzed and niche_report_peers (platform from the key)
+    query: str = ""
+    peers_analyzed: int = 0
+    peer_handles: Mapping[Platform, tuple[str, ...]] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)
@@ -602,6 +612,8 @@ class NicheReportOut:
     frameworks: tuple[FrameworkOut, ...]
     detail: str | None
     created_at: datetime
+    query: str = ""  # 1.5
+    peers_analyzed: int = 0  # 1.5
 
 
 @runtime_checkable
@@ -697,6 +709,7 @@ class ChatMessageIn:
     tool_name: str | None = None
     tools_used: Sequence[str] | None = None
     reason: str | None = None  # the `reason` argument the model gave for a tool call
+    tool_call_id: str | None = None  # 1.5: id of the call a "tool" row answers
 
 
 @dataclass(frozen=True, slots=True)
@@ -710,6 +723,7 @@ class ChatMessageOut:
     tool_name: str | None = None
     tools_used: tuple[str, ...] | None = None
     reason: str | None = None
+    tool_call_id: str | None = None  # 1.5
 
 
 @runtime_checkable
@@ -800,6 +814,9 @@ class RepurposeStore(Protocol):
         source_text: str,
         route_label: str | None,
         attempts: Sequence[AttemptIn],
+        *,
+        mode: Literal["repurpose", "topic"] = "repurpose",
+        brief: str | None = None,
     ) -> tuple[int, list[AttemptOut]]:
         """Store a request and its attempts in ONE transaction; return ``(request_id, attempts)``.
 
@@ -835,7 +852,12 @@ class RequestStore(Protocol):
     """Accounts the user explicitly asked Lumi to look up. Never merged into peer data."""
 
     async def save_user_request(
-        self, profile_id: int, handle: str, note: str | None
+        self,
+        profile_id: int,
+        handle: str,
+        note: str | None,
+        *,
+        platform: Platform | None = None,
     ) -> UserRequestOut:
         """Append a request (re-requests add rows; ``already_requested`` is computed on read)."""
         ...

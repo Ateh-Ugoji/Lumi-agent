@@ -470,6 +470,7 @@ class _Turn:
                         role="tool",
                         content=result_text,
                         tool_name=name,
+                        tool_call_id=call["id"],
                         reason=reason if isinstance(reason, str) else None,
                     )
                 )

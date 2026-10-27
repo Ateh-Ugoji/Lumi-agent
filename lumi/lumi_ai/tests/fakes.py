@@ -132,7 +132,8 @@ class FakeRequests:
     def __init__(self):
         self.rows: list[tuple[int, str, str | None]] = []
 
-    async def save_user_request(self, profile_id, handle, note):
+    async def save_user_request(self, profile_id, handle, note, *, platform=None):
+        self.platforms = [*getattr(self, "platforms", []), platform]
         prior = any(r[0] == profile_id and r[1] == handle for r in self.rows)
         self.rows.append((profile_id, handle, note))
         return UserRequestOut(

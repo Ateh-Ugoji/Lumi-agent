@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import re
-from typing import Any
+from typing import Any, get_args
 
-from lumi_ai.ports import ProfileStore, ReportStore, RequestStore
+from lumi_ai.ports import Platform, ProfileStore, ReportStore, RequestStore
 from lumi_ai.tools.registry import ToolContext, ToolSpec
 
 # 1-30 chars of letters, digits, underscore or dot covers X, Instagram, TikTok and LinkedIn slugs.
@@ -42,8 +42,13 @@ def build(
     requests: RequestStore, profiles: ProfileStore | None, reports: ReportStore | None
 ) -> ToolSpec:
     async def save_user_request(
-        ctx: ToolContext, handles: list[str], request: str = ""
+        ctx: ToolContext,
+        handles: list[str],
+        request: str = "",
+        platform: str | None = None,
     ) -> dict[str, Any]:
+        if platform is not None and platform not in get_args(Platform):
+            raise ValueError(f"platform must be one of {', '.join(get_args(Platform))}")
         membership = await peer_membership(ctx.profile_id, profiles, reports)
         note = (request or "").strip() or None
         saved: list[dict[str, Any]] = []
@@ -53,7 +58,12 @@ def build(
             if not handle:
                 invalid.append(str(raw))
                 continue
-            row = await requests.save_user_request(ctx.profile_id, handle, note)
+            row = await requests.save_user_request(
+                ctx.profile_id,
+                handle,
+                note,
+                **({"platform": platform} if platform else {}),
+            )
             saved.append(
                 {
                     "handle": handle,
@@ -99,6 +109,11 @@ def build(
                 "request": {
                     "type": "string",
                     "description": "What the user wants done with these handles, in their words.",
+                },
+                "platform": {
+                    "type": "string",
+                    "enum": list(get_args(Platform)),
+                    "description": "Platform of the handles. Omit it to use the profile's own platform.",
                 },
             },
             "required": ["profile_id", "handles"],

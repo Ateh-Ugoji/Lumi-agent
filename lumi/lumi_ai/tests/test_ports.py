@@ -159,3 +159,32 @@ def test_ports_1_3_is_additive_for_attempts_and_requires_attempt_id():
     assert record.attempt_id == 3
     with pytest.raises(TypeError):
         ports.EvaluationRecord(7, "x", "draft", "pass", {}, {})  # type: ignore[call-arg]
+
+
+def test_ports_1_5_is_additive():
+    from lumi_ai import ports
+
+    assert tuple(map(int, ports.PORTS_VERSION.split("."))) >= (1, 5)
+    assert (
+        ports.ChatMessageIn("tool", "{}").tool_call_id is None
+    )  # 1.4 call sites still work
+    assert ports.ChatMessageIn("tool", "{}", tool_call_id="c1").tool_call_id == "c1"
+    report = ports.NicheReportIn(None, "ok", 1, 1, {})
+    assert (report.query, report.peers_analyzed, dict(report.peer_handles)) == (
+        "",
+        0,
+        {},
+    )
+    out_fields = {f.name for f in dataclasses.fields(ports.ChatMessageOut)}
+    assert "tool_call_id" in out_fields
+    params = inspect.signature(
+        ports.RepurposeStore.create_request_with_attempts
+    ).parameters
+    assert params["mode"].kind is inspect.Parameter.KEYWORD_ONLY
+    assert params["mode"].default == "repurpose" and params["brief"].default is None
+    assert (
+        inspect.signature(ports.RequestStore.save_user_request)
+        .parameters["platform"]
+        .default
+        is None
+    )

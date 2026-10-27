@@ -102,6 +102,7 @@ async def test_two_tools_in_a_row_are_executed_saved_and_streamed():
     assert roles == ["user", "assistant", "tool", "assistant", "tool", "assistant"]
     tool_rows = rig.saved("tool")
     assert tool_rows[0].tool_name == "get_thing"
+    assert [r.tool_call_id for r in tool_rows] == ["c1", "c2"]  # ports 1.5
     assert tool_rows[0].reason == "the user asked for this in their message"
     assert json.loads(tool_rows[0].content) == {"profile": 7, "q": "alpha"}
     assert rig.saved("assistant")[0].tool_calls[0]["function"]["name"] == "get_thing"

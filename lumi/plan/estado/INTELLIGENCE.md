@@ -19,7 +19,7 @@ Rama: `lumi-orquestador`. Última actualización: 2026-10-27 (T3 hecho salvo Dja
 | T6 RAG y memoria | hecho salvo repos Django y comando `reindex_vectors` (T4) | `rag/{vector_store,embedder,indexer,retrieval,reindex,memory,extractor,tools,collections,errors}.py`. Chroma solo guarda vectores con id `{tipo}:{id de Postgres}` y metadatos de filtro; el texto se lee de Postgres al recuperar y los vectores huérfanos se borran. Memoria: Postgres primero, vector después; si indexar falla la nota se guarda con `indexed=false` y `reindex_vectors` la repara. Extractor de fin de turno (`LLMMemoryExtractor`) y tools `remember`/`recall_memory`. `uv run pytest lumi_ai -q`: 249 pasan, 1 deseleccionado (`live`: ONNX real + Chroma en disco, pasa con `LUMI_RUN_LIVE=1 -m live`). |
 | T6-T12 | pendientes | |
 
-## Puertos publicados (`lumi_ai/ports.py`, `PORTS_VERSION = "1.4"` (1.4: `VoiceStore.save_voice(..., *, model="", prompt_version="")` y `MemoryStore.touch_notes(ids)` para `last_accessed_at`/`access_count`; 1.3: `AttemptIn.is_fallback`, `EvaluationRecord.attempt_id` obligatorio por palabra clave))
+## Puertos publicados (`lumi_ai/ports.py`, `PORTS_VERSION = "1.5"` (1.5: `tool_call_id` en `ChatMessageIn/Out`; `NicheReportIn.query/peers_analyzed/peer_handles` y `NicheReportOut.query/peers_analyzed`; `RepurposeStore.create_request_with_attempts(..., *, mode, brief)`; `RequestStore.save_user_request(..., *, platform=None)`; el bucle guarda `tool_call_id` en las filas `tool`; 1.4: `VoiceStore.save_voice(..., *, model="", prompt_version="")` y `MemoryStore.touch_notes(ids)` para `last_accessed_at`/`access_count`; 1.3: `AttemptIn.is_fallback`, `EvaluationRecord.attempt_id` obligatorio por palabra clave))
 
 - Para implementar por CONNECT: `SocialData`, `McpGateway`, `ConnectionLinks`, `OwnPostSync` (1.2, la tool `backfill_posts` solo la dispara) (más los errores `SocialDataError`, `BudgetExceeded`, `ProviderUnavailable`, `RateLimited`, `ProviderAuthError`, `LiveDisabled`, `UnsupportedPlatform`).
 - Para implementar por INTELLIGENCE sobre el ORM: `ProfileStore`, `PostStore`, `PeerPostStore`, `VoiceStore`, `ReportStore`, `MemoryStore`, `ChatStore`, `TurnLogStore`, `RepurposeStore`, `RequestStore`, `ListeningStore`, `EvalStore`.
@@ -65,3 +65,17 @@ Ninguno por ahora.
 - `voice_profiles.platform = 'general'` en BD y `None` en el puerto: el repo traduce en ambos sentidos.
 - `voice_profiles.model` y `prompt_version`: `VoiceStore.save_voice` no los recibe. `lumi_ai` los entrega en `payload["extraction"]`; el repo debe copiarlos a las columnas. Si ARCHITECT prefiere argumentos explícitos pido puertos 1.4.
 - `CONTRATOS.md` no ha llegado (ni en `origin/lumi-orquestador` ni en el árbol). No escribo `CONTRATO ARCHITECT ACEPTADO` todavía. Lo que necesito de él: firmas de servicio de `apps.profiles.services` y `apps.intelligence` que implementan los puertos, error de `save_voice` concurrente, y el mapeo de `PostOut.is_deleted_suspect`/`text_truncated` a columnas.
+
+## Revisión de `CONTRATOS.md` v1.0 (`f212586`)
+
+CONTRATO ARCHITECT ACEPTADO f212586
+
+Encaja con lo que necesito. Resuelve mis cuatro preguntas pendientes (firmas de servicio, `attempt_id`, mapeo `general`↔`None`, `tool_call_id`). Los puertos suben a 1.5 por lo acordado con ARCHITECT. Observaciones, ninguna bloquea:
+
+1. `apps.intelligence.runtime` (`run_turn`, `stream_turn`) lo escribo en T4. Propongo `run_turn(profile_id, message) -> TurnResult` y `stream_turn(profile_id, message) -> AsyncIterator[SSEEvent]` (async; `SSEEvent.as_dict()` ya coincide con la sección 3.4). `user_id` lo comprueba la vista con `IsProfileOwner`.
+2. `POST /trends/scan` pasa por mi registro de tools. Hace falta una tool `check_niche_trends` y un puerto para escribir y leer `listening_matches` (`record_listening_match(profile_id, post_id, score)` y `GET /trends/matches`). Aún no está en `ports.py`; lo añado como puertos 1.6 cuando llegue a esa tarea. `min_likes` por defecto 20 (el legado usaba 50).
+3. `frameworks`: la columna `name` guarda el título; el nombre estable (`pas`, `aida`...) viaja en `payload["key"]`. `framework_evidence` exige que los posts de pares ya estén en `posts`: el repo de `ReportStore` debe resolver `"<plataforma>:<external_id>"` a `posts.id` y la canalización guarda los posts antes del informe.
+4. `niche_reports.niche` recibe `niche_key`; `origin = 'pipeline'`; `query`, `peers_analyzed` y `niche_report_peers` salen de los campos nuevos de 1.5.
+5. `post_taggings` es por `post_id` y `TaggingRecord.post_ref` es `"<plataforma>:<external_id>"`: el repo resuelve el id.
+6. Las sondas: `lumi_ai.keys.build_probes` (T11) devolverá una sonda por proveedor para `register(name, probe, required, env_vars)`; `probe` será `KeyProbe.run`.
+7. Sigue abierto el comportamiento de `save_voice` concurrente (`select_for_update` sobre la fila vigente, según `SCHEMA.md`): el repo debe convertir un choque en reintento, no en error al agente.

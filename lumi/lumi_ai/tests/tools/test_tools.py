@@ -203,6 +203,15 @@ async def test_save_user_request_normalises_flags_peers_and_rejects_junk():
     out2 = await run(registry, "save_user_request", handles=["peer_one"])
     assert out2["saved"][0]["already_requested"] is True
     assert all(r[0] == 1 for r in reqs.rows)
+    assert reqs.platforms == [
+        None,
+        None,
+        None,
+    ]  # no platform given: the service picks it
+    await run(registry, "save_user_request", handles=["lead"], platform="linkedin")
+    assert reqs.platforms[-1] == "linkedin"
+    with pytest.raises(ValueError, match="platform must be one of"):
+        await run(registry, "save_user_request", handles=["lead"], platform="myspace")
 
 
 # --- voice -----------------------------------------------------------------------------
