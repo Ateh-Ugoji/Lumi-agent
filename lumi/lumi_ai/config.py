@@ -115,6 +115,12 @@ class AIConfig:
     memory_max_per_turn: int = 8  # facts the extractor may store from one turn
     memory_summary_max_chars: int = 2000
 
+    # --- competitor analysis (cost guards: every account is a provider call, every 6 posts an LLM call) ---
+    peer_max_accounts: int = 8
+    peer_max_posts_to_tag: int = 80
+    peer_discovery_posts: int = 100  # posts a keyword search may read to find handles
+    peer_advice_max_items: int = 4
+
     # --- providers ---
     provider_cooldown_seconds: float = (
         300.0  # after a 401/402/403/429 a candidate rests this long
