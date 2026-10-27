@@ -280,7 +280,9 @@ export default function ChronicOnline({
             {filteredMatches.map((item) => {
               const replyTarget = extractReplyTarget(item.caption);
               const avatarFailed = avatarErrors[item.author_handle];
-              const pfpUrl = `https://unavatar.io/x/${item.author_handle}`;
+              // Picture the scan saved to the DB first; unavatar only as fallback
+              const pfpUrl =
+                item.author_avatar_url || `https://unavatar.io/x/${item.author_handle}`;
 
               return (
                 <div key={item.id} className={styles.tweetCard}>

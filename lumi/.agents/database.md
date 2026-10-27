@@ -70,6 +70,7 @@ Social listening results from Xpoz. **Not the profile's own content** — `profi
 | platform | String | Not null. MVP: always `x`. |
 | platform_post_id | String | Not null |
 | author_handle | String | Not null — the third party who actually posted it |
+| author_avatar_url | String | Nullable — author's picture URL from the handle DB (Chroma); null → the UI falls back to unavatar |
 | caption | Text | Not null. Fed into `repurpose_caption` as `source_text` |
 | platform_url | String | Not null |
 | metrics | JSON | Nullable. Engagement snapshot at discovery time, if Xpoz returned one |

@@ -1119,6 +1119,8 @@ async def _agent_turn(
                         "text": (p.get("caption") or p.get("text") or "")[:120],
                         "likes": p.get("likes") or p.get("likeCount"),
                         "url": p.get("url") or p.get("platform_url"),
+                        # Picture from the handle DB (blank = UI falls back to unavatar)
+                        "avatar_url": p.get("avatar_url") or "",
                     })
 
             execution_info = {

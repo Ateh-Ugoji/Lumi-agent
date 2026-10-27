@@ -5,6 +5,7 @@ export type SamplePost = {
   text?: string;
   likes?: number;
   url?: string;
+  avatar_url?: string;
 };
 
 export type SimStep = {
@@ -15,6 +16,8 @@ export type SimStep = {
   detail?: string;
   meta?: string;
   platforms?: string[];
+  /** The face to show in the header icon for this step (header morphs to it) */
+  avatar_url?: string;
   samplePosts?: SamplePost[];
 };
 

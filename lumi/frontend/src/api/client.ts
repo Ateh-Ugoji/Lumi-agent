@@ -5,6 +5,8 @@ export type SamplePost = {
   text?: string;
   likes?: number;
   url?: string;
+  /** Picture for the author (handle DB); blank -> UI falls back to unavatar */
+  avatar_url?: string;
 };
 
 export type ToolExecution = {
@@ -175,6 +177,7 @@ export type TrendMatch = {
   platform: string;
   platform_post_id: string;
   author_handle: string;
+  author_avatar_url?: string | null;
   caption: string;
   platform_url: string;
   metrics: {

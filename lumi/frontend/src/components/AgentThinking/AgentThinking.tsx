@@ -65,6 +65,39 @@ function SocialIconCycler({
   );
 }
 
+/** The account's face in the header — crossfades in where the orb/logo was.
+ * Falls back to the sparkle if the picture 404s, never a broken image. */
+function AvatarIcon({ src }: { src: string }) {
+  const [failed, setFailed] = useState(false);
+  if (failed) return <Sparkle />;
+  return (
+    <img
+      className={styles.iconAvatar}
+      src={src}
+      alt=""
+      onError={() => setFailed(true)}
+    />
+  );
+}
+
+/** Small round author picture on a discovered-post card (letter if unknown). */
+function PostAvatar({ author, url }: { author?: string; url?: string }) {
+  const [failed, setFailed] = useState(false);
+  const src = url || (author ? `https://unavatar.io/x/${author}` : "");
+  if (!src || failed) {
+    return <span className={styles.postAvatarLetter}>{(author || "?").slice(0, 1).toUpperCase()}</span>;
+  }
+  return (
+    <img
+      className={styles.postAvatar}
+      src={src}
+      alt=""
+      loading="lazy"
+      onError={() => setFailed(true)}
+    />
+  );
+}
+
 function Sparkle() {
   return (
     <svg
@@ -278,6 +311,7 @@ function StepRow({
                 className={styles.postCard}
               >
                 <div className={styles.postAuthorRow}>
+                  <PostAvatar author={p.author} url={p.avatar_url} />
                   <span>{p.author ? `@${p.author}` : "Leader post"}</span>
                   {p.likes !== undefined && (
                     <span className={styles.postLikes}>
@@ -298,6 +332,7 @@ function StepRow({
 /** Header icon keyed by identity so the crossfade knows what is swapping. */
 function iconNode(key: string, reduced: boolean): ReactNode {
   if (key === "spark") return <Sparkle />;
+  if (key.startsWith("avatar:")) return <AvatarIcon src={key.slice("avatar:".length)} />;
   if (key === "busy" || key === "calm")
     return <WorkingMark size={20} variant={key} />;
   if (key.startsWith("social:"))
@@ -364,11 +399,13 @@ export default function AgentThinking({
   // Header icon identity: swapped pieces crossfade (150ms delay / 200ms fade).
   const iconKey = final
     ? "spark"
-    : activeStep?.kind === "social"
-      ? `social:${(activeStep.platforms ?? ["x"]).join(",")}`
-      : activeStep?.kind === "action"
-        ? "busy"
-        : "calm";
+    : activeStep?.avatar_url
+      ? `avatar:${activeStep.avatar_url}`
+      : activeStep?.kind === "social"
+        ? `social:${(activeStep.platforms ?? ["x"]).join(",")}`
+        : activeStep?.kind === "action"
+          ? "busy"
+          : "calm";
   const { previous: prevIconKey, gliding: iconGlide } = useStaggered(
     iconKey,
     GLIDE_MS + 40,

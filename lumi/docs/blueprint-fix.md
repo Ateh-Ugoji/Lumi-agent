@@ -7,7 +7,7 @@ Ground truth re-run on 2026-10-26 (after the peer-pipeline Prompt 3 wiring):
 | Check | Result |
 |---|---|
 | `uv run ruff check .` | ✅ all checks passed |
-| `uv run pytest -q` | ✅ 418 passed (40 test files) |
+| `uv run pytest -q` | ✅ 422 passed (40 test files) |
 | `uv run alembic current` | ✅ `cefd455456a2 (head)`, 21 tables |
 | `uv run alembic check` | ✅ passes (B-1 fixed 2026-10-26; it failed at review time) |
 | `grep -rn "Milestones & Shipped Tech" app/ tests/` | ✅ no matches (canned fallback deleted, Prompt 3) |

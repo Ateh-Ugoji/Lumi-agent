@@ -552,7 +552,13 @@ export default function App() {
             // The connected account's platform drives the header icon: steps
             // marked "social" crossfade the ball into that platform's logo.
             const activePlatform: string = profiles[0]?.platform || "x";
+            const activeHandle = profiles[0]?.handle || "";
+            // The connected account's face — same unavatar source the Sidebar uses.
+            const activeAvatarUrl = activeHandle
+              ? `https://unavatar.io/${activePlatform === "x" ? "x" : activePlatform}/${activeHandle}`
+              : "";
             let platforms: string[] = [activePlatform];
+            let avatarUrl: string | undefined;
 
             if (toolName === "connect_account") {
               label = "Generating secure X authorization link...";
@@ -597,12 +603,20 @@ export default function App() {
             }
 
 
+            // Account-walking steps show that account's face in the header;
+            // the niche search keeps its X logo until results land (tool_done
+            // then swaps in the first account it actually found).
+            if (kind === "social" && toolName !== "check_niche_trends") {
+              avatarUrl = activeAvatarUrl;
+            }
+
             liveSteps.push({
               id: `tool-${liveSteps.length}`,
               label,
               kind,
               durationMs: 1500,
               platforms,
+              avatar_url: avatarUrl,
             });
 
             setActiveRun({
@@ -621,6 +635,12 @@ export default function App() {
               if (evt.sample_posts && evt.sample_posts.length > 0) {
                 lastStep.samplePosts = evt.sample_posts.slice(0, 4);
                 lastStep.meta = `${evt.sample_posts.length} discovered posts`;
+                // Results landed: the X logo morphs into the first account found.
+                const first = evt.sample_posts[0];
+                if (!lastStep.avatar_url) {
+                  lastStep.avatar_url =
+                    first.avatar_url || (first.author ? `https://unavatar.io/x/${first.author}` : undefined);
+                }
               }
             }
             setActiveRun({
