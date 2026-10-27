@@ -1,4 +1,4 @@
-"""Parity of the new test suite against the 418 legacy tests.
+"""Parity of the new test suite against the 422 legacy tests.
 
 The legacy tests live in ``lumi/tests`` and go away with ``lumi/app``. Their names are frozen in
 ``legacy_tests.tsv`` so the matrix survives the deletion. ``legacy_parity_map.tsv`` maps each
@@ -7,6 +7,9 @@ legacy test (by file and name regex, first match wins) to a status:
 * ``covered``   a Django or ``lumi_ai`` test checks the same behavior.
 * ``replaced``  the component was redesigned; the behavior is checked in its new form.
 * ``deviation`` an accepted difference, listed in CONTRATOS section 11 (``§11:N`` in the note).
+* ``retired``   dropped on purpose with the feature it tested; the note gives the reason and is
+  required. Targets are optional (a retired test may point at the test that now guards the nearest
+  behavior).
 * ``gap``       nothing checks it yet.
 
 A legacy test whose name matches a new test (after dropping articles) is ``covered`` with no rule.
@@ -29,8 +32,9 @@ ROOT = HERE.parents[2]  # lumi/
 REPORT = ROOT / "plan" / "estado" / "PARIDAD-LEGADO.md"
 CONTRATOS = ROOT / "docs" / "CONTRATOS.md"
 LEGACY_TESTS_DIR = ROOT / "tests"
-STATUSES = ("covered", "replaced", "deviation", "gap")
-EXPECTED_TOTAL = 418
+STATUSES = ("covered", "replaced", "deviation", "retired", "gap")
+MIN_REASON_LENGTH = 20
+EXPECTED_TOTAL = 422
 _NEW_TEST_GLOBS = ("apps/*/tests/**/test_*.py", "lumi_ai/tests/**/test_*.py")
 _SKIP_PARTS = {"legacy_parity"}
 
@@ -135,6 +139,24 @@ def _contratos_rows() -> set[int]:
     return {int(m) for m in re.findall(r"^\|\s*(\d+)\s*\|", text, flags=re.MULTILINE)}
 
 
+def rule_problems(rule: Rule, section_rows: set[int]) -> list[str]:
+    """Shape problems of one rule, apart from whether its targets exist."""
+    problems: list[str] = []
+    if rule.status not in STATUSES:
+        problems.append(f"unknown status {rule.status!r}")
+    if rule.status == "gap" and rule.targets:
+        problems.append("a gap has no targets")
+    if rule.status in ("covered", "replaced", "deviation") and not rule.targets:
+        problems.append("no targets")
+    if rule.status == "retired" and len(rule.note.strip()) < MIN_REASON_LENGTH:
+        problems.append("a retired test needs a written reason")
+    if rule.status == "deviation":
+        m = re.search(r"§11:(\d+)", rule.note)
+        if not m or int(m.group(1)) not in section_rows:
+            problems.append("deviation without an existing CONTRATOS section 11 row")
+    return problems
+
+
 def judge() -> list[Verdict]:
     files = new_tests()
     by_norm: dict[str, list[str]] = defaultdict(list)
@@ -177,19 +199,8 @@ def judge() -> list[Verdict]:
                     )
                 )
             continue
-        if rule.status not in STATUSES:
-            problems.append(f"unknown status {rule.status!r}")
-        if rule.status == "gap" and rule.targets:
-            problems.append("a gap has no targets")
-        if rule.status != "gap" and not rule.targets:
-            problems.append("no targets")
+        problems += rule_problems(rule, section_rows)
         problems += [p for t in rule.targets if (p := _check_target(t, files))]
-        if rule.status == "deviation":
-            m = re.search(r"§11:(\d+)", rule.note)
-            if not m or int(m.group(1)) not in section_rows:
-                problems.append(
-                    "deviation without an existing CONTRATOS section 11 row"
-                )
         out.append(
             Verdict(
                 legacy_file,
@@ -258,8 +269,8 @@ def render(verdicts: list[Verdict]) -> str:
     lines += [
         "## Por archivo legado",
         "",
-        "| Archivo | Total | covered | replaced | deviation | gap |",
-        "| --- | ---: | ---: | ---: | ---: | ---: |",
+        "| Archivo | Total | covered | replaced | deviation | retired | gap |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     per: dict[str, Counter] = defaultdict(Counter)
     for v in verdicts:
@@ -267,7 +278,7 @@ def render(verdicts: list[Verdict]) -> str:
     for f in sorted(per):
         c = per[f]
         lines.append(
-            f"| `{f}` | {sum(c.values())} | {c['covered']} | {c['replaced']} | {c['deviation']} | {c['gap']} |"
+            f"| `{f}` | {sum(c.values())} | {c['covered']} | {c['replaced']} | {c['deviation']} | {c['retired']} | {c['gap']} |"
         )
     gaps = [v for v in verdicts if v.status == "gap"]
     lines += ["", "## Huecos", ""]
@@ -283,6 +294,13 @@ def render(verdicts: list[Verdict]) -> str:
             for v in owners[owner]:
                 lines.append(f"- `{v.legacy_file}::{v.test}`: {v.note}")
             lines.append("")
+    retired = [v for v in verdicts if v.status == "retired"]
+    lines += ["", "## Retirados", ""]
+    if not retired:
+        lines.append("Ninguno.")
+    for v in retired:
+        lines.append(f"- `{v.legacy_file}::{v.test}`: {v.note}")
+    lines.append("")
     reps = [v for v in verdicts if v.status in ("replaced", "deviation")]
     lines += ["## Reemplazos y desviaciones", ""]
     seen: set[tuple[str, str]] = set()

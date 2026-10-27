@@ -3,10 +3,10 @@ INSERT INTO "chat_messages" VALUES(2,1,'ASSISTANT','hello','[{"id": "c1", "name"
 INSERT INTO "chat_messages" VALUES(3,1,'TOOL','{}','null','get_posts','null','needed','2026-01-02 14:00:00.000000');
 INSERT INTO "chat_messages" VALUES(4,3,'USER','from merged profile','null',NULL,'null',NULL,'2026-01-15 12:00:00.000000');
 INSERT INTO "chat_messages" VALUES(5,4,'USER','orphan','null',NULL,'null',NULL,'2026-01-15 12:00:00.000000');
-INSERT INTO "listening_matches" VALUES(1,1,'x','n-1','@Sama','viral','https://x.com/sama/status/n-1','{"likes": 900, "replies": 20, "retweets": 30, "impressions": 5000}','2026-01-07 12:00:00.000000','2026-01-07 12:00:00.000000',1);
-INSERT INTO "listening_matches" VALUES(2,1,'x','n-2','levelsio','second','https://x.com/levelsio/status/n-2','null','2026-01-08 12:00:00.000000','2026-01-08 12:00:00.000000',0);
-INSERT INTO "listening_matches" VALUES(3,3,'x','n-1','sama','dup via merged profile','u','null','2026-01-09 12:00:00.000000',NULL,0);
-INSERT INTO "listening_matches" VALUES(4,1,'x','n-3','bad handle!!','skip me','u','null','2026-01-15 12:00:00.000000',NULL,0);
+INSERT INTO "listening_matches" VALUES(1,1,'x','n-1','@Sama',NULL,'viral','https://x.com/sama/status/n-1','{"likes": 900, "replies": 20, "retweets": 30, "impressions": 5000}','2026-01-07 12:00:00.000000','2026-01-07 12:00:00.000000',1);
+INSERT INTO "listening_matches" VALUES(2,1,'x','n-2','levelsio',NULL,'second','https://x.com/levelsio/status/n-2','null','2026-01-08 12:00:00.000000','2026-01-08 12:00:00.000000',0);
+INSERT INTO "listening_matches" VALUES(3,3,'x','n-1','sama',NULL,'dup via merged profile','u','null','2026-01-09 12:00:00.000000',NULL,0);
+INSERT INTO "listening_matches" VALUES(4,1,'x','n-3','bad handle!!',NULL,'skip me','u','null','2026-01-15 12:00:00.000000',NULL,0);
 INSERT INTO "metric_snapshots" VALUES(1,10,24.0,'pfm','2026-01-03 12:00:00.000000',5,1,0,100);
 INSERT INTO "metric_snapshots" VALUES(2,10,NULL,NULL,'2026-01-04 12:00:00.000000',9,NULL,NULL,150);
 INSERT INTO "metric_snapshots" VALUES(3,12,NULL,NULL,'2026-01-03 12:00:00.000000',7,NULL,NULL,120);

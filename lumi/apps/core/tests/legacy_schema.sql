@@ -17,6 +17,7 @@ CREATE TABLE listening_matches (
 	platform VARCHAR NOT NULL, 
 	platform_post_id VARCHAR NOT NULL, 
 	author_handle VARCHAR NOT NULL, 
+	author_avatar_url VARCHAR, 
 	caption VARCHAR NOT NULL, 
 	platform_url VARCHAR NOT NULL, 
 	metrics JSON, 

@@ -11,64 +11,69 @@ la misma conducta, no que sea equivalente línea a línea.
 
 | Estado | Tests legados | Parte |
 | --- | ---: | ---: |
-| covered | 349 | 83.5 % |
-| replaced | 45 | 10.8 % |
+| covered | 350 | 82.9 % |
+| replaced | 45 | 10.7 % |
 | deviation | 3 | 0.7 % |
-| gap | 21 | 5.0 % |
-| **Total** | **418** | 100 % |
+| retired | 10 | 2.4 % |
+| gap | 14 | 3.3 % |
+| **Total** | **422** | 100 % |
 
 ## Por archivo legado
 
-| Archivo | Total | covered | replaced | deviation | gap |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| `test_agent_claim_gate` | 15 | 15 | 0 | 0 | 0 |
-| `test_agent_context` | 8 | 2 | 6 | 0 | 0 |
-| `test_agent_tool_errors` | 6 | 6 | 0 | 0 | 0 |
-| `test_context_budget` | 11 | 11 | 0 | 0 | 0 |
-| `test_coverage_gate` | 12 | 12 | 0 | 0 | 0 |
-| `test_enforcement` | 7 | 7 | 0 | 0 | 0 |
-| `test_framework_corpus` | 8 | 0 | 8 | 0 | 0 |
-| `test_handle_db` | 12 | 5 | 1 | 0 | 6 |
-| `test_handle_search_mvp` | 29 | 29 | 0 | 0 | 0 |
-| `test_handle_search_platforms` | 14 | 12 | 2 | 0 | 0 |
-| `test_handles_router` | 7 | 0 | 7 | 0 | 0 |
-| `test_jev_layer` | 21 | 18 | 3 | 0 | 0 |
-| `test_loop_gates` | 7 | 7 | 0 | 0 | 0 |
-| `test_mcp` | 20 | 20 | 0 | 0 | 0 |
-| `test_mcp_google_router` | 9 | 9 | 0 | 0 | 0 |
-| `test_memory` | 11 | 0 | 11 | 0 | 0 |
-| `test_metrics` | 7 | 7 | 0 | 0 | 0 |
-| `test_niche_schemas` | 11 | 0 | 0 | 0 | 11 |
-| `test_peer_extract` | 13 | 13 | 0 | 0 | 0 |
-| `test_peer_pipeline_wiring` | 2 | 2 | 0 | 0 | 0 |
-| `test_peer_schemas` | 8 | 8 | 0 | 0 | 0 |
-| `test_peer_store` | 7 | 7 | 0 | 0 | 0 |
-| `test_peer_synthesize` | 8 | 8 | 0 | 0 | 0 |
-| `test_peer_winners` | 12 | 12 | 0 | 0 | 0 |
-| `test_post_filter` | 7 | 5 | 2 | 0 | 0 |
-| `test_profile_extract_fixes` | 27 | 20 | 0 | 3 | 4 |
-| `test_prompt5_acceptance` | 8 | 8 | 0 | 0 | 0 |
-| `test_provider_fallback` | 10 | 10 | 0 | 0 | 0 |
-| `test_registry` | 4 | 4 | 0 | 0 | 0 |
-| `test_repurpose` | 11 | 11 | 0 | 0 | 0 |
-| `test_repurpose_endpoint` | 17 | 17 | 0 | 0 | 0 |
-| `test_tool_tiers` | 18 | 18 | 0 | 0 | 0 |
-| `test_turn_class` | 21 | 20 | 1 | 0 | 0 |
-| `test_user_request_tool` | 6 | 6 | 0 | 0 | 0 |
-| `test_voice` | 5 | 5 | 0 | 0 | 0 |
-| `test_voice_corpus` | 5 | 3 | 2 | 0 | 0 |
-| `test_voice_index_sqlite` | 3 | 1 | 2 | 0 | 0 |
-| `test_voice_routes` | 4 | 4 | 0 | 0 | 0 |
-| `test_xpoz` | 1 | 1 | 0 | 0 | 0 |
-| `test_xpoz_resilience` | 6 | 6 | 0 | 0 | 0 |
+| Archivo | Total | covered | replaced | deviation | retired | gap |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `test_agent_claim_gate` | 15 | 15 | 0 | 0 | 0 | 0 |
+| `test_agent_context` | 8 | 2 | 6 | 0 | 0 | 0 |
+| `test_agent_tool_errors` | 6 | 6 | 0 | 0 | 0 | 0 |
+| `test_context_budget` | 11 | 11 | 0 | 0 | 0 | 0 |
+| `test_coverage_gate` | 12 | 12 | 0 | 0 | 0 | 0 |
+| `test_enforcement` | 7 | 7 | 0 | 0 | 0 | 0 |
+| `test_framework_corpus` | 8 | 0 | 8 | 0 | 0 | 0 |
+| `test_handle_db` | 16 | 5 | 1 | 0 | 0 | 10 |
+| `test_handle_search_mvp` | 29 | 29 | 0 | 0 | 0 | 0 |
+| `test_handle_search_platforms` | 14 | 12 | 2 | 0 | 0 | 0 |
+| `test_handles_router` | 7 | 0 | 7 | 0 | 0 | 0 |
+| `test_jev_layer` | 21 | 18 | 3 | 0 | 0 | 0 |
+| `test_loop_gates` | 7 | 7 | 0 | 0 | 0 | 0 |
+| `test_mcp` | 20 | 20 | 0 | 0 | 0 | 0 |
+| `test_mcp_google_router` | 9 | 9 | 0 | 0 | 0 | 0 |
+| `test_memory` | 11 | 0 | 11 | 0 | 0 | 0 |
+| `test_metrics` | 7 | 7 | 0 | 0 | 0 | 0 |
+| `test_niche_schemas` | 11 | 1 | 0 | 0 | 10 | 0 |
+| `test_peer_extract` | 13 | 13 | 0 | 0 | 0 | 0 |
+| `test_peer_pipeline_wiring` | 2 | 2 | 0 | 0 | 0 | 0 |
+| `test_peer_schemas` | 8 | 8 | 0 | 0 | 0 | 0 |
+| `test_peer_store` | 7 | 7 | 0 | 0 | 0 | 0 |
+| `test_peer_synthesize` | 8 | 8 | 0 | 0 | 0 | 0 |
+| `test_peer_winners` | 12 | 12 | 0 | 0 | 0 | 0 |
+| `test_post_filter` | 7 | 5 | 2 | 0 | 0 | 0 |
+| `test_profile_extract_fixes` | 27 | 20 | 0 | 3 | 0 | 4 |
+| `test_prompt5_acceptance` | 8 | 8 | 0 | 0 | 0 | 0 |
+| `test_provider_fallback` | 10 | 10 | 0 | 0 | 0 | 0 |
+| `test_registry` | 4 | 4 | 0 | 0 | 0 | 0 |
+| `test_repurpose` | 11 | 11 | 0 | 0 | 0 | 0 |
+| `test_repurpose_endpoint` | 17 | 17 | 0 | 0 | 0 | 0 |
+| `test_tool_tiers` | 18 | 18 | 0 | 0 | 0 | 0 |
+| `test_turn_class` | 21 | 20 | 1 | 0 | 0 | 0 |
+| `test_user_request_tool` | 6 | 6 | 0 | 0 | 0 | 0 |
+| `test_voice` | 5 | 5 | 0 | 0 | 0 | 0 |
+| `test_voice_corpus` | 5 | 3 | 2 | 0 | 0 | 0 |
+| `test_voice_index_sqlite` | 3 | 1 | 2 | 0 | 0 | 0 |
+| `test_voice_routes` | 4 | 4 | 0 | 0 | 0 | 0 |
+| `test_xpoz` | 1 | 1 | 0 | 0 | 0 | 0 |
+| `test_xpoz_resilience` | 6 | 6 | 0 | 0 | 0 | 0 |
 
 ## Huecos
 
-### CONNECT: 10 tests
+### CONNECT: 14 tests
 
 - `test_handle_db::test_check_niche_trends_persists_every_user_it_searches`: Guardar en la tabla de handles los autores que descubre un escaneo de nicho (tendencias, frameworks, enriquecimiento con tope) no tiene test ni uso en el código nuevo.
+- `test_handle_db::test_check_niche_trends_stores_the_picture_it_knows`: Avatares de autores en los escaneos de nicho (main 632217e): el modelo nuevo y el almacén de handles aún no los guardan. Pendientes de portar a Django por decisión del orquestador (a9f5c75).
 - `test_handle_db::test_check_niche_trends_survives_handle_db_failure`: Guardar en la tabla de handles los autores que descubre un escaneo de nicho (tendencias, frameworks, enriquecimiento con tope) no tiene test ni uso en el código nuevo.
 - `test_handle_db::test_frameworks_search_persists_every_author`: Guardar en la tabla de handles los autores que descubre un escaneo de nicho (tendencias, frameworks, enriquecimiento con tope) no tiene test ni uso en el código nuevo.
+- `test_handle_db::test_lookup_never_raises_when_the_store_is_down`: Avatares de autores en los escaneos de nicho (main 632217e): el modelo nuevo y el almacén de handles aún no los guardan. Pendientes de portar a Django por decisión del orquestador (a9f5c75).
+- `test_handle_db::test_lookup_returns_only_rows_that_carry_a_picture`: Avatares de autores en los escaneos de nicho (main 632217e): el modelo nuevo y el almacén de handles aún no los guardan. Pendientes de portar a Django por decisión del orquestador (a9f5c75).
+- `test_handle_db::test_scan_leaves_rows_null_when_the_store_does_not_know_the_face`: Avatares de autores en los escaneos de nicho (main 632217e): el modelo nuevo y el almacén de handles aún no los guardan. Pendientes de portar a Django por decisión del orquestador (a9f5c75).
 - `test_handle_db::test_scanned_handles_enrich_only_unknown_within_cap`: Guardar en la tabla de handles los autores que descubre un escaneo de nicho (tendencias, frameworks, enriquecimiento con tope) no tiene test ni uso en el código nuevo.
 - `test_handle_db::test_scanned_handles_no_enrichment_when_store_is_down`: Guardar en la tabla de handles los autores que descubre un escaneo de nicho (tendencias, frameworks, enriquecimiento con tope) no tiene test ni uso en el código nuevo.
 - `test_handle_db::test_scanned_handles_zero_limit_saves_handles_only`: Guardar en la tabla de handles los autores que descubre un escaneo de nicho (tendencias, frameworks, enriquecimiento con tope) no tiene test ni uso en el código nuevo.
@@ -77,19 +82,19 @@ la misma conducta, no que sea equivalente línea a línea.
 - `test_profile_extract_fixes::test_second_miss_bracket_and_window_guards`: Lógica de la pasada (second_miss, pass_reached_window, finalize_ingest_pass): depende de profile.refresh, aún pendiente en CONNECT. Se portan las partes puras cuando exista.
 - `test_profile_extract_fixes::test_second_miss_requires_two_complete_misses`: Lógica de la pasada (second_miss, pass_reached_window, finalize_ingest_pass): depende de profile.refresh, aún pendiente en CONNECT. Se portan las partes puras cuando exista.
 
-### INTELLIGENCE: 11 tests
 
-- `test_niche_schemas::test_comment_sample_defaults`: El esquema de nicho con geografía, consultas y vetado de pares del código legado no se portó. Hace falta decidir: portarlo o retirarlo.
-- `test_niche_schemas::test_config_bands_and_weights`: El esquema de nicho con geografía, consultas y vetado de pares del código legado no se portó. Hace falta decidir: portarlo o retirarlo.
-- `test_niche_schemas::test_geo_signal_requires_evidence`: El esquema de nicho con geografía, consultas y vetado de pares del código legado no se portó. Hace falta decidir: portarlo o retirarlo.
-- `test_niche_schemas::test_global_relevance_needs_no_geo_query`: El esquema de nicho con geografía, consultas y vetado de pares del código legado no se portó. Hace falta decidir: portarlo o retirarlo.
-- `test_niche_schemas::test_hour_histogram_must_be_24`: El esquema de nicho con geografía, consultas y vetado de pares del código legado no se portó. Hace falta decidir: portarlo o retirarlo.
-- `test_niche_schemas::test_local_first_requires_geo_query`: El esquema de nicho con geografía, consultas y vetado de pares del código legado no se portó. Hace falta decidir: portarlo o retirarlo.
-- `test_niche_schemas::test_niche_profile_failed_status_constructs_without_fabrication`: El esquema de nicho con geografía, consultas y vetado de pares del código legado no se portó. Hace falta decidir: portarlo o retirarlo.
-- `test_niche_schemas::test_peer_candidate_defaults_never_guess_geo`: El esquema de nicho con geografía, consultas y vetado de pares del código legado no se portó. Hace falta decidir: portarlo o retirarlo.
-- `test_niche_schemas::test_query_validation_fields_default_to_unvalidated`: El esquema de nicho con geografía, consultas y vetado de pares del código legado no se portó. Hace falta decidir: portarlo o retirarlo.
-- `test_niche_schemas::test_retweet_context_carries_original`: El esquema de nicho con geografía, consultas y vetado de pares del código legado no se portó. Hace falta decidir: portarlo o retirarlo.
-- `test_niche_schemas::test_scored_keyword_weight_bounds`: El esquema de nicho con geografía, consultas y vetado de pares del código legado no se portó. Hace falta decidir: portarlo o retirarlo.
+## Retirados
+
+- `test_niche_schemas::test_comment_sample_defaults`: Retirado a propósito: se quitó la minería de comentarios.
+- `test_niche_schemas::test_config_bands_and_weights`: Retirado a propósito: pertenecía al descubrimiento automático; los umbrales de PeerConfig ya tienen sus propios tests.
+- `test_niche_schemas::test_geo_signal_requires_evidence`: Retirado a propósito: la geografía nunca se infiere, la fija el usuario.
+- `test_niche_schemas::test_global_relevance_needs_no_geo_query`: Retirado a propósito: la geografía es el país ISO o global dentro de niche_key (SCHEMA v2), sin consulta geográfica aparte.
+- `test_niche_schemas::test_hour_histogram_must_be_24`: Retirado a propósito: el rango de las horas lo cubre post_metrics_rejects_out_of_range_timing.
+- `test_niche_schemas::test_local_first_requires_geo_query`: Retirado a propósito: la geografía es el país ISO o global dentro de niche_key (SCHEMA v2), sin consulta geográfica aparte.
+- `test_niche_schemas::test_peer_candidate_defaults_never_guess_geo`: Retirado a propósito: los pares los aporta el usuario, no se descubren.
+- `test_niche_schemas::test_query_validation_fields_default_to_unvalidated`: Retirado a propósito: ya no hay búsqueda automática de pares que valide consultas.
+- `test_niche_schemas::test_retweet_context_carries_original`: Retirado a propósito: PeerPostIn no modela retuits.
+- `test_niche_schemas::test_scored_keyword_weight_bounds`: Retirado a propósito: las palabras clave son texto plano, sin peso.
 
 ## Reemplazos y desviaciones
 

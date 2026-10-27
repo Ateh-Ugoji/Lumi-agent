@@ -44,13 +44,23 @@ test_peer_extract	.*	covered	INTELLIGENCE	lumi_ai/tests/competitors/test_extract
 test_peer_schemas	.*	covered	INTELLIGENCE	lumi_ai/tests/competitors/test_schemas.py	
 test_peer_synthesize	.*	covered	INTELLIGENCE	lumi_ai/tests/competitors/test_synthesize.py	
 test_peer_winners	.*	covered	INTELLIGENCE	lumi_ai/tests/competitors/test_winners.py	
-test_niche_schemas	.*	gap	INTELLIGENCE		El esquema de nicho con geografía, consultas y vetado de pares del código legado no se portó. Hace falta decidir: portarlo o retirarlo.
+test_niche_schemas	niche_profile_failed_status_constructs_without_fabrication	covered	INTELLIGENCE	lumi_ai/tests/competitors/test_schemas.py::failed_report_constructs_without_fabricated_frameworks	Portado (f4a660c): un informe fallido no trae marcos inventados.
+test_niche_schemas	local_first_requires_geo_query|global_relevance_needs_no_geo_query	retired	INTELLIGENCE	lumi_ai/tests/competitors/test_niche.py::niche_key_round_trips	Retirado a propósito: la geografía es el país ISO o global dentro de niche_key (SCHEMA v2), sin consulta geográfica aparte.
+test_niche_schemas	query_validation_fields_default_to_unvalidated	retired	INTELLIGENCE		Retirado a propósito: ya no hay búsqueda automática de pares que valide consultas.
+test_niche_schemas	hour_histogram_must_be_24	retired	INTELLIGENCE	lumi_ai/tests/competitors/test_schemas.py::post_metrics_rejects_out_of_range_timing	Retirado a propósito: el rango de las horas lo cubre post_metrics_rejects_out_of_range_timing.
+test_niche_schemas	scored_keyword_weight_bounds	retired	INTELLIGENCE		Retirado a propósito: las palabras clave son texto plano, sin peso.
+test_niche_schemas	geo_signal_requires_evidence	retired	INTELLIGENCE		Retirado a propósito: la geografía nunca se infiere, la fija el usuario.
+test_niche_schemas	peer_candidate_defaults_never_guess_geo	retired	INTELLIGENCE		Retirado a propósito: los pares los aporta el usuario, no se descubren.
+test_niche_schemas	comment_sample_defaults	retired	INTELLIGENCE		Retirado a propósito: se quitó la minería de comentarios.
+test_niche_schemas	retweet_context_carries_original	retired	INTELLIGENCE		Retirado a propósito: PeerPostIn no modela retuits.
+test_niche_schemas	config_bands_and_weights	retired	INTELLIGENCE		Retirado a propósito: pertenecía al descubrimiento automático; los umbrales de PeerConfig ya tienen sus propios tests.
 test_xpoz	.*	covered	CONNECT	apps/connections/tests/test_xpoz.py::user_posts_page	
 test_xpoz_resilience	niche_trends_.*|partial_handle_failure.*	covered	INTELLIGENCE	lumi_ai/tests/competitors/test_tools.py::trends	
 test_xpoz_resilience	.*	covered	CONNECT	apps/connections/tests/test_xpoz.py	
 test_handle_db	remember_.*	covered	CONNECT	apps/connections/tests/db/test_stores.py::remember_new_keeps	
 test_handle_db	no_chroma_config_is_a_noop	replaced	CONNECT	apps/connections/tests/db/test_stores.py	El almacén de handles ya no depende de Chroma ni de Firestore: vive en PostgreSQL.
 test_handle_db	user_profile_.*	covered	CONNECT	apps/connections/tests/test_xpoz.py::key_rotates;apps/connections/tests/test_xpoz.py::user_posts_page	
+test_handle_db	check_niche_trends_stores_the_picture_it_knows|lookup_never_raises_when_the_store_is_down|lookup_returns_only_rows_that_carry_a_picture|scan_leaves_rows_null_when_the_store_does_not_know_the_face	gap	CONNECT		Avatares de autores en los escaneos de nicho (main 632217e): el modelo nuevo y el almacén de handles aún no los guardan. Pendientes de portar a Django por decisión del orquestador (a9f5c75).
 test_handle_db	.*	gap	CONNECT		Guardar en la tabla de handles los autores que descubre un escaneo de nicho (tendencias, frameworks, enriquecimiento con tope) no tiene test ni uso en el código nuevo.
 test_handle_search_mvp	.*	covered	CONNECT	apps/connections/tests/handles/test_service.py;apps/connections/tests/handles/test_ranking.py;apps/connections/tests/db/test_handles_api.py;apps/connections/tests/db/test_stores.py	
 test_handle_search_platforms	fat_pull_.*|cache_read_pages_.*	replaced	CONNECT	apps/connections/tests/db/test_stores.py::cache_entry_round_trips	La cuota de lectura y recorte de Firestore no existe en PostgreSQL.

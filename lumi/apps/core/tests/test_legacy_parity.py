@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import re
+
 import pytest
 
 from apps.core.tests import legacy_parity as parity
 
 
-def test_the_frozen_list_holds_the_418_legacy_tests() -> None:
+def test_the_frozen_list_holds_the_422_legacy_tests() -> None:
     assert sum(count for _, _, count in parity.legacy_tests()) == parity.EXPECTED_TOTAL
 
 
@@ -44,3 +46,30 @@ def test_the_frozen_names_match_lumi_tests_while_it_exists() -> None:
     }
     disk = {f: names for f, names in disk.items() if names}
     assert disk == frozen
+
+
+def _rule(status: str, note: str = "", targets: tuple[str, ...] = ()) -> parity.Rule:
+    return parity.Rule("test_x", re.compile(".*"), status, "OWNER", targets, note)
+
+
+def test_a_retired_test_needs_a_written_reason() -> None:
+    assert parity.rule_problems(_rule("retired"), set()) == [
+        "a retired test needs a written reason"
+    ]
+    assert parity.rule_problems(_rule("retired", "no"), set()) != []
+    reason = "Retirado a propósito: la función se quitó."
+    assert parity.rule_problems(_rule("retired", reason), set()) == []
+
+
+def test_a_gap_cannot_hide_behind_targets_and_covered_needs_them() -> None:
+    assert parity.rule_problems(_rule("gap", targets=("a.py",)), set()) != []
+    assert parity.rule_problems(_rule("covered"), set()) == ["no targets"]
+
+
+def test_retired_tests_are_listed_with_their_reason_in_the_report() -> None:
+    verdicts = parity.judge()
+    retired = [v for v in verdicts if v.status == "retired"]
+    assert retired
+    report = parity.render(verdicts)
+    for v in retired:
+        assert f"`{v.legacy_file}::{v.test}`: {v.note}" in report
