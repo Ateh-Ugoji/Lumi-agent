@@ -201,7 +201,7 @@ class TestBootstrapJob:
         bootstrap(VoiceRefresh("failed", reason="model said no: secret detail"))
         with pytest.raises(JobError) as caught:
             tasks.bootstrap_profile(ctx(profile))
-        assert caught.value.code == "voice_failed"
+        assert caught.value.code == "voice.learn_failed"
         assert "secret detail" not in str(caught.value)
         assert SocialProfile.objects.get(pk=profile.pk).bootstrapped_at is None
 

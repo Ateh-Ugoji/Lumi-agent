@@ -58,7 +58,8 @@ def bootstrap_profile(ctx: JobContext) -> dict[str, Any]:
             "voice bootstrap failed for profile %s: %s", profile_id, refreshed.reason
         )
         raise JobError(
-            "voice_failed", "No se pudo aprender tu voz. Se puede reintentar más tarde."
+            "voice.learn_failed",
+            "No se pudo aprender tu voz. Se puede reintentar más tarde.",
         )
 
     services.mark_bootstrapped(profile_id)
@@ -81,7 +82,7 @@ def refresh_profile(ctx: JobContext) -> dict[str, Any]:
     synced = _sync(wiring, ctx.profile_id)
     if synced is None:
         raise JobError(
-            "sync_failed",
+            "profiles.sync_failed",
             "No se pudieron leer tus publicaciones. Revisa que la cuenta siga conectada.",
         )
     jobs.set_progress(ctx.id, PROGRESS_SYNCED)

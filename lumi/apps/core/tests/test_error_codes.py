@@ -16,10 +16,7 @@ DOMAIN_CODE = re.compile(r"^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$")
 
 #: Codes that predate the rule and belong to another team's files. Each one names its owner and
 #: the new code. When the owner renames it, the test below fails until the entry is deleted here.
-PENDING_RENAME = {
-    "sync_failed": "INTELLIGENCE: profiles.sync_failed (apps/intelligence/tasks.py, profile.refresh)",
-    "voice_failed": "INTELLIGENCE: voice.learn_failed (apps/intelligence/tasks.py, profile.bootstrap)",
-}
+PENDING_RENAME: dict[str, str] = {}
 
 
 def generic_codes() -> set[str]:

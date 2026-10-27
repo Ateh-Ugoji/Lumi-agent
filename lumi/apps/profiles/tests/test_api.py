@@ -339,4 +339,4 @@ def test_profile_refresh_fails_cleanly_when_the_posts_cannot_be_read(
     job_id = api.post(url(profile, "/refresh")).json()["job_id"]
     assert jobs.run_job(job_id) == "failed"
     body = api.get(f"{BASE}/jobs/{job_id}").json()
-    assert (body["status"], body["error_code"]) == ("failed", "sync_failed")
+    assert (body["status"], body["error_code"]) == ("failed", "profiles.sync_failed")

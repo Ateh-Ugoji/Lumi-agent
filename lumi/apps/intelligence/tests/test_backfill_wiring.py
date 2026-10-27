@@ -275,7 +275,9 @@ class TestJobs:
         _, indexer, _ = jobs_rig(sync)
         with pytest.raises(JobError) as caught:
             tasks.refresh_profile(ctx(profile, tasks.REFRESH_KIND))
-        assert caught.value.code == "sync_failed" and "secret" not in str(caught.value)
+        assert caught.value.code == "profiles.sync_failed" and "secret" not in str(
+            caught.value
+        )
         assert indexer.seen == []
 
     def test_refresh_without_a_profile_is_refused(self, profile, jobs_rig):

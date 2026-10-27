@@ -91,8 +91,8 @@ Los cuerpos coinciden con los de FastAPI salvo lo marcado como **cambio**.
 | `job.no_handler` | cualquiera | Nadie registró ese `kind`. |
 | `job.unexpected` | cualquiera | El manejador lanzó una excepción no prevista. El mensaje es fijo. |
 | `validation_error` | `profile.*` | El trabajo no trae `profile_id`. |
-| `sync_failed` (pendiente: pasa a `profiles.sync_failed`) | `profile.refresh` | No se pudo leer el feed de la cuenta conectada (sin cuenta, sin configurar o caída del proveedor). `profile.bootstrap` no falla por esto: termina con `sync = unavailable`. |
-| `voice_failed` (pendiente: pasa a `voice.learn_failed`) | `profile.bootstrap` | No se pudo aprender la voz. Se puede reintentar. |
+| `profiles.sync_failed` | `profile.refresh` | No se pudo leer el feed de la cuenta conectada (sin cuenta, sin configurar o caída del proveedor). `profile.bootstrap` no falla por esto: termina con `sync = unavailable`. |
+| `voice.learn_failed` | `profile.bootstrap` | No se pudo aprender la voz. Se puede reintentar. |
 
 `profile.refresh` devuelve `{posts_synced, posts_indexed, complete, flagged_deleted}` y avanza a `progress` 20 tras la lectura. `POST /profiles/{id}/refresh` no cambia: `202 {job_id}`.
 
