@@ -27,3 +27,10 @@ class PfmSyncThrottle(UserRateThrottle):
 
     scope = "pfm_sync"
     rate = "12/min"
+
+
+class ServiceCredentialThrottle(UserRateThrottle):
+    """Staff-only credential management. Slow on purpose: nobody edits keys in a loop."""
+
+    scope = "service_credentials"
+    rate = "30/min"
