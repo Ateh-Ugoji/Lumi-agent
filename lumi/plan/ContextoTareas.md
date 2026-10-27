@@ -214,3 +214,14 @@ ARCHITECT verificó que ningún archivo de INTELLIGENCE ni de CONNECT importa `a
 - (c) Esperar.
 El orquestador eligió (c) mientras Christian decide. Entretanto, ARCHITECT completa la matriz de paridad contra los 418 tests legados y congela en un fixture el esquema de `legacy_regen.py`. No se borra ni se mueve nada.
 - Restricción (07:40 UTC): INTELLIGENCE y CONNECT confirmaron que su código no importa `app.*`. Pero el frontend todavía llama a rutas del FastAPI viejo en la pantalla de voz y en el conector de Google, y CONNECT las pasa a `/api/v1` en su T11. Lo que decida Christian se aplica recién cuando T11 esté cerrada.
+
+## Estado 27 oct 2026, 07:45 UTC
+- CONNECT terminó T0 a T14 (HEAD `82f29c3`). El e2e con Playwright da 9/9 con proveedores simulados y un runtime de chat falso, y pytest da 1555 pasan. La voz y Google ya van por `/api/v1`. Le queda la revisión de seguridad de OAuth y del e2e, y diagnosticar 2 tests intermitentes. Pendientes anotados: elegir Página cuando hay varias en Meta (ruta `link` pedida a ARCHITECT), publicar en Instagram y TikTok, y un tope diario de Xpoz.
+- INTELLIGENCE terminó T0 a T10 y T12 (HEAD `9bc2ac6`; 626 tests; `docs/AI.md`, `docs/VIDEO_API_COMPARISON.md`). T11 (los live) está escrita y sin correr. Le queda T4b (runtime con MCP) y corregir el riesgo de que el timeout de una tool permita confirmar una escritura del ORM.
+- ARCHITECT tiene que montar `apps.intelligence.urls`: hoy `/repurpose` y `/voice/transcribe` dan 404. También tiene que corregir 2 tests suyos: el arranque ASGI exige `GROQ_API_KEY` sin key en los tests, y un test de `legacy_import` quedó desfasado.
+
+### Decisiones de Christian (INTELLIGENCE)
+1. ¿Se aprueba Gemini de pago (`gemini-3.5-flash-lite`) para analizar video? Cuesta unos $0.008–0.013 por video de 60 s, con un tope de `VIDEO_MAX_PER_RUN=5`. Hace falta una key de plan de pago, porque el plan gratis usa el contenido para entrenar.
+2. Revisar los términos de Google, X, Instagram y TikTok sobre analizar videos de terceros.
+3. Pegar `GROQ_API_KEY` y `TYPESAFE_API_KEY` (y `OPENROUTER_API_KEY` si se quiere) en `lumi/.env`, y autorizar los tests live y `ai_eval --live`, que gastan cuota.
+4. Pasar posts reales aceptados y rechazados para calibrar los umbrales de los jueces.
