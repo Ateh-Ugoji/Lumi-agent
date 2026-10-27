@@ -1,0 +1,26 @@
+{
+  "name": "lumi",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --port 3010",
+    "build": "vite build",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test tests/formatDuration.test.ts tests/scriptPlayer.test.ts tests/revealEngine.test.ts"
+  },
+  "dependencies": {
+    "clsx": "^2.1.1",
+    "glimm": "^0.3.1",
+    "liveline": "^0.0.7",
+    "react": "^19",
+    "react-dom": "^19"
+  },
+  "devDependencies": {
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@vitejs/plugin-react": "^6.0.1",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.4"
+  }
+}

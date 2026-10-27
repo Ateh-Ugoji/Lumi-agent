@@ -1,0 +1,686 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lumi — Flow Map (Connect · Agent Chat · Data Flow)</title>
+<style>
+  :root{
+    --bg:#1F1F1F; --panel:#262626; --panel2:#2B2B2B; --line:#3A3A3A;
+    --text:#E8E8E8; --muted:#9B9B9B; --accent:#0078D4; --accent2:#4DA3FF;
+    --ui:#3B82F6; --api:#0EA5E9; --svc:#14B8A6; --ext:#F59E0B; --db:#38BDF8;
+    --chroma:#8B5CF6; --bgj:#10B981; --llm:#EC4899; --file:#22C55E; --agent:#0078D4;
+    --edge:#5B6470;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--bg); color:var(--text);
+    font-family:Inter,"Segoe UI",system-ui,-apple-system,sans-serif;
+    font-size:14px; line-height:1.45;
+  }
+  header{
+    position:sticky; top:0; z-index:50;
+    background:rgba(31,31,31,.96); backdrop-filter:blur(6px);
+    border-bottom:1px solid var(--line); padding:14px 24px 0;
+  }
+  h1{margin:0; font-size:17px; font-weight:650; letter-spacing:.2px}
+  h1 span{color:var(--muted); font-weight:450; font-size:13px; margin-left:10px}
+  .tabs{display:flex; gap:8px; margin-top:12px}
+  .tabs button{
+    background:var(--panel); color:var(--muted); border:1px solid var(--line);
+    border-bottom:none; border-radius:8px 8px 0 0; padding:8px 16px;
+    font:inherit; font-size:13px; cursor:pointer;
+  }
+  .tabs button.active{background:var(--panel2); color:var(--text); border-color:var(--accent); box-shadow:inset 0 -2px 0 var(--accent)}
+  .tabs button:hover{color:var(--text)}
+  main{padding:0 24px 60px}
+  .view{display:none}
+  .view.active{display:block}
+  .vhead{display:flex; flex-wrap:wrap; gap:10px 18px; align-items:center; margin:16px 0 10px}
+  .vhead h2{margin:0; font-size:15px; font-weight:650}
+  .vhead p{margin:0; color:var(--muted); font-size:12.5px}
+  .legend{display:flex; flex-wrap:wrap; gap:6px}
+  .chip{font-size:11px; padding:2px 8px; border-radius:99px; border:1px solid var(--line); background:var(--panel); color:var(--muted)}
+  .chip i{display:inline-block; width:8px; height:8px; border-radius:2px; margin-right:5px; vertical-align:0}
+  .graph-wrap{overflow-x:auto; border:1px solid var(--line); border-radius:10px; background:#1B1B1B}
+  .graph{position:relative}
+  .graph svg{position:absolute; inset:0; width:100%; height:100%; pointer-events:none}
+  .node{
+    position:absolute; width:210px; background:var(--panel);
+    border:1px solid var(--line); border-left:3px solid var(--accent);
+    border-radius:8px; padding:8px 10px 9px;
+    box-shadow:0 2px 8px rgba(0,0,0,.35);
+  }
+  .node .t{font-size:12.5px; font-weight:640; letter-spacing:.1px}
+  .node .s{font-size:11px; color:var(--muted); margin-top:3px; font-family:"Cascadia Code",Consolas,monospace}
+  .node .n{font-size:11px; color:#B9C4D0; margin-top:4px; border-top:1px dashed #3A3F45; padding-top:4px}
+  .k-ui{border-left-color:var(--ui)} .k-api{border-left-color:var(--api)}
+  .k-svc{border-left-color:var(--svc)} .k-ext{border-left-color:var(--ext)}
+  .k-db{border-left-color:var(--db)} .k-chroma{border-left-color:var(--chroma)}
+  .k-bg{border-left-color:var(--bgj)} .k-llm{border-left-color:var(--llm)}
+  .k-file{border-left-color:var(--file)} .k-agent{border-left-color:var(--agent)}
+  .elabel{
+    position:absolute; transform:translate(-50%,-50%);
+    background:#22262B; border:1px solid #3A4048; color:#C7D2DE;
+    font-size:10.5px; padding:1.5px 7px; border-radius:99px; white-space:nowrap;
+    pointer-events:none; z-index:5;
+  }
+  .elabel.dash{color:#9AA6B2; border-style:dashed}
+  .elabel.blue{color:#8FC8FF; border-color:#245A8A}
+  .notes{display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:10px; margin-top:12px}
+  .note{background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:10px 12px; font-size:12.5px}
+  .note b{display:block; font-size:12px; margin-bottom:4px; color:#BFD7F2}
+  .note.warn{border-color:#6B5A1E} .note.warn b{color:#F0C552}
+  .note.ok b{color:#6EE7A0}
+  h3{font-size:13.5px; margin:22px 0 8px; font-weight:650}
+  table{border-collapse:collapse; width:100%; font-size:12.5px; background:var(--panel); border:1px solid var(--line); border-radius:8px; overflow:hidden}
+  th,td{border:1px solid var(--line); padding:6px 9px; text-align:left; vertical-align:top}
+  th{background:#2E2E2E; font-weight:640; font-size:11.5px; color:#B9C4D0; text-transform:uppercase; letter-spacing:.4px}
+  td code, p code{background:#1B1B1B; border:1px solid #333; border-radius:4px; padding:0 4px; font-size:11.5px; font-family:Consolas,monospace}
+  .mono{font-family:Consolas,monospace; font-size:11.5px}
+  .muted{color:var(--muted)}
+  .pill{display:inline-block; font-size:10.5px; border-radius:99px; padding:1px 7px; border:1px solid}
+  .pill.live{color:#6EE7A0; border-color:#1F5B3C; background:#12281D}
+  .pill.res{color:#C7B9FF; border-color:#4A3F7A; background:#1D1A2E}
+  .pill.no{color:#8A8A8A; border-color:#3A3A3A; background:#242424}
+  footer{color:var(--muted); font-size:11.5px; margin-top:26px}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Lumi — Flow Map <span>hand-maintained · keep in sync with code (mirrors docs/flow-map.md)</span></h1>
+  <div class="tabs" id="tabs">
+    <button data-v="connect" class="active">1 · Connect session</button>
+    <button data-v="chat">2 · Agent chat session</button>
+    <button data-v="data">3 · General data flow</button>
+    <button data-v="mvp">4 · @-handle bar MVP</button>
+    <button data-v="voice">5 · Voice chat</button>
+    <button data-v="userreq">6 · User-requested handles</button>
+    <button data-v="mcp">7 · MCP connectors</button>
+    <button data-v="recaption">8 · AI recaption</button>
+  </div>
+</header>
+
+<main>
+
+<!-- ═══════════════ VIEW 1 · CONNECT ═══════════════ -->
+<section class="view active" id="v-connect">
+  <div class="vhead">
+    <h2>1 · Connect session — OAuth → bootstrap → first data</h2>
+    <p>Frontend → PFM OAuth → callback creates the profile → background bootstrap builds voice + peer corpora.</p>
+    <div class="legend">
+      <span class="chip"><i style="background:var(--ui)"></i>UI</span>
+      <span class="chip"><i style="background:var(--api)"></i>route</span>
+      <span class="chip"><i style="background:var(--ext)"></i>external</span>
+      <span class="chip"><i style="background:var(--db)"></i>Postgres</span>
+      <span class="chip"><i style="background:var(--chroma)"></i>Chroma</span>
+      <span class="chip"><i style="background:var(--bgj)"></i>background</span>
+      <span class="chip"><i style="background:var(--llm)"></i>LLM</span>
+    </div>
+  </div>
+
+  <div class="graph-wrap"><div class="graph" id="g-connect"></div></div>
+
+  <div class="notes">
+    <div class="note"><b>Only the callback writes the profile</b><code>POST /pfm/connect</code> just mints an auth URL — the <code>profiles</code> row is created by <code>GET /pfm/callback</code> (upsert by unique <code>pfm_account_id</code>). Nothing else may create profiles.</div>
+    <div class="note"><b>Bootstrap is retry-driven, not one-shot</b>Voice extraction re-runs every ~5&nbsp;min until ≥5 posts yield a real profile; frameworks re-extract weekly (<code>FRAMEWORK_REFRESH_DAYS=7</code>); corpus sync runs every pass.</div>
+    <div class="note ok"><b>Chroma is a derived index here</b>Every write to <code>voice_corpus</code> / <code>peer_frameworks</code> / <code>peer_posts</code> is exception-shielded — if Chroma is down, Postgres still holds everything and startup backfill re-indexes later.</div>
+    <div class="note ok"><b>Profile-extract data quality — landed (migration b7d2e5f8a3c1)</b>All own-post paths funnel through <code>services/ingest.py</code> (<code>store_raw_item</code>): classification with API-flag provenance (<code>posts.kind</code>/<code>kind_source</code>/<code>conversation_id</code>), <b>missing metrics stored as NULL, never 0</b> (migration fixed 24 fabricated all-zero snapshots on profile 16; Rule A matched 0 rows), snapshot policy (append on change; milestones 24h/72h/7d/30d; unchanged ≤7d refreshed ≥6h apart; <code>age_hours</code> stored; final = snapshot nearest 72h), sticky truncation flag (≥270 chars + ellipsis/URL tail), and deletion-suspect flagging (two consecutive complete-pass misses in a 30d bracket-guarded window → excluded, never deleted). Bootstrap step 3 computes the profile baseline + own-lift table via the <b>same</b> <code>app/analysis/{metrics,lift}.py</code> the peer pipeline will use; tagging rows stay <code>status='pending'</code> until Runtime Prompt A. Weak timezone inference on ingest (<code>user_confirmed</code> always wins) is exposed on <code>GET /profiles</code>. Report: <code>uv run python scripts/own_report.py</code> · tests: <code>tests/test_profile_extract_fixes.py</code> · details: AGENTS.md → “Profile-Extract Data Quality”, flow-map.md → “Profile-extract data quality”, audit: <code>docs/profile_extract_audit.md</code>.</div>
+    <div class="note ok"><b>Peer-framework upgrade — live (Prompts 1–3, 2026-10-26)</b><code>app/services/peer_pipeline.py</code> runs the whole flow (28-day per-account baseline, winners at ≥1.5× the account's <i>own</i> median, blind LLM tagging with no metrics in the prompt, lift-table synthesis, <code>NicheFrameworkReport</code>) from both live entry points: <code>discover_and_extract_niche_frameworks</code> and bootstrap <code>_ensure_peer_frameworks</code>. Persistence: <code>niche_framework_reports</code> + <code>post_taggings</code> (migration <code>cefd455456a2</code>), bridged into <code>peer_frameworks</code>/Chroma. The impressions-≥1k path and the canned “Milestones &amp; Shipped Tech” fallback are <b>deleted</b>. Details: AGENTS.md → “Peer-Framework Pipeline Upgrade”, flow-map.md → “Peer-framework upgrade”.</div>
+    <div class="note warn"><b>Niche extraction upgrade — staged, not wired</b>Schemas landed in <code>app/schemas/niche.py</code>: niche, location (3 scopes: creator / audience / niche), typed weighted keywords, tiered queries, and peer handles derived from the user's own profile extract — bio, replies <i>with parent</i>, RTs <i>with original text</i>, quotes, and sampled inbound comments. The hardcoded niche query + handle lists (<code>bootstrap.py</code>, <code>prompts.py</code> rule 4, <code>trends.py</code>, frontend) are still the <b>live</b> path until Prompts 1–3 of <code>niche_opencode_prompts.md</code> merge; Prompt 1 gates on an Xpoz capability report (profile lookup / reply parents / comments are unverified today). Planned tables: <code>post_comments</code>, <code>profile_niche</code>, <code>niche_keywords</code>, <code>niche_registry</code> (key = <code>topic:geo</code>), <code>niche_peers</code> (giants excluded from benchmarks). Details: AGENTS.md → “Niche Extraction Pipeline Upgrade”, flow-map.md → “Niche extraction upgrade”.</div>
+  </div>
+
+  <h3>Pipeline steps — file · reads · writes</h3>
+  <table>
+    <thead><tr><th>#</th><th>Step</th><th>File</th><th>Reads</th><th>Writes</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>Settings → Connect X</td><td class="mono">frontend Settings.tsx → <code>api/client.ts getConnectAuthUrl</code></td><td>—</td><td>—</td><td>Opens PFM URL in same tab</td></tr>
+      <tr><td>2</td><td><code>POST /pfm/connect</code></td><td class="mono">app/routers/pfm.py</td><td>—</td><td>—</td><td>Returns raw <code>{url}</code>; permissions <code>["read","write"]</code> (REST path differs from agent tool's <code>["posts","feeds"]</code>)</td></tr>
+      <tr><td>3</td><td>auth-url</td><td class="mono">app/services/pfm.py <code>create_auth_url()</code></td><td>PFM API</td><td>—</td><td>Bearer <code>PFM_JWT_TOKEN</code></td></tr>
+      <tr><td>4</td><td>X OAuth consent</td><td class="mono">external · api.x.com</td><td>—</td><td>—</td><td>User authorizes; PFM redirects to registered callback URL</td></tr>
+      <tr><td>5</td><td><code>GET /pfm/callback</code></td><td class="mono">app/routers/pfm.py</td><td>PFM <code>get_social_account</code> per id</td><td><b>profiles</b> (upsert by <code>pfm_account_id</code>)</td><td>Only profile-creation point; returns JSON (no SPA redirect)</td></tr>
+      <tr><td>6</td><td>schedule bootstrap</td><td class="mono">app/main.py lifespan → <code>background/bootstrap.py</code></td><td>—</td><td>—</td><td>Runs alongside poller; exception-shielded per profile</td></tr>
+      <tr><td>7</td><td>step 0 · corpus sync</td><td class="mono">bootstrap <code>_sync_voice_corpus</code> → <code>services/voice_corpus.py</code></td><td>posts (latest ≤200)</td><td>Chroma <b>voice_corpus</b></td><td>Idempotent upsert; no-op if Chroma down</td></tr>
+      <tr><td>8</td><td>step 1 · voice profile</td><td class="mono">tools/voice.py <code>extract_voice_profile</code></td><td>posts (PFM backfill if &lt;5), <code>user_activity</code> replies (→ reply_style only), Chroma corpus sample, prior <code>voice_profiles</code></td><td><b>posts + metric_snapshots</b>, <b>voice_profiles</b> (versioned), <b>user_activity</b> (classify routing), voice_corpus upsert</td><td>Flip <code>is_current</code> → flush → insert next version; retry loop while thin; non-authentic filtered</td></tr>
+      <tr><td>9</td><td>step 2 · peer frameworks</td><td class="mono">bootstrap <code>_ensure_peer_frameworks</code></td><td><code>run_peer_pipeline</code> (Xpoz <code>search_live_posts</code> → <code>get_user_live_posts_page</code> ×≤8 accounts), <code>check_niche_trends</code></td><td><b>listening_matches</b>, <b>niche_framework_reports</b>, <b>post_taggings</b>, <b>peer_frameworks</b>, Chroma <b>peer_frameworks + peer_posts</b></td><td>Weekly refresh; index right after persist</td></tr>
+      <tr><td>10</td><td>step 3 · own analysis</td><td class="mono">bootstrap <code>_ensure_own_analysis</code> → <code>app/analysis/{own_lift,own_tagging}.py</code></td><td>posts + metric_snapshots (final = nearest 72h)</td><td><b>profile_baseline</b> (append-only), own-lift rows, <b>own_post_analysis</b> (<code>status='pending'</code> until Prompt A)</td><td>All local DB work — safe every tick; deleted-suspect/too-young/too-old/NULL-views excluded; baseline = shared <code>analysis/metrics.py</code> + <code>lift.py</code> (same functions as the peer pipeline)</td></tr>
+      <tr><td>11</td><td>startup backfill</td><td class="mono">app/main.py lifespan → <code>framework_corpus.sync_frameworks_from_db</code></td><td>peer_frameworks rows</td><td>Chroma peer_frameworks</td><td>Repairs the index after key rotation / new tenant</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ═══════════════ VIEW 2 · CHAT ═══════════════ -->
+<section class="view" id="v-chat">
+  <div class="vhead">
+    <h2>2 · Agent chat session — one turn, end to end</h2>
+    <p>SSE → <b>turn classify</b> (rules first, Jev stage 2 off by default → fast or full path) → prompt build (memory summary + profile ctx) → fit to 6.7k est. tokens → OpenLux → Groq (gpt-oss-120b → qwen3.8-27b) → OpenRouter tool loop (≤6) → persist → fire-and-forget memory extraction + classification row.</p>
+    <div class="legend">
+      <span class="chip"><i style="background:var(--agent)"></i>loop</span>
+      <span class="chip"><i style="background:var(--llm)"></i>LLM</span>
+      <span class="chip"><i style="background:var(--db)"></i>Postgres</span>
+      <span class="chip"><i style="background:var(--chroma)"></i>Chroma</span>
+      <span class="chip"><i style="background:var(--file)"></i>memory.md</span>
+      <span class="chip">— solid = call/sequence · ┄ dashed = data read · pill labels on edges</span>
+    </div>
+  </div>
+
+  <div class="graph-wrap"><div class="graph" id="g-chat"></div></div>
+
+  <div class="notes">
+    <div class="note"><b>Prompt composition</b><code>build_system_prompt(memory_summary=…)</code> = <code>SYSTEM_PROMPT</code> (rules 1–22) + AGENT MEMORY block (from <code>memory.md</code>) + CURRENT PROFILE CONTEXT (incl. <code>today's date</code>, rule 19). Rule 7 → <code>get_peer_advice</code>, rule 11 → <code>recall_memory</code>, rule 12 → <code>remember</code>, rules 13–15 → user-requested handles, no un-run action claims, honest <code>get_peer_advice</code> labeling, rules 17–20 → coverage line per named handle + <code>source_handles</code> evidence rule + no invented specifics + state the deliverable's owner, rule 21 → free-first ambiguity (offer a credits/llm tool, never spend silently), rule 22 → tool-call <code>reason</code> discipline + answer from the TOOLS USED note instead of re-running tools. A fast-path turn sends <code>_FAST_PROMPT</code> instead (no "Operating rules" block).</div>
+    <div class="note ok"><b>Turn classification → path → tier (PROMPT 5)</b><code>classify_turn</code> runs rules first and only calls Jev when nothing matched (stage 2 default <b>off</b> — <code>turn_class_jev_enabled</code>, 0.85/0.6, 800 ms). The class picks the tool allowlist (<code>CLASS_ALLOWED</code>: chitchat/history_meta → no tools, memory → free + memory, read_cheap → free only, live_scan → free+credits+llm, write → free+write) and the effort (<code>low</code> for the free-tier classes). <b>Fast path</b> additionally requires no pending-write resolution and no coverage-guarded ask; <code>path_taken</code> records what actually ran. Each turn writes one <code>turn_classifications</code> row <b>after</b> the reply (fire-and-forget — a failed write never breaks a turn) carrying <code>timings</code>; <code>/health</code> merges p50/p95 over the newest 100 turns and <b>omits</b> the block when nothing is measurable.</div>
+    <div class="note ok"><b>Tool loop invariants</b>USER row persisted <i>before</i> the loop; TOOL rows never re-enter context next request; tool exceptions, malformed JSON arguments, and missing required arguments are caught and fed back to the model as <code>{"error": …}</code> tool messages — the turn always completes (registry validates arguments before dispatch). Every tool runs under a 120 s timeout; a zero-tool reply that claims scan-style work gets one corrective nudge, then an appended honesty disclaimer (see section 6).</div>
+    <div class="note ok"><b>Request-fit before every completion</b>The assembled payload (system + history + current ask + tool specs) is estimated (chars ÷ 3.5) and trimmed to <code>MAX_REQUEST_TOKENS = 6_700</code> before <i>each</i> call — ladder: drop oldest history → shrink older tool-group results to 1,200 chars → drop the oldest whole tool-group; never the system prompt, the current ask, or the newest tool group (whole-group deletion can't orphan <code>tool_calls</code>). Re-run every loop iteration (tool results grow the transcript); trims are in-memory — the DB keeps full text, each tool result's context copy is capped at 4,000 chars. Still-over sends with a warning: the Groq chain's second model (~8k-token wall) is the backstop, so a qwen 413/429 no longer kills the turn (smoke: <code>context budget: dropped 8 oldest history message(s)…</code>, no 413).</div>
+    <div class="note ok"><b>Memory never blocks the reply</b>Extraction runs as a held fire-and-forget task after success; LLM failure → nothing written, Chroma failure → summary-only. <code>remember</code> dedupes exact matches.</div>
+    <div class="note"><b>Content routing — authentic originals vs activity</b>All routing lives in <code>services/ingest.py</code> (shared by every own-post path). <code>classify_post_item</code> uses <b>API structural flags when present</b> (Xpoz user-live → <code>kind_source="api"</code>) else the text heuristics of <code>classify_post_kind</code> (<code>kind_source="heuristic"</code>): originals (incl. quotes) → <b>posts</b>; <code>@</code>-openers → <b>user_activity reply</b> (user's own words → <code>get_user_activity</code> + voice <code>reply_style</code>); <code>RT</code>-openers → <b>user_activity retweet</b> (shared content, never attributed to the user). <b>Self-replies (parent == user) become originals with thread fields → posts</b>; provenance persisted as <code>posts.kind</code> + <code>posts.kind_source</code>.</div>
+  </div>
+
+  <h3>All 20 tools — reads · writes · Chroma · degrades-to</h3>
+  <table>
+    <thead><tr><th>Tool</th><th>Reads</th><th>Writes</th><th>Chroma</th><th>Degrades to</th></tr></thead>
+    <tbody>
+      <tr><td><code>get_peer_advice</code> <span class="muted">(advice.py)</span></td><td>Chroma <code>peer_frameworks</code> + <code>peer_posts</code> (profile-scoped, limit ≤5)</td><td>fallback only: peer_frameworks + index</td><td><b>R+W</b> query-first</td><td>empty store → live Xpoz+LLM extraction → re-query; everything failed → <code>found:false</code> + reason (honest)</td></tr>
+      <tr><td><code>extract_voice_profile</code> <span class="muted">(voice.py)</span></td><td>posts (PFM backfill if &lt;5), <code>user_activity</code> replies (→ <code>reply_style</code> only), Chroma corpus diverse sample, prior voice_profiles</td><td>posts+metrics, voice_profiles (versioned), voice_corpus, user_activity (replies/RTs routed by classify)</td><td><b>R+W</b> voice_corpus</td><td>no corpus → <code>posts[:10]</code>; no LLM keys/error → heuristic profile; non-authentic captions filtered (defense in depth)</td></tr>
+      <tr><td><code>get_user_activity</code> <span class="muted">(activity.py)</span></td><td>user_activity (replies + retweets, newest first; <code>kind</code> filter)</td><td>—</td><td>—</td><td>no rows → <code>{activity:[], count:0}</code>; replies = user's own words, RTs = shared, never attributed to user</td></tr>
+      <tr><td><code>get_voice_profile</code></td><td>voice_profiles (current)</td><td>—</td><td>—</td><td>missing → <code>voice_profile: null</code></td></tr>
+      <tr><td><code>answer_style_questions</code></td><td>—</td><td>style_answers (append; no unique key)</td><td>—</td><td>DB error → bubbles up</td></tr>
+      <tr><td><code>save_user_request</code> <span class="muted">(user_requests.py)</span></td><td>peer_frameworks payloads + listening_matches authors + niche defaults (membership report only)</td><td>user_search_requests (append-only; <b>never</b> the peer stores)</td><td>—</td><td>membership lookup failure → <code>in_peer_set</code> silently unknown, rows still saved; no search inside — the agent searches via <code>check_niche_trends</code> (section 6)</td></tr>
+      <tr><td><code>repurpose_caption</code> <span class="muted">(repurpose.py)</span></td><td>voice_profiles (current), post caption / source_text</td><td>repurpose_requests, repurpose_attempts (+user_actions via submit_action)</td><td>—</td><td>LLM fail → passthrough source text (<code>Fallback Mode</code> change); enforce: 280-char X limit + must-keep + Jev judge</td></tr>
+      <tr><td><code>submit_action</code> <span class="muted">(actions.py)</span></td><td>attempt_id (implicit)</td><td>user_actions (accept/edit/reject)</td><td>—</td><td>bad enum → ValueError → 500 (unguarded)</td></tr>
+      <tr><td><code>dismiss_alert</code></td><td>posts</td><td>posts.alert_dismissed=true</td><td>—</td><td>—</td></tr>
+      <tr><td><code>check_niche_trends</code> <span class="muted">(listening.py)</span></td><td>Xpoz get_user_live_posts per handle</td><td>listening_matches, <b>handle DB</b> (<code>handle_mappings</code>: every tracked account w/ bounded enrichment + every author seen, <code>origin: niche</code>)</td><td>—</td><td>per-handle fetch error → retried once on 5xx/network, then named in <code>failed_handles</code>; all handles failing → <code>error</code> key, nothing invented. <span class="muted">Hardcoded default handles staged out by niche pipeline (<code>niche_peers</code>), schemas in <code>app/schemas/niche.py</code> — see note above.</span></td></tr>
+      <tr><td><code>discover_and_extract_niche_frameworks</code></td><td>Xpoz search_live_posts (discovery) → <code>run_peer_pipeline</code> (per-account <code>get_user_live_posts_page</code>, 28-day baseline)</td><td><b>niche_framework_reports</b>, <b>post_taggings</b>, peer_frameworks + <b>Chroma peer_frameworks + peer_posts</b> (report-derived bridge) + <b>handle DB</b> (every search-result author, <code>origin: niche</code>)</td><td><b>W</b> index after persist</td><td>Xpoz search fail (retried once on 5xx/network) → honest <code>error</code> payload, no pipeline run and no DB/Chroma write. Unsupported data → <code>insufficient_data</code>/<code>failed</code> report with zero frameworks (the canned “Milestones &amp; Shipped Tech” fallback is <b>deleted</b>; <code>min_impressions</code> is gone — winners are judged against each account's own median).</td></tr>
+      <tr><td><code>remember</code> <span class="muted">(memory.py)</span></td><td>Chroma agent_memory (dedupe, Get ≤300)</td><td>Chroma agent_memory + memory.md bullet</td><td><b>R+W</b></td><td>Chroma down → <code>stored:false, reason:chroma_unavailable</code>; memory.md still appends</td></tr>
+      <tr><td><code>recall_memory</code></td><td>Chroma agent_memory (semantic n≤5)</td><td>access_count / last_accessed metadata</td><td><b>R</b></td><td>down → <code>found:false, reason:chroma_unavailable</code></td></tr>
+      <tr><td><code>get_analytics</code> <span class="muted">(analytics.py)</span></td><td>posts ⋅ metric_snapshots (by post_id), PFM feed (incremental ≤20), Xpoz live</td><td>posts+metrics (shared <code>store_raw_item</code> — kind/last_seen/truncation/suspect bookkeeping); user_activity (replies/RTs classified out); <b>profile_snapshots</b> (one per call)</td><td>—</td><td>no data → honest zeros + <code>is_live_data:false</code> (never demo numbers); missing metrics stay NULL, display-only <code>or 0</code></td></tr>
+      <tr><td><code>backfill_posts</code> <span class="muted">(backfill.py)</span></td><td>Profile.pfm_account_id, PFM feed</td><td>posts + metric_snapshots; user_activity (classify_post_kind)</td><td>—</td><td>no profile / no PFM id → error dict</td></tr>
+      <tr><td><code>get_posts</code></td><td>posts (ORDER published_at DESC)</td><td>—</td><td>—</td><td>—</td></tr>
+      <tr><td><code>check_trending</code></td><td>posts + metric_snapshots (N+1)</td><td>posts.alerted_at (+dismiss reset), poll_config.last_polled_at</td><td>—</td><td>needs ≥2 snapshots/post — analytics/Xpoz ingest now appends snapshots (policy: milestones 24h/72h/7d/30d, ≥6h gap when unchanged) so alerts <i>can</i> fire; and since 2026-10-25 the poller tick itself runs <code>backfill_profile_posts</code> per due profile (non-<code>demo-</code> <code>pfm_account_id</code>), so metrics refresh without an inbound request</td></tr>
+      <tr><td><code>start_listening</code> / <code>stop_listening</code></td><td>poll_config</td><td>poll_config (is_active, interval_minutes)</td><td>—</td><td>stop on missing config → <code>{listening:false}</code></td></tr>
+      <tr><td><code>connect_account</code> <span class="muted">(connect.py)</span></td><td>PFM get_social_account (demo id), auth-url</td><td>— (callback creates profile)</td><td>—</td><td>already connected → <code>already_connected</code> shortcut; only real PFM URLs ever returned</td></tr>
+    </tbody>
+  </table>
+  <p class="muted" style="font-size:12px">Registration is an import side effect — a new tool module must be added to <code>app/tools/__init__.py</code> or it never registers (20 currently).</p>
+</section>
+
+<!-- ═══════════════ VIEW 3 · DATA FLOW ═══════════════ -->
+<section class="view" id="v-data">
+  <div class="vhead">
+    <h2>3 · General data flow — sources → processing → stores</h2>
+    <p>Everything Lumi touches: 4 external services, background cadence, 19 Postgres tables, 5 Chroma collections, 1 rolling file.</p>
+    <div class="legend">
+      <span class="chip"><i style="background:var(--ext)"></i>external</span>
+      <span class="chip"><i style="background:var(--bgj)"></i>background</span>
+      <span class="chip"><i style="background:var(--db)"></i>Postgres</span>
+      <span class="chip"><i style="background:var(--chroma)"></i>Chroma</span>
+      <span class="chip"><i style="background:var(--file)"></i>memory.md</span>
+    </div>
+  </div>
+
+  <div class="graph-wrap"><div class="graph" id="g-data"></div></div>
+
+  <div class="notes">
+    <div class="note"><b>Source-of-truth rule</b>Postgres is authoritative. Chroma is a derived, rebuildable index: <code>ensure_collections()</code> at startup, DB backfill for frameworks, exception-shielded everywhere. Losing Chroma costs freshness, never data.</div>
+    <div class="note warn"><b>Chroma Cloud quota</b>Per-request <code>Get</code> <b>limit ≤ 300</b> (helpers paginate). Credentials live in <code>.env</code> only (<code>CHROMA_API_KEY / TENANT / DATABASE</code>) — never in code, docs, or chat.</div>
+    <div class="note ok"><b>Cadence</b>poller tick 120&nbsp;s (spike check + bootstrap retry + weekly decay) · MCP tool discovery wake 30&nbsp;s (network only when the 300&nbsp;s TTL lapsed) · voice retry ~5&nbsp;min · framework refresh 7&nbsp;d · memory extraction + one <code>turn_classifications</code> row every turn · decay window 90&nbsp;d.</div>
+  </div>
+
+  <h3>Storage inventory — writers · readers · cadence</h3>
+  <table>
+    <thead><tr><th>Store</th><th>Contents</th><th>Writers</th><th>Readers</th><th>Cadence / degradation</th></tr></thead>
+    <tbody>
+      <tr><td rowspan="6" class="mono">Postgres<br><span class="muted">source of truth</span></td><td>profiles (+timezone), posts (+kind/kind_source/conversation_id/last_seen/is_deleted_suspect/text_truncated), metric_snapshots (+age_hours/source, <b>nullable metrics</b>), <b>user_activity</b></td><td>pfm/callback, backfill_posts, analytics ingest — <code>services/ingest.py</code> <code>store_raw_item</code> routes replies/RTs → user_activity, snapshots per policy</td><td>voice extract, analytics, spike check, get_posts, <b>get_user_activity</b></td><td rowspan="6">Alembic-managed (<code>uv run alembic upgrade head</code>); SQLite local / Postgres prod. Every tool commits explicitly via <code>session_scope</code>.</td></tr>
+      <tr><td><b>own_post_analysis, profile_snapshots, profile_baseline</b> <span class="muted">(migration b7d2e5f8a3c1)</span></td><td>bootstrap step 3 <code>_ensure_own_analysis</code> (baseline + own lift, append-only), analytics ingest (profile_snapshots); tagging writes <code>status='pending'</code> rows until Runtime Prompt A</td><td>own lift / baseline consumers; <code>scripts/own_report.py</code> (read-only)</td></tr>
+      <tr><td>voice_profiles, style_answers</td><td>extract_voice_profile (flip+flush+insert), answer_style_questions</td><td>repurpose_caption, get_voice_profile, extractor (prior version)</td></tr>
+      <tr><td>peer_frameworks, niche_framework_reports, post_taggings, listening_matches</td><td>discover…, check_niche_trends, bootstrap weekly</td><td>get_peer_advice fallback, /trends/matches, startup backfill</td></tr>
+      <tr><td>chat_messages (+<b>tools_used</b>, <b>reason</b>), repurpose_*, user_actions, poll_config, <b>user_search_requests</b> <span class="muted">(migration d3c4b5a6978e — user-pasted handles, never peers)</span></td><td>loop (USER/ASSISTANT/TOOL; <code>tools_used</code> on the final reply only, <code>reason</code> on TOOL rows), repurpose, submit_action, start/stop_listening, save_user_request (append-only)</td><td>history load (TOOL excluded, <code>tools_used</code> popped before send), /chat/history, alert reads</td></tr>
+      <tr><td><b>turn_classifications</b> <span class="muted">(migration f3a7c9e2b41d)</span></td><td>loop <code>_write_classification</code> — fire-and-forget <i>after</i> the reply (class, path, tools_called, <b>NULL</b> credits_spent / user_corrected, timings)</td><td><code>/health</code> p50/p95 (newest 100, block omitted when empty), <code>scripts/classifier_report.py</code></td></tr>
+      <tr><td class="mono">memory.md <span class="muted">(gitignored)</span></td><td>Rolling per-profile summary (<code>## Profile N (@handle)</code> sections)</td><td>extract_turn_memories (replace section), remember (append bullet)</td><td>build_system_prompt (AGENT MEMORY block) each turn</td><td>Regenerated every turn; LLM failure → untouched; safe to delete (rebuilds)</td></tr>
+      <tr><td class="mono">Chroma · voice_corpus</td><td>≤200 posts/profile, temporal spread</td><td>extract upsert, bootstrap step 0</td><td>extract diverse sample (fallback posts[:10])</td><td><span class="pill live">LIVE</span> synced every bootstrap pass</td></tr>
+      <tr><td class="mono">Chroma · voice_profiles</td><td>—</td><td>—</td><td>—</td><td><span class="pill res">RESERVED</span> future cross-version search</td></tr>
+      <tr><td class="mono">Chroma · peer_frameworks + peer_posts</td><td>Framework text docs + raw winner posts</td><td>discover…, bootstrap weekly, startup backfill</td><td>get_peer_advice (query-first)</td><td><span class="pill live">LIVE</span> re-indexed at startup + at write time</td></tr>
+      <tr><td class="mono">Chroma · agent_memory</td><td>Durable facts (kind, access_count, timestamps)</td><td>remember, extract_turn_memories, recall (metadata bump)</td><td>recall_memory, weekly decay</td><td><span class="pill live">LIVE</span> decay: 90 d unaccessed → deleted (weekly)</td></tr>
+      <tr><td class="mono">~/.cache/chroma/onnx</td><td>all-MiniLM-L6-v2 embedder (384-d)</td><td>Chroma (first run, 79 MB)</td><td>every Chroma add/query</td><td>One-time download; cloud or local identical embeddings</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Background jobs — trigger · work · guard</h3>
+  <table>
+    <thead><tr><th>Job</th><th>Trigger</th><th>Work</th><th>Guard</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">background/poller.py</td><td>every 120 s (asyncio task from lifespan)</td><td>due PollConfigs → check_trending; weekly decay pass; bootstrap retry</td><td><b>No outer try/except — one raise kills polling silently until redeploy</b></td></tr>
+      <tr><td class="mono">background/bootstrap.py</td><td>after callback + every poller pass</td><td>corpus sync → voice extract (retry ~5 min) → frameworks (refresh 7 d) → own analysis (baseline/lift + pending tags)</td><td>Per-step try/except; thin-history retry counter</td></tr>
+      <tr><td class="mono">extract_turn_memories</td><td>after each successful agent turn (fire-and-forget)</td><td>LLM merges prior summary + turn → memory.md + agent_memory</td><td>Task held in <code>_memory_tasks</code>; keys missing → skip; never raises</td></tr>
+      <tr><td class="mono">background/mcp_refresh.py</td><td>asyncio task from lifespan — wakes every 30 s (TTL-gated, so only an expired cache reaches the network); first refresh right after boot</td><td><code>mcp.refresh_tools()</code> → warm connector <code>tools/list</code> spec cache the turn reads (PROMPT 5 item 6)</td><td>Never raises; a turn <b>never</b> waits on discovery — it runs without that connector's tools, like an unauthenticated one (prompt rule 16)</td></tr>
+      <tr><td class="mono">_decay_pass</td><td>poller, once per 7 days (<code>DECAY_INTERVAL_DAYS</code>)</td><td>delete agent_memory untouched for 90 d</td><td>Chroma down → 0 removed, logged, poller continues</td></tr>
+      <tr><td class="mono">startup (main.py lifespan)</td><td>process boot</td><td>seed_demo_profiles → ensure_collections → framework backfill → poller + MCP background refresh</td><td>Chroma init failure logged, app continues without agentic storage; MCP refresh task never raises</td></tr>
+    </tbody>
+  </table>
+
+  <footer>Generated for hand editing — after changing tools, routers, or background jobs, update this file <b>and</b> <code>docs/flow-map.md</code>. Secrets never belong here.</footer>
+</section>
+
+<!-- ═══════════════ VIEW 4 · @-HANDLE BAR MVP ═══════════════ -->
+<section class="view" id="v-mvp">
+  <div class="vhead">
+    <h2>4 · @-handle bar MVP — real-time search, self-expanding handle DB</h2>
+    <p>Born as a standalone side project (<code>mvp/handle_search/</code>, port 8010 — still runnable on its own); <b>wired into the main app 2026-10-21</b> via the <code>app/routers/handles.py</code> shim (<code>/handles/search|saved|select|stats</code> on :8000 → the same MVP handler functions), consumed by the chat composer's <code>@</code> menu. <b>Multi-platform selector 2026-10-25:</b> a pill row (X · Instagram · TikTok · Reddit · LinkedIn) in both UIs fans every search out per selected platform. Cache-first so it saves Xpoz credits, but never locked to cache: stale entries re-query live.</p>
+  </div>
+
+  <table>
+    <thead><tr><th>Stage</th><th>Source</th><th>What happens</th><th>Credit cost</th></tr></thead>
+    <tbody>
+      <tr><td>1 · Local DB</td><td class="mono">lumi.db</td><td>prefix-match <code>profiles.handle</code> + <code>listening_matches.author_handle</code></td><td>0</td></tr>
+      <tr><td>2 · Handle DB</td><td class="mono">Chroma handle_mappings</td><td>every handle ever <b>pulled, selected, or fed by a main-app search</b> (pfp + name + followers), prefix match</td><td>0</td></tr>
+      <tr><td>3 · Search cache</td><td class="mono">Chroma handle_cache</td><td>results of past searches + <b>prefix-chain reuse</b> (ka→kar→karp = one query), fresh for <code>MVP_CACHE_TTL_MINUTES</code> (default 60)</td><td>0</td></tr>
+      <tr><td>4 · Live search</td><td class="mono">Xpoz users/live — per selected platform</td><td>fires on a real miss <b>or stale cache</b> for that platform (real-time refresh); key rotation on 401/402/403; <code>q</code> param for X/Reddit, <code>name</code> for IG/TikTok</td><td>X/Reddit 2, TikTok 5, Instagram 12 — <b>credits</b>, budget-capped</td></tr>
+    </tbody>
+  </table>
+
+  <p><b>The DB is a head start, never the answer:</b> handle-DB rows (stages 1–2) merge into the results and paint instantly client-side, but they <b>never gate the live search</b> — only a fresh <i>cache</i> entry (a real recent search) may skip live. Otherwise <code>@ateh</code> would show only the one Ateh saved in the db instead of the actual people currently on X. When live is off or the budget is spent, the db still answers — the help, not the source.</p>
+
+  <p><b>The DB expands on every search:</b> every live pull persists <em>all</em> returned handles — picture, display name, follower count — into <code>handle_mappings</code> (<code>origin: live | cache | selected | niche</code>), not just the one the user picks. The main app feeds the same store (<code>app/services/handle_db.py</code>): <code>check_niche_trends</code> saves every tracked account (bounded enrichment: picture/name/followers for genuinely-new handles via the verified user search, exact username match only, <code>HANDLE_DB_ENRICH_LIMIT</code> per scan) plus every author its posts surfaced; <code>discover_and_extract_niche_frameworks</code> saves every search-result author (handle-only). Add-if-absent, never raises, no-op without <code>MVP_CHROMA_*</code>.</p>
+
+  <ul>
+    <li><b>Instant first paint (0 credits):</b> the browser keeps a snapshot of every saved handle (<code>GET /api/handles/saved</code> = local db ∪ remembered, deduped, followers first), loaded at page load and refreshed after each search/selection — each keystroke prefix-filters it in-browser (0 ms, no request), so known handles appear while the 300 ms-debounced full search refines the same dropdown. A db miss shows a <b>breathing skeleton</b> (a gentle in/out pulse — never a false "no matches"), and behind db-served rows a small breathing dot signals the refinement in flight.</li>
+    <li><b>Context words:</b> the up-to-3 words typed before the <code>@</code> travel as <code>context</code> and re-rank merged results (exact → local-db lead → context boost → followers desc, within each group) — never sent to Xpoz, ordering only. The list is a <b>half-and-half mix</b> by <i>where each handle came from on this search</i>: about half the slots go to the <b>saved half</b> — everything served from memory (local db / remembered / past-search cache), with local-db handles leading it — and half to the <b>live half</b>, what a fresh Xpoz pull just returned; a side short of half hands its leftover slots to the other so the list still fills to ten. The exact handle you typed stays at the very top, so a known handle like <code>@AtehOfficial</code> is always visible beside fresh results instead of sinking behind higher-follower strangers, and a memory-served handle can never crowd a fresh-pull one out — they sit in different halves.</li>
+    <li><b>Platform selector (added 2026-10-25):</b> multi-select pills (X · Instagram · TikTok · Reddit · LinkedIn) top the <code>@</code> menu in both UIs; every ticked platform is fanned out server-side (<code>?platforms=</code> CSV) and charged its own credit price; at least one pill stays ticked; toggling re-fetches the saved snapshot and re-runs the open search. <b>LinkedIn has no Xpoz endpoint</b> — selectable, answered from db/remembered only, reported <code>platform_reasons.linkedin = "unsupported"</code> (0 credits, never a fake live source). Rows carry <code>platform</code> (chip for non-X rows or &gt;1 selected), avatars fall back per <code>unavatar.io/&lt;platform&gt;</code>, caches and <code>/saved</code> are platform-filtered (legacy rows default to <code>x</code>).</li>
+    <li><b>Real-time, not frozen:</b> a cached result older than the TTL triggers a budget-guarded re-query (<code>refreshed: true</code>), replacing the stale copy. A fresh <em>empty</em> entry (negative cache) still never re-burns credits.</li>
+    <li><b>Credit guards:</b> <code>MVP_XPOZ_BUDGET</code> (default <b>100 credits</b>/session — a query charges its platform's price; the fan-out stops honestly when the next platform's cost won't fit), <code>MVP_XPOZ_LIVE</code> kill-switch, two keys with rotation.</li>
+    <li><b>Chroma Cloud quota hardening (fixed 2026-10-25 in live smoke):</b> two free-tier quotas silently broke cache-first — (1) <code>MetadataValueSizeBytes</code> (8,182) rejected fat cache writes (an Instagram-sized pull ≈ 14 KB), so the IG entry never existed and <i>every</i> search re-burned 12 credits → cache rows are now slimmed to the four fields reads use and trimmed tail-first to fit; (2) <code>LimitValue</code> for <code>Get</code> (300) truncated every unfiltered read to the first 300 rows while the handle DB held 637 → <code>_cache_get_all</code> now pages with <code>offset</code> until a short page, and stats counts the full read.</li>
+    <li><b>Isolation:</b> uses dedicated <code>MVP_CHROMA_*</code> env vars → database <code>Onscript</code>; the main app's <code>CHROMA_*</code> voice-corpus storage is never repointed.</li>
+    <li><b>Endpoints:</b> standalone MVP <code>GET /</code> (bar) + <code>GET /api/handles/*</code>; main-app shim on :8000 <code>GET /handles/search</code> (<code>?platforms=</code> CSV + <code>?context=</code> for ranking), <code>GET /handles/saved</code> (<code>?platforms=</code> filter), <code>POST /handles/select</code> (accepts <code>platform</code>), <code>GET /handles/stats</code> (credit meter incl. <code>credits_spent_this_session</code> + combined saved-handles count + per-origin counts + TTL + the <code>available_platforms</code> catalog the pills render from) — both call the same handler functions.</li>
+    <li><b>Tests:</b> <code>tests/test_handle_search_mvp.py</code> (db never gates live, free db fallback when live is off) + <code>tests/test_handle_search_platforms.py</code> (per-platform fan-out params/normalization, cache isolation, X-only local db, LinkedIn honest, budget stops mid-fanout, CSV validation, stats catalog, plus both quota regressions: a fat pull trimmed into the metadata-value limit and cache reads paged past the 300-row Get cap) + <code>tests/test_handle_db.py</code> (main-app side: row compatibility, add-if-absent, enrichment rules, tool wiring) — Xpoz fully mocked; green with no network.</li>
+  </ul>
+
+  <footer>See <code>docs/xpoz_optimization.md</code> §5–§6. Composer integration (2026-10-21): <code>@</code> + ≥2 chars opens the handle menu in <code>PromptBar.tsx</code>; picking inserts <code>@handle </code> (the user types their own ask — no auto-send) and POSTs <code>/handles/select</code> (with the row's <code>platform</code>); sending follows prompt rule 13 (<code>save_user_request</code> → <code>check_niche_trends</code>), and a message that is <i>nothing but</i> <code>@handles</code> is a lookup request (gate <code>_BARE_HANDLES_RE</code>). Platform selector landed 2026-10-25. Secrets never belong here.</footer>
+</section>
+
+<section class="view" id="v-voice">
+  <div class="section-head">
+    <h2>5 · Voice chat (phase 1 — landed 2026-10)</h2>
+    <p>Browser-initiated voice input + browser-local TTS. No new API keys. STT = Groq whisper; TTS = <code>speechSynthesis</code> (Groq has no TTS model on this account — verified).</p>
+  </div>
+
+  <table>
+    <thead><tr><th>Component</th><th>File</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td><code>POST /voice/transcribe</code></td><td class="mono">app/routers/voice.py</td><td>multipart WAV → Groq <code>whisper-large-v3-turbo</code> → <code>{text, duration_ms}</code>. Audio discarded; nothing persists. 422 empty, 413 &gt;25 MB, 502 provider failure.</td></tr>
+      <tr><td><code>get_audio_provider()</code></td><td class="mono">app/agent/providers.py</td><td>Plain <code>AsyncOpenAI</code> (Groq base URL), built lazily, separate from neatlogs-wrapped chat providers.</td></tr>
+      <tr><td><code>MicRecorder</code></td><td class="mono">frontend/src/voice/recorder.ts</td><td>PCM capture via <code>ScriptProcessorNode</code> → WAV blob. Silence endpointer: 1.5 s quiet after ≥0.5 s speech, 30 s hard cap. No MediaRecorder → format is always WAV.</td></tr>
+      <tr><td><code>speak()</code> / <code>stopSpeaking()</code></td><td class="mono">frontend/src/voice/speak.ts</td><td>Sentence-splits reply → queues <code>SpeechSynthesisUtterance</code>s. Generation counter prevents cancelled utterances from chaining. Chrome keepalive (resume every 8 s).</td></tr>
+      <tr><td><code>transcribeWav()</code></td><td class="mono">frontend/src/api/voice.ts</td><td><code>POST /voice/transcribe</code> with WAV blob; throws honest error text on failure.</td></tr>
+      <tr><td>PromptBar mic button</td><td class="mono">frontend/src/components/PromptBar/PromptBar.tsx</td><td><code>voiceState: idle → listening → transcribing</code>. Silence endpointer auto-stops and auto-sends; manual tap stops and sends. Errors shown inline via placeholder.</td></tr>
+      <tr><td>Speak-on-reply</td><td class="mono">frontend/src/App.tsx</td><td><code>send(raw, opts?)</code> sets <code>voiceReplyRef</code>; on completion, if voice was used, <code>speak(replyText)</code>. New send calls <code>stopSpeaking()</code> first (barge-in).</td></tr>
+    </tbody>
+  </table>
+
+  <div class="notes">
+    <div class="note ok"><b>Barge-in = cancel TTS only</b>A new mic tap or send calls <code>stopSpeaking()</code> — the agent run itself is never cancelled by voice input. The generation counter in <code>speak.ts</code> ensures a cancelled utterance never chains the next phrase.</div>
+    <div class="note"><b>Turn policy (Codename Jo §3.2 adaptation)</b>First-look window (no auto-stop until speech is heard), short-poll endpointer (120 ms), 1.5 s silence threshold, 30 s hard cap. PCM capture (not MediaRecorder) → format is always WAV, no codec guessing between browsers.</div>
+    <div class="note warn"><b>No server-side TTS (yet)</b>The Groq account exposes no TTS model (verified via <code>GET /openai/v1/models</code>). A <code>POST /voice/speak</code> route can be added when a TTS-capable key exists; the browser fallback is the honest v1.</div>
+  </div>
+
+  <footer>Phase 1 of the voice-chat integration — see <code>docs/codenamejo-integration.md</code> §3. Mic UX (hold-to-talk vs toggle) is on hold pending user decision.</footer>
+</section>
+
+<section class="view" id="v-userreq">
+  <div class="section-head">
+    <h2>6 · User-requested handles (landed 2026-10-20)</h2>
+    <p>When the user pastes/names @usernames to look up, those are <b>user requests</b> — recorded in their own table, never merged into the profile's peer set.</p>
+  </div>
+
+  <table>
+    <thead><tr><th>Step</th><th>Component</th><th>What happens</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td><code>save_user_request</code> <span class="muted">(tools/user_requests.py)</span></td><td>Normalizes + validates each handle (<code>@Beaconsai,</code> → <code>beaconsai</code>; <code>beacons.ai</code> reported invalid, not saved), appends <code>user_search_requests</code> rows, reports per handle <code>already_requested</code> + <code>in_peer_set</code>/<code>peer_source</code> (niche defaults · peer_frameworks payloads · listening_matches authors). <b>0 Xpoz credits, no search.</b></td></tr>
+      <tr><td>2</td><td><code>check_niche_trends</code></td><td>The agent searches the saved handles (credit-burning step) — content lands in <code>listening_matches</code>, not the peer store.</td></tr>
+      <tr><td>3</td><td>System prompt rule 13</td><td>Pasted handles → <code>save_user_request</code> FIRST, then search; if a handle is already in the peer set, say so plainly; <code>discover_and_extract_niche_frameworks</code> is forbidden for user-requested handles.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="notes">
+    <div class="note ok"><b>Hard separation</b><code>save_user_request</code> only ever writes <code>user_search_requests</code> (migration <code>d3c4b5a6978e</code>) — asserted by <code>tests/test_user_request_tool.py::test_saving_never_writes_the_peer_stores</code>. Membership in the peer set is <i>reported</i>, never created.</div>
+    <div class="note ok"><b>Action-claim gate + tool timeout (agent loop)</b>A final reply with <b>zero tool calls</b> that claims scan-style work was done/running, promises to do it, <b>or</b> meets a user's explicit search/scan/recon request without acting or honestly declining, triggers ONE corrective nudge and a retry; if the model still claims without acting, an honest disclaimer is appended. Explicit claims win even inside decline-framed replies (observed: a fabricated “I had saved @x … went through” wrapped in “I can't finish this turn”); claim-free honest declines pass untouched. Hung tools degrade to a visible timeout error after <code>TOOL_TIMEOUT_SECONDS = 120</code> — never a silently dead turn. (Born from the 2026-10-20 incident: “I've finished digging through @beaconsai's neighbourhood” with <code>tool_calls = null</code> on every turn, plus two recon turns that hung mid-flight and died silently.)</div>
+  </div>
+
+  <footer>Migration <code>d3c4b5a6978e</code> · tests: <code>tests/test_user_request_tool.py</code> + <code>tests/test_agent_claim_gate.py</code> · prompt rules 13–15 · details: AGENTS.md → “Registered tools” + Data Model.</footer>
+</section>
+
+<!-- ═══════════════ VIEW 7 · MCP CONNECTORS ═══════════════ -->
+<section class="view" id="v-mcp">
+  <div class="vhead">
+    <h2>7 · MCP connectors — Google Drive + Docs (landed 2026-10-21)</h2>
+    <p>In-backend MCP client (official <code>mcp</code> SDK, pinned 2.3.0, Streamable HTTP) — Google's connector servers called directly with our OAuth token, tools converted to OpenAI-style function specs for the <b>same</b> Groq tool-calling loop. No provider switch, no Anthropic key.</p>
+  </div>
+
+  <table>
+    <thead><tr><th>Stage</th><th>Component</th><th>What happens</th></tr></thead>
+    <tbody>
+      <tr><td>1 · Registry</td><td><code>services/mcp_connectors.py</code></td><td><b>Config-driven:</b> one <code>MCPConnector</code> entry per connector — name, verified server URL (Drive <code>drivemcp.googleapis.com/mcp/v1</code>, Docs <code>docsmcp.googleapis.com/mcp/v1</code>), auth method, scopes, <code>allowed_tools</code> allowlist, <code>confirm_writes</code>, kill-switch env. Adding a connector = one entry, never code elsewhere.</td></tr>
+      <tr><td>2 · OAuth <span class="muted">(one-time)</span></td><td><code>GET /mcp/google/connect</code> → <code>/callback</code></td><td>Consent URL with the <b>union</b> scope set (<code>drive.readonly</code> + <code>drive.file</code> + <code>documents</code>), <code>access_type=offline</code> + forced consent so a refresh token exists; callback exchanges the code and upserts <code>mcp_auth_accounts</code> (account <code>google</code>, shared by both connectors). Unconfigured → honest <b>503</b>, never a fabricated URL.</td></tr>
+      <tr><td>3 · Discovery</td><td><code>services/mcp.py</code> <span class="muted">(per turn)</span></td><td>TTL-gated (300 s/connector, 15 s budget) <code>tools/list</code> → OpenAI function specs named <code>mcp__&lt;connector&gt;__&lt;tool&gt;</code> (sanitized, allowlist-filtered, originals kept), merged into the loop's toolset by <code>tools/registry.py</code>. No token / dead server / disabled → no tools that turn; prompt rule 16 makes the model say Google isn't connected.</td></tr>
+      <tr><td>4 · Read call</td><td><code>registry.call_tool("mcp__gdrive__…")</code></td><td><code>tools/call</code> over Streamable HTTP with the auto-refreshed bearer token, 60 s timeout (inside the loop's 120 s per-tool cap). Honest <code>{error}</code> payloads on failure — never a raised 500.</td></tr>
+      <tr><td>5 · Write gate</td><td><code>mcp.requires_confirmation</code></td><td>Write-verb tool name (word-wise — <code>get_file_created_time</code> is NOT gated) → <b>nothing runs</b>; the model states what will run and asks. The user's next message resolves the pending write: <b>clear yes</b> (defer words like “but/wait/later” veto) executes and injects the <b>real</b> outcome as a system note + TOOL row + <code>tool_calls_made</code>; anything else cancels. Never stale, never unconfirmed.</td></tr>
+      <tr><td>6 · Composer</td><td><code>PromptBar.tsx</code> hash menu</td><td>Typing <code>#</code> opens the doc menu — <code>#doc</code> prefills “Create a new Google Doc about ”, <code>#drive</code> prefills “List my 5 most recently modified Google Drive files”. Prefills an <b>editable</b> prompt; sending is the user's call (same no-auto-send rule as <code>@</code> tags).</td></tr>
+      <tr><td>7 · Status UI</td><td><code>GET /mcp/google/status</code> → <b>Settings → Connectors</b></td><td>Live status card: <code>connected</code> (chip + granted scope labels + token expiry), <code>configured</code> (<code>false</code> = OAuth client env vars unset → the card explains instead of offering a dead Connect button), Connect/Reconnect → same-tab <code>/mcp/google/connect</code>. Re-checked each time the section opens; free (no credits).</td></tr>
+    </tbody>
+  </table>
+
+  <div class="notes">
+    <div class="note ok"><b>One consent, two connectors</b><code>gdrive</code> + <code>gdocs</code> share auth account <code>google</code> and one union-scope consent. <code>drive.file</code> is the <i>narrow</i> write scope — a confirmed write can only touch files <b>this app created</b>, never the user's other files.</div>
+    <div class="note ok"><b>Anti-fabrication</b>Zero-tool replies that claim doc creation (“I've created the doc…”) are caught by the action-claim gate like every other fabricated action; after a confirmed execution the model can only narrate the <b>real</b> result payload (success or honest error) that was injected as a system note.</div>
+    <div class="note warn"><b>Single-worker memory</b>Pending write-confirmations and OAuth <code>state</code> values live in process memory — fine for the single-worker app (a restart just makes the user re-confirm / re-click connect), not for multi-worker deploys.</div>
+    <div class="note ok"><b>Secrets rule</b>Client id/secret live only in <code>.env</code> (gitignored); tokens live only in <code>mcp_auth_accounts</code> — never in code, docs, logs, or chat output. Docs name env vars, never values.</div>
+  </div>
+
+  <footer>Migration <code>e4f1a2b3c5d6</code> · SDK pin <code>mcp==2.3.0</code> · tests: <code>tests/test_mcp.py</code> + <code>tests/test_mcp_google_router.py</code> (32, all faked seams — no sockets/Google/credits) + <code>tests/test_agent_claim_gate.py</code> · prompt rule 16 · full guide: <code>docs/mcp-connectors.md</code> (add-a-connector recipe + Google Cloud setup checklist).</footer>
+</section>
+
+<!-- ═══════════════ VIEW 8 · AI RECAPTION ═══════════════ -->
+<section class="view" id="v-recaption">
+  <div class="vhead">
+    <h2>8 · AI recaption — composer auto-rewrite (landed 2026-10-25)</h2>
+    <p>webappv2 composer → <b>debounced <code>POST /repurpose</code></b> → shared DB-free pipeline core fans platforms out in parallel (<code>asyncio.gather</code>) → one batched commit → per-platform drafts + breathing/green UI states → hold-to-preview with per-platform tags.</p>
+  </div>
+
+  <p>The external client (the <code>webappv2</code> composer — its frontend code lives in that repo) auto-runs recaption in the background whenever the text or selected targets change; the UI animations only <i>notify</i> the user to go check. <b>0 Xpoz credits</b> — Groq + Jev/TypeSafe only.</p>
+
+  <table>
+    <thead><tr><th>Stage</th><th>Component</th><th>What happens</th></tr></thead>
+    <tbody>
+      <tr><td>1 · Trigger</td><td class="mono">webappv2 <code>useAiRecaption</code> hook</td><td>Text ≥10 chars or target-set change → 1.5&nbsp;s debounce → content-hash skip (identical text never re-burns LLM calls) → <code>AbortController</code> cancels the in-flight run → toast <b>"AI recaption in progress"</b> → <code>POST /repurpose</code> at <code>VITE_LUMI_URL</code>. The dead "AI Assist coming soon!" pill is wired as the manual trigger.</td></tr>
+      <tr><td>2 · Validate</td><td class="mono"><code>app/routers/repurpose.py</code></td><td>One read session: profile (defaults to the seeded first row) + current voice profile. Alias map — <code>twitter/bluesky/farcaster → x</code>, <code>facebook → instagram</code>, <code>youtube → linkedin</code>, <code>linkedin/tiktok/instagram</code> native. Unknown platform → <b>422</b> <i>before</i> any generation; deduped, 1–8 platforms, source 1–8000 chars.</td></tr>
+      <tr><td>3 · Fan-out</td><td class="mono"><code>app/services/repurpose_flow.py</code></td><td><code>asyncio.gather(return_exceptions=True)</code> — one core run per platform, <b>DB-free</b> (no session held across an LLM call): classify → generate → must-keep + Jev semantic judge → confidence-gated retry. Same core the chat's <code>repurpose_caption</code> tool consumes. Wall time ≈ one platform's.</td></tr>
+      <tr><td>4 · Persist</td><td class="mono">one batched commit</td><td>Only successes: one <code>repurpose_requests</code> row per platform + its <code>repurpose_attempts</code> (route_label, tier, model, provider, judge verdict/confidence), flushed then committed together. The tool path now also inserts its request <i>after</i> the pipeline returns — an LLM failure no longer leaves an orphan request.</td></tr>
+      <tr><td>5 · Result</td><td class="mono">response → drafts</td><td>Per platform: <code>{platform, rule_platform, ok, output, changes, must_keep_passed, judge_verdict, fallback, error, …}</code>. Partial failure is honest — one broken platform never discards the others. <code>fallback: true</code> = generator passthrough (LLM outage), so the client must not present unchanged text as generated.</td></tr>
+      <tr><td>6 · UI states</td><td class="mono">webappv2 <code>Composer.tsx</code></td><td>Success → each caption written into <code>usePlatformDrafts</code> (escaped HTML, <code>\n → &lt;br&gt;</code>) + toast <b>"Hold to preview captions for each social"</b> + <b>green breathing ring</b> ("tines around the socials buttons") on each selected chip — cleared per chip when its preview opens. While a run is in flight, a <i>held</i> chip shows the <b>breathing loading</b> animation.</td></tr>
+      <tr><td>7 · Preview + tags</td><td class="mono"><code>PlatformPreviewModal.tsx</code></td><td>Existing hold-to-preview (PR #68) opens the per-platform preview; a new <b>tags row</b> renders the <code>#hashtags</code> / <code>@mentions</code> extracted from that platform's caption — the per-platform cross-platform-tagging display (display-only; no contenteditable edits).</td></tr>
+    </tbody>
+  </table>
+
+  <div class="notes">
+    <div class="note ok"><b>Two entry points, one core</b>Chat's <code>repurpose_caption</code> tool and <code>POST /repurpose</code> both run <code>repurpose_flow.run_platform_repurpose</code> — classify/generate/enforce/judge/retry can't drift between them.</div>
+    <div class="note ok"><b>Honesty preserved</b>Per-platform errors come back as <code>ok:false</code> payloads (never a 500 for one bad platform); <code>fallback:true</code> flags generator passthrough; unknown platforms are rejected up front instead of silently aliased.</div>
+    <div class="note warn"><b>Publish caveat (pre-existing)</b><code>NON_TEXT_PLATFORMS</code> (<code>youtube/tiktok/instagram</code>) skips per-platform text overrides at publish time — those captions preview and show tags, but don't override the post text. Out of scope for this feature.</div>
+    <div class="note"><b>Costs</b>One auto-run = N× (Groq generate + Jev judge, maybe a retry) — <b>0 Xpoz credits</b>, no PFM calls. Same no-auth demo posture as every route here (CORS <code>*</code>).</div>
+  </div>
+
+  <footer>Endpoint spec: <code>.agents/api-endpoints.md</code> → "AI recaption" · tests: <code>tests/test_repurpose_endpoint.py</code> (17 — endpoint, aliases, validation, dedupe, partial failure, fallback flag, core retry, tool return-shape lock) · tool tiers: <code>cost="llm"</code> + <code>side_effects="writes_db"</code> locked by <code>tests/test_tool_tiers.py</code> · frontend: <code>webappv2</code> repo (<code>useAiRecaption</code>, <code>Composer.tsx</code>, <code>PlatformPreviewModal.tsx</code>).</footer>
+</section>
+
+</main>
+
+<script>
+"use strict";
+/* ───────── data ───────── */
+const COL = 250, W = 210, PADX = 24; // col step / node width / canvas pad
+const VIEWS = {
+  connect: { h: 780, nodes: [
+    {id:"cUi",   col:0,y:24, k:"ui",    t:"Settings · Connect X", s:"frontend → getConnectAuthUrl", n:"same-tab redirect"},
+    {id:"cRt",   col:1,y:24, k:"api",   t:"POST /pfm/connect", s:"routers/pfm.py", n:"mints auth URL only"},
+    {id:"cPfm",  col:2,y:24, k:"svc",   t:"PFMClient.create_auth_url", s:"services/pfm.py", n:"Bearer PFM_JWT_TOKEN"},
+    {id:"cX",    col:3,y:24, k:"ext",   t:"X OAuth consent", s:"external · api.x.com", n:"user authorizes"},
+    {id:"cCb",   col:4,y:24, k:"api",   t:"GET /pfm/callback", s:"routers/pfm.py", n:"?isSuccess&accountIds"},
+    {id:"cProf", col:4,y:150,k:"db",    t:"profiles", s:"Postgres", n:"upsert by unique pfm_account_id · only creator"},
+    {id:"cBoot", col:2,y:150,k:"bg",    t:"background/bootstrap.py", s:"spawned per profile", n:"4 ordered steps, each shielded"},
+    {id:"cS0",   col:0,y:275,k:"bg",    t:"step 0 · sync_profile_corpus", s:"services/voice_corpus.py", n:"every pass"},
+    {id:"cS1",   col:2,y:275,k:"bg",    t:"step 1 · extract_voice_profile", s:"tools/voice.py", n:"retry ~5 min while thin"},
+    {id:"cS2",   col:4,y:275,k:"bg",    t:"step 2 · _ensure_peer_frameworks", s:"bootstrap.py", n:"weekly refresh (7 d)"},
+    {id:"cS3",   col:5,y:275,k:"bg",    t:"step 3 · _ensure_own_analysis", s:"bootstrap → app/analysis/", n:"baseline + own lift · local DB only"},
+    {id:"cCorp", col:0,y:405,k:"chroma",t:"Chroma · voice_corpus", s:"≤200 posts / profile", n:"diverse temporal sample"},
+    {id:"cFeed", col:1,y:435,k:"ext",   t:"PFM get_account_feed", s:"limit 20 · cursor unused", n:"classify: originals → posts · replies/RTs → user_activity"},
+    {id:"cPosts",col:2,y:405,k:"db",    t:"posts + metric_snapshots", s:"Postgres", n:"unique (profile, platform_post_id)"},
+    {id:"cXpoz", col:4,y:405,k:"ext",   t:"Xpoz search_live_posts", s:"keyword search", n:"impressions ≥ 1,000 · being replaced"},
+    {id:"cOwnAn",col:5,y:405,k:"db",    t:"own_post_analysis + profile_snapshots + profile_baseline", s:"Postgres · migration b7d2e5f8a3c1", n:"NULL metrics · suspects excluded"},
+    {id:"cLlm1", col:2,y:545,k:"llm",   t:"LLM voice analysis", s:"OpenLux → Groq → OpenRouter", n:"+ prior version continuity · reply_style"},
+    {id:"cVp",   col:2,y:675,k:"db",    t:"voice_profiles", s:"Postgres", n:"flip is_current → flush → insert"},
+    {id:"cFwL",  col:3,y:530,k:"llm",   t:"peer_pipeline blind tagging", s:"ids + text only → PostAnalysisBatch", n:"live since 2026-10-26 · cache by post_id+prompt_version"},
+    {id:"cFw",   col:4,y:530,k:"db",    t:"peer_frameworks", s:"Postgres · source of truth", n:"payload JSON column"},
+    {id:"cCfw",  col:5,y:665,k:"chroma",t:"Chroma · peer_frameworks + peer_posts", s:"retrieval index", n:"indexed right after persist"},
+  ], edges:[
+    {a:"cUi",b:"cRt",s:"p"},
+    {a:"cRt",b:"cPfm",s:"p"},{a:"cPfm",b:"cX",l:"auth-url",s:"p"},{a:"cX",b:"cCb",l:"redirect",s:"p"},
+    {a:"cCb",b:"cProf",l:"upsert profile",s:"p"},{a:"cProf",b:"cBoot",l:"schedule bootstrap",s:"p"},
+    {a:"cBoot",b:"cS0",s:"p"},{a:"cBoot",b:"cS1",s:"p"},{a:"cBoot",b:"cS2",s:"p"},{a:"cBoot",b:"cS3",s:"p"},
+    {a:"cS3",b:"cOwnAn",l:"baseline + lift",s:"p"},
+    {a:"cPosts",b:"cOwnAn",l:"final metrics (72h)",s:"d"},
+    {a:"cS0",b:"cCorp",s:"p"},
+    {a:"cS1",b:"cFeed",l:"if posts < 5",s:"p"},
+    {a:"cFeed",b:"cPosts",l:"originals only (classify)",s:"p"},
+    {a:"cS1",b:"cLlm1",s:"p",sa:"l",pts:[{x:504,y:350},{x:504,y:575}]},
+    {a:"cPosts",b:"cCorp",l:"sync reads posts",s:"d",pts:[{x:629,y:372},{x:129,y:372}],sa:"t",ta:"t"},
+    {a:"cCorp",b:"cLlm1",l:"diverse sample (else posts[:10])",s:"d",pts:[{x:129,y:635},{x:629,y:635}],sa:"b",ta:"b"},
+    {a:"cPosts",b:"cLlm1",l:"captions",s:"d"},
+    {a:"cLlm1",b:"cVp",l:"save versioned row",s:"p"},
+    {a:"cS2",b:"cXpoz",s:"p"},{a:"cXpoz",b:"cFwL",l:"qualifying winners",s:"p"},
+    {a:"cFwL",b:"cFw",l:"persist",s:"p"},{a:"cFw",b:"cCfw",l:"index after persist",s:"p"},
+    {a:"cS2",b:"cCfw",l:"weekly re-index",s:"d",sa:"l",pts:[{x:950,y:330},{x:950,y:14},{x:1379,y:14}],ta:"t"},
+  ]},
+
+  chat: { h: 720, nodes: [
+    {id:"kUi",   col:0,y:24, k:"ui",    t:"Frontend · PromptBar", s:"streamChatMessage (SSE)", n:"busy prop ignored (no send lock)"},
+    {id:"kSse",  col:1,y:24, k:"api",   t:"POST /chat/stream", s:"routers/chat.py", n:"events: tool_start/tool_done/done/error"},
+    {id:"kLoop", col:2,y:24, k:"agent", t:"run_agent_loop", s:"agent/loop.py · neatlogs span", n:"≤6 iterations · request-fit per call"},
+    {id:"kCls",  col:2,y:150,k:"agent", t:"classify turn → path", s:"agent/turn_class.py", n:"rules first · Jev stage 2 off · CLASS_ALLOWED tier filter"},
+    {id:"kTc",   col:0,y:150,k:"db",    t:"turn_classifications", s:"Postgres · migration f3a7c9e2b41d", n:"one row after the reply · timings · NULL = unknown"},
+    {id:"kPr",   col:3,y:24, k:"svc",   t:"build system prompt", s:"prompts.py", n:"rules 1–22 + memory summary"},
+    {id:"kGq",   col:4,y:24, k:"llm",   t:"OpenLux → Groq", s:"providers.py chain · gpt-oss-120b → qwen3.8-27b", n:"413/429 → 2nd model first · effort=low for free tiers"},
+    {id:"kOr",   col:4,y:150,k:"llm",   t:"OpenRouter fallback", s:"llama-3.3-70b-instruct", n:"after both Groq models fail"},
+    {id:"kDb",   col:1,y:150,k:"db",    t:"chat_messages", s:"Postgres", n:"USER saved before loop"},
+    {id:"kTl",   col:3,y:150,k:"agent", t:"tool loop · call_tool()", s:"registry auto-fills profile_id", n:"args validated · 120s timeout · failures fed back"},
+    {id:"kT1",   col:0,y:315,k:"agent", t:"get_peer_advice", s:"advice.py", n:"retrieval-first"},
+    {id:"kT2",   col:1,y:315,k:"agent", t:"voice tools", s:"extract / get / answer_style", n:"3 tools"},
+    {id:"kT3",   col:2,y:315,k:"agent", t:"repurpose + actions", s:"repurpose_caption · submit · dismiss", n:"enforce → Jev judge"},
+    {id:"kT4",   col:3,y:315,k:"agent", t:"listening tools", s:"niche · frameworks · trending · start/stop", n:"5 tools"},
+    {id:"kT5",   col:4,y:315,k:"agent", t:"data tools", s:"analytics · posts · backfill · connect · activity", n:"5 tools"},
+    {id:"kT6",   col:5,y:315,k:"agent", t:"memory tools", s:"remember · recall_memory", n:"2 tools"},
+    {id:"kS1",   col:0,y:455,k:"chroma",t:"Chroma · peer_frameworks + peer_posts", s:"store → instant", n:"empty → live scan"},
+    {id:"kS2",   col:1,y:455,k:"db",    t:"voice_profiles + posts", s:"Postgres", n:"one current voice row"},
+    {id:"kS3",   col:2,y:455,k:"db",    t:"repurpose_requests → attempts", s:"Postgres", n:"+ user_actions"},
+    {id:"kS4",   col:3,y:455,k:"db",    t:"listening_matches / peer_frameworks", s:"Postgres", n:""},
+    {id:"kS5",   col:4,y:455,k:"db",    t:"posts + metric_snapshots", s:"Postgres", n:"backfill on demand"},
+    {id:"kS6",   col:5,y:455,k:"chroma",t:"Chroma · agent_memory", s:"durable facts", n:"deduped · Get ≤300"},
+    {id:"kExt",  col:2,y:610,k:"bg",    t:"extract_turn_memories", s:"fire-and-forget after success", n:"LLM merges prior summary"},
+    {id:"kMem",  col:4,y:610,k:"file",  t:"memory.md (rolling summary)", s:"project root · gitignored", n:"## Profile N sections"},
+  ], edges:[
+    {a:"kUi",b:"kSse",l:"{profile_id, message}",s:"p"},
+    {a:"kSse",b:"kLoop",s:"p"},
+    {a:"kLoop",b:"kDb",l:"persist USER first",s:"d"},
+    {a:"kLoop",b:"kCls",l:"classify turn",s:"p"},
+    {a:"kCls",b:"kTc",l:"row after reply (fire-and-forget)",s:"d"},
+    {a:"kCls",b:"kPr",l:"fast → _FAST_PROMPT · full → rules 1–22 + tier filter",s:"p"},
+    {a:"kLoop",b:"kPr",s:"p"},
+    {a:"kPr",b:"kGq",l:"system + history · fit ≤6.7k tok",s:"p"},
+    {a:"kGq",b:"kOr",l:"APIError → fallback chain",s:"d"},
+    {a:"kGq",b:"kTl",l:"tool_calls?",s:"p"},
+    {a:"kOr",b:"kTl",s:"p"},
+    {a:"kPr",b:"kTl",s:"p"},
+    {a:"kTl",b:"kGq",l:"tool results → next iteration",s:"p"},
+    {a:"kTl",b:"kDb",l:"save TOOL + ASSISTANT rows",s:"d"},
+    {a:"kTl",b:"kT1",s:"p"},{a:"kTl",b:"kT2",s:"p"},{a:"kTl",b:"kT3",s:"p"},{a:"kTl",b:"kT4",s:"p"},
+    {a:"kTl",b:"kT5",s:"p",pts:[{x:1004,y:262},{x:1129,y:262}],sa:"b",ta:"t"},
+    {a:"kTl",b:"kT6",s:"p",pts:[{x:1004,y:255},{x:1004,y:293}],sa:"b",ta:"t"},
+    {a:"kT1",b:"kS1",s:"p"},{a:"kT2",b:"kS2",s:"p"},{a:"kT3",b:"kS3",s:"p"},
+    {a:"kT4",b:"kS4",s:"p"},{a:"kT5",b:"kS5",s:"p"},{a:"kT6",b:"kS6",s:"p"},
+    {a:"kT1",b:"kT4",l:"found:false → live Xpoz + LLM",s:"d",pts:[{x:129,y:420},{x:879,y:420}],sa:"b",ta:"b"},
+    {a:"kTl",b:"kExt",l:"after successful turn",s:"p",sa:"b",pts:[{x:754,y:260},{x:754,y:585}],ta:"t"},
+    {a:"kExt",b:"kMem",l:"replace summary section",s:"p"},
+    {a:"kExt",b:"kS6",l:"store durable facts",s:"d",sa:"t",pts:[{x:629,y:575},{x:1379,y:575}],ta:"b"},
+    {a:"kT6",b:"kMem",l:"append bullet",s:"d",pts:[{x:1254,y:353},{x:1254,y:474},{x:1254,y:595},{x:1129,y:595}],sa:"l",ta:"t"},
+    {a:"kMem",b:"kPr",l:"injected next turn",s:"d",pts:[{x:1494,y:650},{x:1494,y:10},{x:879,y:10}],sa:"r",ta:"t"},
+    {a:"kLoop",b:"kUi",l:"SSE done → render reply",s:"p",pts:[{x:629,y:275},{x:129,y:275}],sa:"b",ta:"b"},
+  ]},
+
+  data: { h: 800, nodes: [
+    {id:"gPfm", col:0,y:24, k:"ext", t:"Post for Me (PFM)", s:"OAuth · get_account_feed", n:"5 rps limit · no client backoff"},
+    {id:"gXp",  col:0,y:145,k:"ext", t:"Xpoz", s:"user posts · keyword search", n:"optional XPOZ_API_KEY"},
+    {id:"gUsr", col:0,y:265,k:"ui",  t:"User chat", s:"/chat · /chat/stream", n:"19 REST routes, no auth"},
+    {id:"gLlm", col:0,y:385,k:"llm", t:"OpenLux → Groq → OpenRouter", s:"single chain for all LLM calls", n:"voice · repurpose · frameworks · memory"},
+    {id:"gEmb", col:0,y:505,k:"chroma",t:"Chroma Cloud (embedder)", s:"all-MiniLM-L6-v2 · 384-d", n:"creds in .env only · Get ≤300"},
+    {id:"gPol", col:2,y:24, k:"bg",  t:"background/poller.py", s:"tick 120 s", n:"spike check · bootstrap retry · weekly decay"},
+    {id:"gBt",  col:2,y:165,k:"bg",  t:"background/bootstrap.py", s:"corpus → voice → frameworks", n:"retry ~5 min · refresh 7 d"},
+    {id:"gLo",  col:2,y:325,k:"agent",t:"agent/loop.py (tool loop)", s:"prompt build · ≤6 iters · SSE", n:"19 registered tools"},
+    {id:"gRt",  col:2,y:465,k:"api", t:"routers (19 REST)", s:"chat · profiles · alerts · pfm · trends · handles · voice", n:"CORS * · no auth layer"},
+    {id:"gEx",  col:2,y:590,k:"bg",  t:"extract_turn_memories", s:"per successful turn", n:"held task · never raises"},
+    {id:"gDc",  col:2,y:705,k:"bg",  t:"decay pass (weekly)", s:"delete unaccessed 90 d", n:"Chroma down → 0 removed"},
+    {id:"gP1",  col:4,y:24, k:"db",  t:"profiles · posts · user_activity", s:"Postgres", n:"posts = originals only · activity = replies + RTs"},
+    {id:"gP2",  col:4,y:150,k:"db",  t:"voice_profiles · style_answers", s:"Postgres", n:"one current per profile"},
+    {id:"gP3",  col:4,y:276,k:"db",  t:"peer_frameworks · listening_matches", s:"Postgres", n:"weekly refresh"},
+    {id:"gP4",  col:4,y:402,k:"db",  t:"chat_messages · repurpose_* · user_actions · poll_config", s:"Postgres", n:"TOOL rows never re-enter context"},
+    {id:"gP5",  col:4,y:545,k:"file",t:"memory.md (project root)", s:"gitignored rolling summary", n:"injected into prompt"},
+    {id:"gC1",  col:5,y:24, k:"chroma",t:"voice_corpus", s:"≤200 posts/profile", n:""},
+    {id:"gC2",  col:5,y:150,k:"chroma",t:"voice_profiles (reserved)", s:"future cross-version search", n:""},
+    {id:"gC3",  col:5,y:276,k:"chroma",t:"peer_frameworks + peer_posts", s:"retrieval-first advice", n:""},
+    {id:"gC4",  col:5,y:402,k:"chroma",t:"agent_memory", s:"remember / recall / decay", n:""},
+  ], edges:[
+    {a:"gPfm",b:"gBt",l:"OAuth callback spawns",s:"p"},
+    {a:"gPfm",b:"gLo",l:"feed backfill",s:"d"},
+    {a:"gXp", b:"gBt",l:"niche scan + search",s:"p"},
+    {a:"gXp", b:"gLo",l:"listening tools",s:"d"},
+    {a:"gUsr",b:"gRt",l:"HTTP request",s:"p"},
+    {a:"gLlm",b:"gLo",l:"completion + fallback",s:"d"},
+    {a:"gLlm",b:"gEx",s:"d"},
+    {a:"gPol",b:"gBt",l:"bootstrap pass",s:"p"},
+    {a:"gPol",b:"gP1",l:"spike check reads",s:"d"},
+    {a:"gPol",b:"gDc",l:"weekly",s:"p",sa:"b",pts:[{x:920,y:140},{x:920,y:680}],ta:"t"},
+    {a:"gBt", b:"gP2",l:"voice rows",s:"p"},
+    {a:"gBt", b:"gP3",l:"frameworks + matches",s:"p"},
+    {a:"gBt", b:"gC1",l:"corpus sync",s:"d",pts:[{x:950,y:196},{x:950,y:12},{x:1379,y:12}],sa:"r",ta:"t"},
+    {a:"gLo", b:"gC3",l:"get_peer_advice query",s:"d",pts:[{x:950,y:390},{x:1254,y:390},{x:1254,y:320}]},
+    {a:"gRt", b:"gP4",l:"persist",s:"p"},
+    {a:"gEx", b:"gP5",l:"write summary",s:"p"},
+    {a:"gEx", b:"gC4",l:"store facts",s:"d",pts:[{x:950,y:638},{x:1254,y:638},{x:1254,y:445}]},
+    {a:"gDc", b:"gC4",l:"weekly remove",s:"d",pts:[{x:950,y:740},{x:950,y:670},{x:1264,y:670},{x:1264,y:495}],sa:"r",ta:"b"},
+    {a:"gP5", b:"gLo",l:"summary → system prompt",s:"d",pts:[{x:880,y:575},{x:880,y:440}],sa:"l",ta:"b"},
+  ]},
+};
+
+/* ───────── renderer ───────── */
+function xOf(col){ return PADX + col*COL; }
+
+function anchor(node, side){
+  const x = xOf(node.col), y = node.y, h = node._h || 70;
+  switch(side){
+    case "t": return {x:x+W/2, y:y};
+    case "b": return {x:x+W/2, y:y+h};
+    case "l": return {x:x, y:y+h/2};
+    case "r": return {x:x+W, y:y+h/2};
+  }
+}
+
+function pathFor(src, tgt, e){
+  if (e.pts && e.pts.length){
+    const s = anchor(src, e.sa || "r"), t = anchor(tgt, e.ta || "l");
+    let d = `M${s.x},${s.y}`;
+    for (const p of e.pts) d += ` L${p.x},${p.y}`;
+    d += ` L${t.x},${t.y}`;
+    // label at midpoint of the longest segment (avoids stacking on bends/nodes)
+    const all = [s, ...e.pts, t];
+    let best = {a: all[0], b: all[1], len: -1};
+    for (let i = 0; i < all.length - 1; i++){
+      const len = Math.abs(all[i+1].x - all[i].x) + Math.abs(all[i+1].y - all[i].y);
+      if (len > best.len) best = {a: all[i], b: all[i+1], len};
+    }
+    return {d, mid: {x:(best.a.x + best.b.x)/2, y:(best.a.y + best.b.y)/2}};
+  }
+  // auto anchor: |dx| >= |dy| → horizontal, else vertical
+  const sc = {x:xOf(src.col)+W/2, y:src.y+(src._h||70)/2};
+  const tc = {x:xOf(tgt.col)+W/2, y:tgt.y+(tgt._h||70)/2};
+  const dx = tc.x-sc.x, dy = tc.y-sc.y;
+  let s, t, c1, c2, mid;
+  if (Math.abs(dx) >= Math.abs(dy)){
+    s = anchor(src, dx>=0 ? "r":"l"); t = anchor(tgt, dx>=0 ? "l":"r");
+    const off = Math.max(30, Math.abs(dx)*0.45);
+    c1 = {x:s.x + Math.sign(dx||1)*off, y:s.y};
+    c2 = {x:t.x - Math.sign(dx||1)*off, y:t.y};
+    mid = {x:(s.x+3*c1.x+3*c2.x+t.x)/8, y:(s.y+3*c1.y+3*c2.y+t.y)/8};
+  } else {
+    s = anchor(src, dy>=0 ? "b":"t"); t = anchor(tgt, dy>=0 ? "t":"b");
+    const off = Math.max(24, Math.abs(dy)*0.45);
+    c1 = {x:s.x, y:s.y + Math.sign(dy||1)*off};
+    c2 = {x:t.x, y:t.y - Math.sign(dy||1)*off};
+    mid = {x:(s.x+3*c1.x+3*c2.x+t.x)/8, y:(s.y+3*c1.y+3*c2.y+t.y)/8};
+  }
+  return {d:`M${s.x},${s.y} C${c1.x},${c1.y} ${c2.x},${c2.y} ${t.x},${t.y}`, mid};
+}
+
+function render(id){
+  const host = document.getElementById(id);
+  const V = VIEWS[id.replace("g-","")];
+  const wide = Math.max(...V.nodes.map(n=>xOf(n.col)+W)) + PADX;
+  host.innerHTML = "";
+  host.style.height = V.h + "px";
+  host.style.width = Math.max(wide, 1200) + "px";
+
+  // nodes
+  const byId = {};
+  for (const n of V.nodes){
+    const el = document.createElement("div");
+    el.className = "node k-" + n.k;
+    el.style.left = xOf(n.col) + "px";
+    el.style.top = n.y + "px";
+    el.style.width = W + "px";
+    el.innerHTML = `<div class="t">${n.t}</div><div class="s">${n.s||""}</div>` + (n.n?`<div class="n">${n.n}</div>`:"");
+    host.appendChild(el);
+    n._h = el.offsetHeight;
+    byId[n.id] = n;
+  }
+
+  // edges
+  const NS = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(NS, "svg");
+  const defs = document.createElementNS(NS, "defs");
+  const mk = (id2,color,dash)=>{
+    const m = document.createElementNS(NS,"marker");
+    m.setAttribute("id",id2); m.setAttribute("viewBox","0 0 10 10");
+    m.setAttribute("refX","9"); m.setAttribute("refY","5");
+    m.setAttribute("markerWidth","6"); m.setAttribute("markerHeight","6");
+    m.setAttribute("orient","auto-start-reverse");
+    const p = document.createElementNS(NS,"path");
+    p.setAttribute("d","M0,0 L10,5 L0,10 z"); p.setAttribute("fill",color);
+    if(dash) p.setAttribute("opacity",".8");
+    m.appendChild(p); defs.appendChild(m);
+  };
+  mk("ar-g","#6B7280"); mk("ar-b","#0078D4");
+  svg.appendChild(defs); host.appendChild(svg);
+
+  for (const e of V.edges){
+    const s = byId[e.a], t = byId[e.b];
+    if (!s || !t) continue;
+    const {d, mid} = pathFor(s, t, e);
+    const path = document.createElementNS(NS,"path");
+    path.setAttribute("d", d); path.setAttribute("fill","none");
+    if (e.s === "p"){ path.setAttribute("stroke","#0078D4"); path.setAttribute("stroke-width","1.8"); path.setAttribute("marker-end","url(#ar-b)"); }
+    else { path.setAttribute("stroke","#6B7280"); path.setAttribute("stroke-width","1.4"); path.setAttribute("stroke-dasharray","5 4"); path.setAttribute("marker-end","url(#ar-g)"); }
+    svg.appendChild(path);
+    if (e.l){
+      const lab = document.createElement("div");
+      lab.className = "elabel " + (e.s==="p"?"blue":"dash");
+      lab.textContent = e.l;
+      lab.style.left = mid.x + "px"; lab.style.top = mid.y + "px";
+      host.appendChild(lab);
+    }
+  }
+}
+
+/* ───────── tabs ───────── */
+const rendered = {};
+function show(v){
+  document.querySelectorAll(".view").forEach(s=>s.classList.toggle("active", s.id === "v-"+v));
+  document.querySelectorAll("#tabs button").forEach(b=>b.classList.toggle("active", b.dataset.v === v));
+  const gid = "g-"+v;
+  // graph-less views (tables/prose only, e.g. 4–8) have no canvas to render
+  if (!rendered[gid] && document.getElementById(gid)){ render(gid); rendered[gid] = true; }
+  history.replaceState(null, "", "#" + v);
+}
+document.getElementById("tabs").addEventListener("click", ev=>{
+  const b = ev.target.closest("button"); if (b) show(b.dataset.v);
+});
+const start = (location.hash || "#connect").slice(1);
+show(VIEWS[start] ? start : "connect");
+</script>
+</body>
+</html>

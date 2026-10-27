@@ -1,0 +1,251 @@
+.wrap {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+  margin: 0 -6px;
+  padding: 4px 6px;
+  background: transparent;
+  border: none;
+  border-radius: var(--r-card-sm);
+  cursor: pointer;
+  transition: background-color 0.1s ease;
+}
+
+.header:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.headerIcon {
+  display: flex;
+  flex-shrink: 0;
+  transition: color 0.2s ease;
+}
+
+.statusGroup {
+  display: contents;
+}
+
+.activeText {
+  font-family: "Outfit", sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  background-image: linear-gradient(
+    90deg,
+    var(--text-muted) 35%,
+    var(--text) 50%,
+    var(--text-muted) 65%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.doneText {
+  font-family: "Outfit", sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  color: var(--text-dim);
+}
+
+.chevron {
+  transition: transform 0.3s ease;
+}
+
+.traceGrid {
+  display: grid;
+  transition:
+    grid-template-rows 0.4s cubic-bezier(0.23, 1, 0.32, 1),
+    opacity 0.4s cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.traceClip {
+  overflow: hidden;
+}
+
+.traceInner {
+  position: relative;
+  margin-top: 4px;
+  margin-left: 5px;
+  padding-left: 16px;
+}
+
+.traceLine {
+  position: absolute;
+  left: 3px;
+  width: 1px;
+  background: var(--glass-border);
+}
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px 0;
+}
+
+.queryRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 24px;
+  padding: 0 6px;
+}
+
+.queryIcon {
+  flex-shrink: 0;
+}
+
+.queryText {
+  font-family: "Outfit", sans-serif;
+  font-size: 12.5px;
+  color: var(--text-dim);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  width: 100%;
+  padding: 2px 6px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  text-align: left;
+  color: inherit;
+  text-decoration: none;
+}
+
+.rowHover:hover {
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.rowSelected {
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.rowPrimary {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: "Outfit", sans-serif;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.reasoning {
+  white-space: normal;
+  line-height: 1.6;
+  font-weight: 400;
+  color: var(--text-dim);
+}
+
+.searchLink {
+  text-decoration-line: underline;
+  text-decoration-color: transparent;
+  text-underline-offset: 3px;
+  transition:
+    text-decoration-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.rowHover.searchLink:hover {
+  text-decoration-color: var(--text-muted);
+}
+
+.rowSecondary {
+  flex-shrink: 0;
+  font-family: "DM Sans", sans-serif;
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+.mono {
+  font-family: var(--mono-font);
+}
+
+.diff {
+  flex-shrink: 0;
+  font-family: var(--mono-font);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.diffAdd {
+  color: var(--green);
+}
+
+.diffDel {
+  color: var(--red);
+}
+
+.check {
+  flex-shrink: 0;
+}
+
+.spinner {
+  flex-shrink: 0;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255, 255, 255, 0.25);
+  border-top-color: var(--text-dim);
+}
+
+.more {
+  font-family: "DM Sans", sans-serif;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.dot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  color: #ffffff;
+}
+
+.dotAccent {
+  background: #6366f1;
+}
+
+.dotOrange {
+  background: var(--orange);
+}
+
+.dotGreen {
+  background: var(--green);
+}
+
+.social {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 17px;
+  height: 17px;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.socialLight {
+  background: #ffffff;
+  padding: 2px;
+  box-sizing: border-box;
+}

@@ -1,0 +1,46 @@
+/* ═══════════════════════════════════════
+   THEME — light mode overrides
+   Matched to HTML version exactly.
+   ═══════════════════════════════════════ */
+body.light {
+  --bg: #f5f4f0;
+  --text: #0a0a0a;
+  --text-dim: rgba(10, 10, 10, 0.62);
+  --text-muted: rgba(10, 10, 10, 0.38);
+  --green: #16a34a;
+  --green-glow: rgba(22, 163, 74, 0.14);
+
+  /* Glass tokens re-tuned for cream bg */
+  --glass-base: rgba(255, 255, 255, 0.55);
+  --glass-mid: rgba(255, 255, 255, 0.72);
+  --glass-top: rgba(255, 255, 255, 0.88);
+  --glass-thick: rgba(255, 255, 255, 0.65);
+
+  /* Borders: bright white rim (specular) + faint dark edge */
+  --glass-border: rgba(255, 255, 255, 0.82);
+  --glass-border-h: rgba(255, 255, 255, 0.95);
+  --glass-border-f: rgba(22, 163, 74, 0.35);
+
+  /* v10 shadow set — lighter on cream */
+  --sh-sm: 0 2px 12px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0, 0, 0, 0.04);
+  --sh: 0 4px 24px rgba(0, 0, 0, 0.08), 0 1px 6px rgba(0, 0, 0, 0.04);
+  --sh-lg: 0 12px 48px rgba(0, 0, 0, 0.1), 0 4px 12px rgba(0, 0, 0, 0.06);
+  --sh-xl: 0 24px 80px rgba(0, 0, 0, 0.12), 0 8px 24px rgba(0, 0, 0, 0.06);
+
+  /* Specular: bright top rim, faint bottom depth */
+  --spec:
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.95),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.05);
+  --spec-sm: inset 0 1px 0 rgba(255, 255, 255, 0.88);
+  --spec-thick:
+    inset 0 2px 0 rgba(255, 255, 255, 0.95),
+    inset 0 -1.5px 0 rgba(0, 0, 0, 0.06),
+    inset 1px 0 0 rgba(255, 255, 255, 0.75), inset -1px 0 0 rgba(0, 0, 0, 0.02);
+
+  /* Aliases for LoginScreen, OAuthCallback, Sidebar */
+  --text-primary: #0a0a0a;
+  --glass-bg: rgba(255, 255, 255, 0.62);
+  --glass-highlight: rgba(255, 255, 255, 0.92);
+  --accent: #6366f1;
+  --input-bg: rgba(0, 0, 0, 0.04);
+}

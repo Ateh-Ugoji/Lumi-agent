@@ -1,0 +1,329 @@
+.wrap {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+  max-width: 100%;
+  min-height: 28px;
+  margin: 0 -6px;
+  padding: 4px 6px;
+  background: transparent;
+  border: none;
+  border-radius: var(--r-card-sm);
+  cursor: pointer;
+  transition: background-color 0.1s ease;
+}
+
+.header:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.headerIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  min-width: 17px;
+  min-height: 17px;
+  color: var(--text-dim);
+}
+
+.statusGroup {
+  display: contents;
+}
+
+.activeText {
+  font-family: "Outfit", sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  background-image: linear-gradient(
+    90deg,
+    var(--text-muted) 35%,
+    var(--text) 50%,
+    var(--text-muted) 65%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: shimmer-text 1.4s linear infinite;
+}
+
+.noMotion {
+  animation: none;
+}
+
+.doneText {
+  font-family: "Outfit", sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-dim);
+  animation: fade-in 350ms ease-out both;
+}
+
+.static .doneText {
+  animation: none;
+}
+
+.chevron {
+  flex-shrink: 0;
+  transition: transform 0.3s ease;
+}
+
+.traceGrid {
+  display: grid;
+  transition:
+    grid-template-rows 0.4s cubic-bezier(0.23, 1, 0.32, 1),
+    opacity 0.4s cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.traceClip {
+  overflow: hidden;
+}
+
+.traceInner {
+  position: relative;
+  margin-top: 4px;
+  margin-left: 5px;
+  padding-left: 16px;
+}
+
+.traceLine {
+  position: absolute;
+  left: 3px;
+  width: 1px;
+  background: var(--glass-border);
+}
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px 0;
+}
+
+.row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-height: 28px;
+  width: 100%;
+  padding: 3px 6px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  text-align: left;
+  color: inherit;
+}
+
+.rowActive {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.rowBody {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.rowLine {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.rowPrimary {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: "Outfit", sans-serif;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.rowActiveText {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: "Outfit", sans-serif;
+  font-size: 12.5px;
+  font-weight: 500;
+  background-image: linear-gradient(
+    90deg,
+    var(--text-muted) 35%,
+    var(--text) 50%,
+    var(--text-muted) 65%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: shimmer-text 1.4s linear infinite;
+}
+
+.meta {
+  flex-shrink: 0;
+  font-family: "DM Sans", sans-serif;
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+.detail {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: "DM Sans", sans-serif;
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+.samplePostsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 8px;
+  margin-top: 8px;
+  margin-bottom: 6px;
+  width: 100%;
+}
+
+.postCard {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-family: "DM Sans", sans-serif;
+  transition: all 0.2s ease;
+  text-decoration: none;
+  color: inherit;
+}
+
+.postCard:hover {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.16);
+  transform: translateY(-1px);
+}
+
+.postAuthorRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.postLikes {
+  font-size: 11px;
+  color: #f43f5e;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.postText {
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--text-dim);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.check {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.spinner {
+  flex-shrink: 0;
+  width: 12px;
+  height: 12px;
+  margin-top: 2px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255, 255, 255, 0.25);
+  border-top-color: var(--text-dim);
+}
+
+.iconSocial {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 17px;
+  height: 17px;
+  margin-top: 1px;
+  border-radius: 4px;
+  overflow: hidden;
+  animation: iconSwap 180ms ease-out both;
+}
+
+.iconSocialLight {
+  background: #ffffff;
+  padding: 2px;
+  box-sizing: border-box;
+}
+
+@keyframes iconSwap {
+  from {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .activeText,
+  .rowActiveText,
+  .iconSocial,
+  .doneText {
+    animation: none !important;
+  }
+
+  .wrap,
+  .traceGrid,
+  .chevron,
+  .traceLine {
+    transition: none !important;
+  }
+}
+
+@media (max-width: 640px) {
+  .activeText,
+  .doneText {
+    flex: 1;
+  }
+
+  .rowLine {
+    gap: 6px;
+  }
+}

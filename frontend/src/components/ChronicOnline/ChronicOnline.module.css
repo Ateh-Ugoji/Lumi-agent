@@ -1,0 +1,506 @@
+.root {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px 28px 64px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.14) transparent;
+}
+
+.wrap {
+  max-width: 720px;
+  margin: 0 auto;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #2f3336;
+}
+
+.titleRow {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.titleBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #1d9bf0;
+  margin-bottom: 2px;
+}
+
+.pulseDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #1d9bf0;
+  box-shadow: 0 0 8px #1d9bf0;
+  animation: pulse 2s infinite ease-in-out;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.5; transform: scale(0.9); }
+  50% { opacity: 1; transform: scale(1.15); }
+}
+
+.title {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: #e7e9ea;
+  margin: 0;
+}
+
+.subtitle {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-size: 13px;
+  color: #71767b;
+  margin: 0;
+  max-width: 480px;
+  line-height: 1.4;
+}
+
+.scanBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 9999px;
+  background: #eff3f4;
+  border: 1px solid transparent;
+  color: #0f1419;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.1s ease;
+  white-space: nowrap;
+}
+
+.scanBtn:hover:not(:disabled) {
+  background: #d7dbdc;
+  transform: translateY(-1px);
+}
+
+.scanBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── Primary Post Type Tabs (Posts vs Conversations) ── */
+.primaryTabs {
+  display: flex;
+  border-bottom: 1px solid #2f3336;
+}
+
+.primaryTab {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 16px;
+  background: transparent;
+  border: none;
+  color: #71767b;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  position: relative;
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+.primaryTab:hover {
+  background: rgba(231, 233, 234, 0.04);
+  color: #e7e9ea;
+}
+
+.primaryTabActive {
+  color: #e7e9ea;
+  font-weight: 700;
+}
+
+.primaryTabActive::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 25%;
+  right: 25%;
+  height: 3px;
+  border-radius: 9999px;
+  background: #1d9bf0;
+}
+
+.tabBadge {
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 9999px;
+  background: #202327;
+  color: #71767b;
+  font-weight: 500;
+}
+
+.primaryTabActive .tabBadge {
+  background: rgba(29, 155, 240, 0.2);
+  color: #1d9bf0;
+}
+
+/* ── Secondary Topic Filters & Search ── */
+.filterRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.topicChips {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.topicChip {
+  padding: 5px 12px;
+  border-radius: 9999px;
+  border: 1px solid #2f3336;
+  background: #000000;
+  color: #71767b;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.topicChip:hover {
+  background: #16181c;
+  color: #e7e9ea;
+  border-color: #536471;
+}
+
+.topicChipActive {
+  background: #1d9bf0;
+  border-color: #1d9bf0;
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.topicChipActive:hover {
+  background: #1a8cd8;
+  border-color: #1a8cd8;
+}
+
+.searchBox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 9999px;
+  border: 1px solid #2f3336;
+  background: #202327;
+  min-width: 200px;
+}
+
+.searchInput {
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #e7e9ea;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 12px;
+  width: 100%;
+}
+
+.searchInput::placeholder {
+  color: #71767b;
+}
+
+/* ── Tweets Feed ── */
+.feed {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* ── Authentic X Tweet Card ── */
+.tweetCard {
+  display: flex;
+  flex-direction: column;
+  background: #000000;
+  border: 1px solid #2f3336;
+  border-radius: 14px;
+  padding: 14px 16px;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.tweetCard:hover {
+  background: #080808;
+  border-color: #3e4144;
+}
+
+.tweetMain {
+  display: flex;
+  gap: 12px;
+}
+
+/* ── Left Avatar Column ── */
+.avatarCol {
+  flex-shrink: 0;
+}
+
+.avatarImg {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: #202327;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.avatarFallback {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #1d9bf0, #7c3aed);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 14px;
+  text-transform: uppercase;
+}
+
+/* ── Right Content Column ── */
+.contentCol {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.authorRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.authorMeta {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  line-height: 1.2;
+}
+
+.authorName {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 15px;
+  font-weight: 700;
+  color: #e7e9ea;
+}
+
+.verifiedBadge {
+  display: inline-flex;
+  align-items: center;
+  color: #1d9bf0;
+}
+
+.authorHandle {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 14px;
+  color: #71767b;
+}
+
+.dot {
+  color: #71767b;
+  font-size: 13px;
+}
+
+.timestamp {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 13px;
+  color: #71767b;
+}
+
+.topLinks {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.xLogo {
+  color: #71767b;
+  transition: color 0.15s ease;
+}
+
+.extLink {
+  color: #71767b;
+  text-decoration: none;
+  font-size: 12px;
+  transition: color 0.15s ease;
+}
+
+.extLink:hover, .xLogo:hover {
+  color: #1d9bf0;
+}
+
+.replyingTo {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 13px;
+  color: #71767b;
+  margin-top: -2px;
+}
+
+.replyTarget {
+  color: #1d9bf0;
+}
+
+.tweetText {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-size: 15px;
+  line-height: 1.45;
+  color: #e7e9ea;
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ── Authentic X Tweet Action Bar ── */
+.tweetActions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  max-width: 460px;
+  padding-top: 8px;
+  margin-top: 4px;
+  color: #71767b;
+}
+
+.actionItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 12.5px;
+  color: #71767b;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.actionItem svg {
+  width: 17px;
+  height: 17px;
+}
+
+.actionReply:hover {
+  color: #1d9bf0;
+}
+
+.actionRepost:hover {
+  color: #00ba7c;
+}
+
+.actionLike:hover {
+  color: #f91880;
+}
+
+.actionViews:hover {
+  color: #1d9bf0;
+}
+
+.actionShare:hover {
+  color: #1d9bf0;
+}
+
+/* ── Lumi Repurposing Footer Bar ── */
+.repurposeBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #202327;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.voiceHint {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #71767b;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.repurposeBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 9999px;
+  background: linear-gradient(135deg, rgba(168, 85, 247, 0.2), rgba(59, 130, 246, 0.2));
+  border: 1px solid rgba(168, 85, 247, 0.4);
+  color: #d8b4fe;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.repurposeBtn:hover {
+  background: linear-gradient(135deg, rgba(168, 85, 247, 0.35), rgba(59, 130, 246, 0.35));
+  border-color: rgba(168, 85, 247, 0.7);
+  color: #ffffff;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 10px rgba(168, 85, 247, 0.25);
+}
+
+.emptyState {
+  padding: 48px 24px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  background: #000000;
+  border: 1px solid #2f3336;
+  border-radius: 14px;
+  color: #71767b;
+}
+
+.emptyTitle {
+  font-size: 16px;
+  font-weight: 700;
+  color: #e7e9ea;
+  margin: 0;
+}
+
+.emptyDesc {
+  font-size: 13px;
+  max-width: 380px;
+  margin: 0;
+  line-height: 1.4;
+}

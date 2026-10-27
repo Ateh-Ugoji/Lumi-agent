@@ -1,0 +1,1293 @@
+.composerSticky {
+  position: sticky;
+  top: 8px;
+  z-index: 50;
+  background: transparent;
+  padding: 0;
+  width: 100%;
+  max-width: 600px;
+  transition: top 0.38s var(--spring-enter);
+}
+
+/* ── Composer card container (transparent) ── */
+.composerCard {
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Expand zone ── */
+.composerExpandZone {
+  overflow: visible;
+  max-height: 260px;
+  opacity: 1;
+  padding-bottom: 16px;
+  margin-bottom: -16px;
+  /* Use ease-out (not spring) — spring overshoots max-height
+     causing layout instability + scrollbar toggle → shake loop */
+  transition:
+    max-height 0.36s cubic-bezier(0.2, 0, 0, 1),
+    opacity 0.24s cubic-bezier(0.2, 0, 0, 1),
+    padding 0.30s cubic-bezier(0.2, 0, 0, 1),
+    margin 0.30s cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* ── COMPACT STATE ── */
+.compact .composerExpandZone {
+  overflow: hidden;
+  max-height: 0;
+  opacity: 0;
+  padding-bottom: 0;
+  margin-bottom: 0;
+  pointer-events: none;
+}
+
+.compact .inputBarWrapper {
+  padding: 4px 10px 4px 5px;
+  width: 72%;
+  margin-left: 14%;
+  margin-right: 14%;
+
+  box-shadow:
+    0 20px 64px rgba(0, 0, 0, 0.65),
+    0 8px 32px rgba(0, 0, 0, 0.40),
+    0 2px 8px rgba(0, 0, 0, 0.20),
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.26),
+    inset 1px 0 0 rgba(255, 255, 255, 0.12),
+    inset 0 -1.5px 0 rgba(0, 0, 0, 0.20);
+}
+
+.compact .inputBarWrapper::before {
+  opacity: 0.85;
+}
+
+.compact .plusBtn {
+  width: 32px;
+  height: 32px;
+}
+
+.compact .sendBtn {
+  width: 42px;
+  height: 42px;
+}
+
+.compact .composeInput {
+  font-size: 14px;
+  padding: 7px 0;
+}
+
+.compact .charCounterInline {
+  font-size: 10px;
+
+}
+
+/* ── Liquid Glass pill ── */
+.inputBarWrapper {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  position: relative;
+  z-index: 10;
+  width: 100%;
+  margin-left: 0%;
+  margin-right: 0%;
+  background: rgba(255, 255, 255, 0.062);
+  backdrop-filter: blur(32px) saturate(220%);
+  -webkit-backdrop-filter: blur(32px) saturate(220%);
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: var(--r-pill);
+  padding: 6px 12px 6px 6px;
+  box-shadow:
+    0 12px 40px rgba(0, 0, 0, 0.50),
+    0 4px 16px rgba(0, 0, 0, 0.30),
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.22),
+    inset 1px 0 0 rgba(255, 255, 255, 0.10),
+    inset 0 -1.5px 0 rgba(0, 0, 0, 0.18);
+  transition: background 0.35s var(--spring-enter),
+    border-color 0.35s var(--spring-enter),
+    box-shadow 0.35s var(--spring-enter),
+    padding 0.38s var(--spring-enter),
+    width 0.42s var(--spring-enter),
+    margin-left 0.42s var(--spring-enter),
+    margin-right 0.42s var(--spring-enter),
+    transform 0.35s var(--spring-enter);
+  animation: specularBreathe 6s ease-in-out infinite;
+}
+
+/* Layer 2: lensing shimmer ring */
+.inputBarWrapper::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: calc(var(--r-pill) + 1px);
+  background: linear-gradient(125deg,
+      rgba(255, 255, 255, 0.12) 0%,
+      rgba(255, 255, 255, 0.04) 30%,
+      rgba(160, 100, 255, 0.06) 60%,
+      transparent 80%);
+  pointer-events: none;
+  opacity: 0.9;
+  transition: opacity 0.4s;
+}
+
+/* Layer 3: green focus ring */
+.inputBarWrapper::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: calc(var(--r-pill) + 1px);
+  background: rgba(22, 163, 74, 0.42);
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  -webkit-mask-composite: xor;
+  padding: 1.5px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.28s;
+}
+
+.inputBarWrapper:focus-within::before {
+  opacity: 1;
+}
+
+.inputBarWrapper:focus-within::after {
+  opacity: 1;
+}
+
+.inputBarWrapper:focus-within {
+  background: rgba(255, 255, 255, 0.09);
+  border-color: rgba(255, 255, 255, 0.22);
+  box-shadow:
+    0 16px 48px rgba(0, 0, 0, 0.55),
+    0 0 0 3px rgba(22, 163, 74, 0.18),
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.28),
+    inset 1px 0 0 rgba(255, 255, 255, 0.12),
+    inset 0 -1.5px 0 rgba(0, 0, 0, 0.20);
+  transform: translateY(-2px);
+  animation: none;
+}
+
+/* ── Plus button (concentric radius inside pill) ── */
+.plusBtn {
+  width: 38px;
+  height: 38px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: var(--text);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+  transition: background 0.28s var(--spring-enter),
+    border-color 0.28s var(--spring-enter),
+    box-shadow 0.28s var(--spring-enter),
+    width 0.38s var(--spring-enter),
+    height 0.38s var(--spring-enter);
+  margin: auto 0;
+  margin-top: (auto+5px);
+
+}
+
+/* Light flash */
+.plusBtn::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.5) 0%, transparent 70%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.plusBtnFlash::after {
+  animation: lightPulse 0.38s forwards;
+}
+
+.plusBtn:hover {
+  background: var(--glass-mid);
+  border-color: rgba(255, 255, 255, 0.22);
+  transform: rotate(90deg) scale(1.08);
+}
+
+.plusBtnActive {
+  background: var(--glass-top);
+  transition: all;
+  border-color: rgba(255, 255, 255, 0.32);
+  transform: rotate(45deg) scale(1.05);
+}
+
+/* ── Textarea ── */
+.composeInput {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  color: var(--text);
+  font-size: 15px;
+  font-family: 'Outfit', sans-serif;
+  padding: 10px 0;
+  outline: none;
+  resize: none;
+  min-height: 24px;
+  max-height: 200px;
+  overflow-y: auto;
+  line-height: 1.5;
+  position: relative;
+  z-index: 2;
+}
+
+.composeInput::placeholder {
+  color: rgba(255, 255, 255, 0.38);
+}
+
+/* ── Char counter ── */
+.charCounterInline {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 11px;
+  color: var(--text-muted);
+  align-self: flex-end;
+  padding-bottom: 10px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  position: relative;
+  z-index: 2;
+  transition: color 0.35s ease, transform 0.35s var(--spring-bounce);
+}
+
+.charWarn {
+  color: #fbbf24;
+  transform: scale(1.05);
+}
+
+.charLimit {
+  color: #f87171;
+  transform: scale(1.12);
+  animation: counterPulse 0.4s var(--spring-bounce);
+}
+
+/* ── Clear button ── */
+.clearBtn {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  align-self: flex-end;
+  margin-bottom: 10px;
+  margin-right: 8px;
+  transition: all 0.2s;
+  position: relative;
+  z-index: 2;
+}
+
+.clearBtn:hover {
+  background: rgba(239, 68, 68, 0.12);
+  color: #ef4444;
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+/* ── Send button — glass orb ── */
+.sendBtn {
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.30);
+  color: #ffffff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.25s var(--spring-enter),
+    border-color 0.25s var(--spring-enter),
+    box-shadow 0.25s var(--spring-enter),
+    transform 0.18s var(--ease-standard),
+    width 0.38s var(--spring-enter),
+    height 0.38s var(--spring-enter);
+  align-self: flex-end;
+  box-shadow:
+    0 4px 16px rgba(0, 0, 0, 0.36),
+    inset 0 2px 0 rgba(255, 255, 255, 0.36),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.20);
+  position: relative;
+  z-index: 2;
+  overflow: hidden;
+  margin: auto 0;
+  margin-top: (auto+5px);
+}
+
+.sendBtn::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.6) 0%, transparent 70%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.sendBtnFlash::after {
+  animation: lightPulse 0.38s forwards;
+}
+
+.sendBtn:hover {
+  background: rgba(255, 255, 255, 0.22);
+  border-color: rgba(255, 255, 255, 0.42);
+  transform: scale(1.10) translateY(-1px) rotate(-10deg);
+  box-shadow:
+    0 8px 28px rgba(0, 0, 0, 0.46),
+    0 0 24px rgba(255, 255, 255, 0.12),
+    inset 0 2px 0 rgba(255, 255, 255, 0.42),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.20);
+}
+
+.sendBtn:active {
+  transform: scale(0.92);
+  transition-duration: 0.10s;
+  transition-timing-function: var(--ease-standard);
+}
+
+.sendBtn svg {
+  width: 20px;
+  height: 20px;
+}
+
+.sendBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* ── Send spinner (shown while publishing to backend) ── */
+.sendSpinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: sendSpin 0.7s linear infinite;
+}
+
+@keyframes sendSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ── Media container ── */
+.mediaContainer {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  padding-right: 4px;
+  position: relative;
+  z-index: 2;
+  margin-bottom: -12px;
+  margin-top: 8px;
+}
+
+.mediaThumbnail {
+  position: relative;
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  cursor: pointer;
+  transition: all 0.2s;
+  align-self: center;
+  margin: 10px;
+}
+
+.mediaThumbnail:hover {
+  border-color: rgba(255, 255, 255, 0.22);
+  transform: scale(1.05);
+}
+
+.mediaThumbnail img,
+.mediaThumbnail video {
+  width: 100%;
+  height: 50px;
+  object-fit: cover;
+
+}
+
+.removeMedia {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.72);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.2s;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: white;
+}
+
+.mediaThumbnail:hover .removeMedia {
+  opacity: 1;
+}
+
+.removeMedia svg {
+  width: 10px;
+  height: 10px;
+}
+
+/* ── Plus menu ── */
+.plusMenu {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 6px;
+  background: rgba(12, 11, 20, 0.84);
+  backdrop-filter: blur(28px) saturate(200%);
+  -webkit-backdrop-filter: blur(28px) saturate(200%);
+  border: 1px solid var(--glass-border);
+  border-radius: 28px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  box-shadow: var(--sh-lg), var(--spec-sm);
+  z-index: 9999;
+  min-width: 160px;
+  transform-origin: 20px bottom;
+  animation: menuMorphUp 0.28s var(--spring-enter) forwards;
+}
+
+.plusMenuClosing {
+  animation: menuMorphUpOut 0.18s var(--spring-leave) forwards;
+}
+
+.menuItem {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  font-family: 'Outfit', sans-serif;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.15s;
+  text-align: left;
+  width: 100%;
+}
+
+.menuItem:hover {
+  background: var(--glass-base);
+  color: var(--text);
+}
+
+.menuItem svg {
+  flex-shrink: 0;
+}
+
+.menuItem:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── Send button + Post now / Schedule menu ── */
+.sendWrap {
+  position: relative;
+  display: inline-flex;
+  margin: auto 0;
+  margin-top: (auto+5px);
+
+}
+
+.sendMenu {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  right: 0;
+  background: rgba(12, 11, 20, 0.84);
+  backdrop-filter: blur(28px) saturate(200%);
+  -webkit-backdrop-filter: blur(28px) saturate(200%);
+  border: 1px solid var(--glass-border);
+  border-radius: 20px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  box-shadow: var(--sh-lg), var(--spec-sm);
+  z-index: 9999;
+  min-width: 168px;
+  transform-origin: bottom right;
+  animation: menuMorphUp 0.28s var(--spring-enter) forwards;
+}
+
+/* ── Platform selector ── */
+.platformSelector {
+  display: flex;
+  gap: 10px;
+  margin-top: 16px;
+  flex-wrap: wrap;
+  position: relative;
+  z-index: 10;
+  overflow: visible;
+  padding: 0 12px;
+}
+
+/* ── Platform toggles — 48px rounded square ── */
+.platformToggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  border-radius: var(--r-icon);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  cursor: pointer;
+  transition: background 0.3s var(--spring-enter),
+    border-color 0.3s var(--spring-enter),
+    box-shadow 0.3s var(--spring-enter);
+  user-select: none;
+  width: 48px;
+  height: 48px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.10);
+  position: relative;
+  overflow: hidden;
+}
+
+/* Light flash on toggle */
+.platformToggle::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.35) 0%, transparent 70%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.platformToggleFlash::after {
+  animation: lightPulse 0.38s forwards;
+}
+
+.platformToggle input {
+  display: none;
+}
+
+.platformLogo {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+  opacity: 0.35;
+  transition: all 0.25s;
+  display: block;
+  pointer-events: none;
+}
+
+.platformToggleActive {
+  border-color: rgba(255, 255, 255, 0.38);
+  background: rgba(255, 255, 255, 0.14);
+  box-shadow:
+    0 4px 16px rgba(0, 0, 0, 0.35),
+    0 0 20px rgba(255, 255, 255, 0.08),
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.30),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.12);
+  transform: scale(1.08);
+}
+
+.platformToggleActive .platformLogo {
+  opacity: 1;
+}
+
+.loadingBar {
+  position: absolute;
+  inset: 0;
+  background: transparent;
+  overflow: hidden;
+  border-radius: var(--r-pill);
+  z-index: 15;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(4px);
+  transition:
+    opacity 0.28s ease-out,
+    transform 0.28s ease-out;
+}
+
+.loadingBarVisible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.loadingBarFill {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 0%;
+  background: var(--green);
+  box-shadow: 0 0 8px var(--green-glow);
+  transition: width 0.15s ease-out;
+  border-radius: 0 var(--r-pill) var(--r-pill) var(--r-pill);
+}
+
+.loadingBarFailed .loadingBarFill {
+  border-radius: var(--r-pill) 0 var(--r-pill) var(--r-pill);
+  transition: width 0.5s ease-in;
+}
+
+.platformToggleActiveTarget {
+  /* Vibrant green border with original 0.45 opacity */
+  border-color: rgba(34, 197, 94, 0.45);
+
+  /* Smooth green background tint with original 0.16 opacity */
+  background: rgba(16, 185, 129, 0.16);
+
+  box-shadow:
+    0 4px 16px rgba(0, 0, 0, 0.35),
+    0 0 20px rgba(34, 197, 94, 0.18),
+    /* Green outer glow */
+    inset 0 1.5px 0 rgba(134, 239, 172, 0.32),
+    /* Light green inner top highlight */
+    inset 0 -1px 0 rgba(0, 0, 0, 0.12);
+
+  transform: scale(1.08);
+}
+
+.platformToggleActiveTarget .platformLogo {
+  opacity: 1;
+}
+
+.platformToggleActiveTarget .platformLogo {
+  opacity: 1;
+}
+
+.platformToggle:hover:not(.platformToggleActive) {
+  border-color: rgba(255, 255, 255, 0.20);
+  background: rgba(255, 255, 255, 0.075);
+  transform: translateY(-2px) scale(1.06);
+}
+
+.platformToggle:hover .platformLogo {
+  opacity: 0.75;
+}
+
+:global(body.light) .platformToggle {
+  border: 1px solid rgba(255, 255, 255, 0.80);
+  background: rgba(255, 255, 255, 0.60);
+  backdrop-filter: blur(12px) saturate(140%);
+  -webkit-backdrop-filter: blur(12px) saturate(140%);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.07), inset 0 1px 0 rgba(255, 255, 255, 0.95);
+}
+
+:global(body.light) .platformLogo {
+  filter: invert(1) brightness(0);
+  opacity: 0.35;
+}
+
+:global(body.light) .platformToggleActive {
+  border-color: rgba(255, 255, 255, 0.92);
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.09), inset 0 1.5px 0 rgba(255, 255, 255, 0.98), inset 0 -1px 0 rgba(0, 0, 0, 0.04);
+  transform: scale(1.08);
+}
+
+:global(body.light) .platformToggleActive .platformLogo {
+  opacity: 1;
+  filter: invert(1) brightness(0);
+}
+
+:global(body.light) .platformToggle:hover:not(.platformToggleActive) {
+  background: rgba(255, 255, 255, 0.78);
+  border-color: rgba(255, 255, 255, 0.90);
+  transform: translateY(-2px) scale(1.04);
+}
+
+:global(body.light) .platformToggle:hover .platformLogo {
+  opacity: 0.65;
+}
+
+/* ── Overflow pill wrapper (positions popover relative to pill) ── */
+.overflowPillWrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
+/* ── Overflow pill ── */
+.overflowPill {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 14px;
+  height: 48px;
+  border-radius: var(--r-pill);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  color: var(--text-dim);
+  font-family: 'Outfit', sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.10);
+  transition: background 0.22s var(--spring-enter),
+    border-color 0.22s var(--spring-enter),
+    color 0.18s;
+}
+
+.overflowPill:hover {
+  background: rgba(255, 255, 255, 0.09);
+  border-color: rgba(255, 255, 255, 0.18);
+  color: var(--text);
+}
+
+.overflowPillActive {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.22);
+  color: var(--text);
+}
+
+/* ── Bottom action pills ── */
+.bottomActions {
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 20px;
+  width: 100%;
+  position: relative;
+  z-index: 0;
+  overflow: visible;
+  padding: 0 12px;
+}
+
+.pillBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 10px 16px;
+  border-radius: var(--r-pill);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  color: var(--text-dim);
+  font-family: 'Outfit', sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.28s var(--spring-enter),
+    border-color 0.28s var(--spring-enter),
+    box-shadow 0.28s var(--spring-enter),
+    color 0.28s var(--spring-enter),
+    transform 0.18s var(--ease-standard);
+  position: relative;
+  overflow: hidden;
+  flex: 1;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.10), 0 2px 8px rgba(0, 0, 0, 0.20);
+  white-space: nowrap;
+}
+
+/* Glass shimmer sweep on hover */
+.pillBtn::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(125deg, transparent 30%, rgba(255, 255, 255, 0.16) 50%, transparent 70%);
+  transform: translateX(-120%);
+  transition: transform 0.5s var(--spring-enter);
+  pointer-events: none;
+}
+
+.pillBtn:hover::before {
+  transform: translateX(160%);
+}
+
+.pillBtn:hover {
+  background: rgba(255, 255, 255, 0.09);
+  border-color: rgba(255, 255, 255, 0.18);
+  color: var(--text);
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.15), 0 8px 24px rgba(0, 0, 0, 0.34);
+}
+
+.pillBtn:active {
+  transform: translateY(0) scale(0.97);
+  transition-duration: 0.10s;
+  transition-timing-function: var(--ease-standard);
+}
+
+.pillBtn svg {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+}
+
+/* ── Thread trigger ── */
+.threadTrigger {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 0 6px;
+  margin-top: 14px;
+}
+
+.threadTriggerLineCol {
+  display: flex;
+  justify-content: center;
+  width: 38px;
+  flex-shrink: 0;
+}
+
+.threadTriggerLine {
+  width: 2px;
+  height: 22px;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 1px;
+}
+
+:global(body.light) .threadTriggerLine {
+  background: rgba(10, 10, 10, 0.10);
+}
+
+.threadTriggerBtn {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 14px;
+  border-radius: 100px;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  color: rgba(255, 255, 255, 0.38);
+  font-family: 'Outfit', sans-serif;
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: all 0.20s var(--spring-enter);
+}
+
+.threadTriggerBtn:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.18);
+  color: rgba(255, 255, 255, 0.70);
+  transform: translateY(-1px);
+}
+
+:global(body.light) .threadTriggerBtn {
+  color: rgba(10, 10, 10, 0.32);
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+:global(body.light) .threadTriggerBtn:hover {
+  background: rgba(0, 0, 0, 0.04);
+  color: rgba(10, 10, 10, 0.60);
+}
+
+/* ── Light mode overrides ── */
+:global(body.light) .inputBarWrapper {
+  background: rgba(255, 255, 255, 0.68);
+  backdrop-filter: blur(24px) saturate(160%);
+  -webkit-backdrop-filter: blur(24px) saturate(160%);
+  border: 1px solid rgba(255, 255, 255, 0.88);
+  box-shadow:
+    0 4px 24px rgba(0, 0, 0, 0.08),
+    0 1px 4px rgba(0, 0, 0, 0.04),
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.98),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.04);
+  animation: none;
+}
+
+:global(body.light) .inputBarWrapper::before {
+  background: linear-gradient(135deg,
+      rgba(255, 255, 255, 0.70) 0%,
+      rgba(255, 255, 255, 0.20) 45%,
+      transparent 70%);
+  opacity: 0.8;
+}
+
+:global(body.light) .inputBarWrapper:focus-within {
+  background: rgba(255, 255, 255, 0.82);
+  border-color: rgba(255, 255, 255, 0.95);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.10),
+    0 0 0 3px rgba(22, 163, 74, 0.09),
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.98),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.04);
+  transform: translateY(-2px);
+}
+
+:global(body.light) .composeInput {
+  color: #0a0a0a;
+}
+
+:global(body.light) .composeInput::placeholder {
+  color: rgba(0, 0, 0, 0.30);
+}
+
+:global(body.light) .charCounterInline {
+  color: rgba(0, 0, 0, 0.32);
+}
+
+:global(body.light) .plusBtn {
+  background: rgba(255, 255, 255, 0.60);
+  backdrop-filter: blur(12px) saturate(140%);
+  -webkit-backdrop-filter: blur(12px) saturate(140%);
+  border: 1px solid rgba(255, 255, 255, 0.80);
+  color: rgba(10, 10, 10, 0.65);
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.90);
+}
+
+:global(body.light) .plusBtn:hover {
+  background: rgba(255, 255, 255, 0.82);
+  border-color: rgba(255, 255, 255, 0.92);
+  color: #0a0a0a;
+}
+
+:global(body.light) .sendBtn {
+  background: #0a0a0a;
+  border: 1px solid #0a0a0a;
+  color: #ffffff;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.15), 0 4px 20px rgba(0, 0, 0, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+:global(body.light) .sendBtn:hover {
+  background: #1a1a1a;
+  border-color: #1a1a1a;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  transform: scale(1.10) translateY(-1px) rotate(-10deg);
+}
+
+:global(body.light) .clearBtn {
+  border: 1px solid rgba(255, 255, 255, 0.70);
+  background: rgba(255, 255, 255, 0.45);
+  color: rgba(10, 10, 10, 0.38);
+}
+
+:global(body.light) .clearBtn:hover {
+  background: rgba(254, 242, 242, 0.75);
+  color: #dc2626;
+  border-color: rgba(239, 68, 68, 0.35);
+}
+
+:global(body.light) .pillBtn {
+  border: 1px solid rgba(255, 255, 255, 0.78);
+  background: rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(10px) saturate(130%);
+  -webkit-backdrop-filter: blur(10px) saturate(130%);
+  color: rgba(10, 10, 10, 0.55);
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.05), inset 0 1px 0 rgba(255, 255, 255, 0.90);
+}
+
+:global(body.light) .pillBtn::before {
+  background: linear-gradient(125deg, transparent 30%, rgba(255, 255, 255, 0.65) 50%, transparent 70%);
+}
+
+:global(body.light) .pillBtn:hover {
+  background: rgba(255, 255, 255, 0.80);
+  border-color: rgba(255, 255, 255, 0.92);
+  color: #0a0a0a;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.09), inset 0 1px 0 rgba(255, 255, 255, 0.95);
+}
+
+:global(body.light) .overflowPill {
+  background: rgba(255, 255, 255, 0.60);
+  border: 1px solid rgba(255, 255, 255, 0.82);
+  color: rgba(10, 10, 10, 0.55);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.95);
+}
+
+:global(body.light) .overflowPill:hover {
+  background: rgba(255, 255, 255, 0.82);
+  border-color: rgba(255, 255, 255, 0.92);
+  color: #0a0a0a;
+}
+
+:global(body.light) .overflowPillActive {
+  background: rgba(255, 255, 255, 0.88);
+  border-color: rgba(255, 255, 255, 0.95);
+  color: #0a0a0a;
+}
+
+:global(body.light) .plusMenu {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(20px) saturate(150%);
+  -webkit-backdrop-filter: blur(20px) saturate(150%);
+  border: 1px solid rgba(255, 255, 255, 0.90);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.10), 0 2px 8px rgba(0, 0, 0, 0.05), inset 0 1px 0 rgba(255, 255, 255, 0.98);
+}
+
+:global(body.light) .menuItem {
+  color: rgba(10, 10, 10, 0.62);
+}
+
+:global(body.light) .menuItem:hover {
+  background: rgba(255, 255, 255, 0.65);
+  color: #0a0a0a;
+}
+
+/* ── Responsive ── */
+@media (max-width: 768px) {
+  .composerSticky {
+    max-width: 100%;
+  }
+
+  .composeInput {
+    font-size: 14px;
+  }
+
+  .platformSelector {
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .pillBtn {
+    padding: 10px 14px;
+    font-size: 13px;
+  }
+}
+
+@media (max-width: 480px) {
+  .platformSelector {
+    gap: 6px;
+    flex-wrap: nowrap;
+    padding: 4px 0;
+  }
+
+  .platformToggle {
+    width: 44px;
+    height: 44px;
+    min-width: 0;
+    flex-shrink: 0;
+  }
+
+  .overflowPill {
+    min-width: 0;
+    flex-shrink: 1;
+    padding: 0 12px;
+    height: 44px;
+    font-size: 12px;
+  }
+
+  .bottomActions {
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .pillBtn {
+    padding: 9px 12px;
+    font-size: 12px;
+  }
+
+  .pillBtn svg {
+    width: 14px;
+    height: 14px;
+  }
+
+  .sendBtn {
+    width: 44px;
+    height: 44px;
+  }
+}
+
+@media (max-width: 360px) {
+  .platformSelector {
+    gap: 4px;
+    padding: 3px 0;
+  }
+
+  .platformToggle {
+    width: 42px;
+    height: 42px;
+  }
+
+  .pillBtn {
+    padding: 8px 10px;
+    font-size: 11px;
+  }
+
+  .sendBtn {
+    width: 40px;
+    height: 40px;
+  }
+
+  .bottomActions {
+    gap: 4px;
+  }
+}
+
+@keyframes specularBreathe {
+
+  0%,
+  100% {
+    box-shadow:
+      0 12px 40px rgba(0, 0, 0, 0.50), 0 4px 16px rgba(0, 0, 0, 0.30),
+      inset 0 1.5px 0 rgba(255, 255, 255, 0.22),
+      inset 1px 0 0 rgba(255, 255, 255, 0.10),
+      inset 0 -1.5px 0 rgba(0, 0, 0, 0.18);
+  }
+
+  50% {
+    box-shadow:
+      0 12px 40px rgba(0, 0, 0, 0.50), 0 4px 16px rgba(0, 0, 0, 0.30),
+      inset 0 1.5px 0 rgba(255, 255, 255, 0.34),
+      inset 1px 0 0 rgba(255, 255, 255, 0.18),
+      inset 0 -1.5px 0 rgba(0, 0, 0, 0.18);
+  }
+}
+
+@keyframes lightPulse {
+  0% {
+    opacity: 1;
+  }
+
+  60% {
+    opacity: 0.4;
+  }
+
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes counterPulse {
+  0% {
+    transform: scale(1.12);
+  }
+
+  40% {
+    transform: scale(1.22);
+  }
+
+  100% {
+    transform: scale(1.12);
+  }
+}
+
+@keyframes menuMorphUp {
+  0% {
+    opacity: 0;
+    transform: scale(0.6) translateY(12px);
+    filter: blur(4px);
+  }
+
+  60% {
+    filter: blur(0px);
+  }
+
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+    filter: blur(0px);
+  }
+}
+
+@keyframes menuMorphUpOut {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  to {
+    opacity: 0;
+    transform: scale(0.7) translateY(8px);
+  }
+}
+
+/* ── Image / video lightbox ── */
+.lightboxBackdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2000;
+  background: rgba(0, 0, 0, 0.60);
+  backdrop-filter: blur(24px) saturate(120%);
+  -webkit-backdrop-filter: blur(24px) saturate(120%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  animation: lightboxFadeIn 0.24s ease-out forwards;
+}
+
+.lightboxContent {
+  max-width: 90vw;
+  max-height: 85vh;
+  cursor: default;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.60);
+  animation: lightboxScaleIn 0.28s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+.lightboxContent img,
+.lightboxContent video {
+  display: block;
+  max-width: 90vw;
+  max-height: 85vh;
+  object-fit: contain;
+  border-radius: 16px;
+}
+
+@keyframes lightboxFadeIn {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes lightboxScaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.85);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.chatSticky {
+  position: sticky;
+  bottom: 16px;
+  z-index: 50;
+  background: transparent;
+  width: 100%;
+  max-width: 600px;
+  align-self: center;
+  margin-top: auto;
+}
+
+.chatSticky:has(textarea:disabled) {
+  opacity: 0.85;
+}

@@ -16,3 +16,8 @@ frontend/*.local
 
 # Agent runtime memory (rolling summary, regenerated)
 memory.md
+
+# Working junk — never commit
+*.log
+_purge_p16.py
+temp-agents.md

@@ -1,0 +1,93 @@
+.ambientBg {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  overflow: hidden;
+  background-color: #0a0a0a;
+  background-image: radial-gradient(
+    circle,
+    rgba(255, 255, 255, 0.08) 1.5px,
+    transparent 1.5px
+  );
+  background-size: 24px 24px;
+}
+
+:global(body.light) .ambientBg {
+  background-color: #f5f4f0;
+  background-image: radial-gradient(
+    circle,
+    rgba(0, 0, 0, 0.15) 1.5px,
+    transparent 1.5px
+  );
+}
+
+.orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(90px);
+  will-change: transform;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.orb1 {
+  width: 580px;
+  height: 580px;
+  background: radial-gradient(
+    circle,
+    rgba(80, 44, 200, 0.14) 0%,
+    transparent 70%
+  );
+  top: -140px;
+  left: -80px;
+}
+.orb2 {
+  width: 460px;
+  height: 460px;
+  background: radial-gradient(
+    circle,
+    rgba(18, 130, 190, 0.11) 0%,
+    transparent 70%
+  );
+  top: 28%;
+  right: -70px;
+}
+.orb3 {
+  width: 420px;
+  height: 420px;
+  background: radial-gradient(
+    circle,
+    rgba(140, 48, 180, 0.09) 0%,
+    transparent 70%
+  );
+  bottom: -90px;
+  left: 32%;
+}
+.orb4 {
+  width: 320px;
+  height: 320px;
+  background: radial-gradient(
+    circle,
+    rgba(16, 160, 120, 0.07) 0%,
+    transparent 70%
+  );
+  top: 52%;
+  left: 14%;
+}
+.orb5 {
+  width: 280px;
+  height: 280px;
+  background: radial-gradient(
+    circle,
+    rgba(200, 80, 40, 0.055) 0%,
+    transparent 70%
+  );
+  bottom: 20%;
+  right: 24%;
+}
+
+:global(body.light) .orb {
+  opacity: 0;
+  pointer-events: none;
+}

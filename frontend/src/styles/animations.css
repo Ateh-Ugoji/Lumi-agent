@@ -1,0 +1,377 @@
+/* ═══════════════════════════════════════
+   ANIMATIONS — all @keyframes (global, not module)
+   Referenced by name from CSS modules.
+   Matched to HTML version exactly.
+   ═══════════════════════════════════════ */
+
+/* Apple materialization: starts blurry (glass emerging from fog), resolves to sharp */
+@keyframes materializeUp {
+  0% {
+    opacity: 0;
+    transform: translateY(14px);
+    filter: blur(8px);
+  }
+  60% {
+    opacity: 1;
+    filter: blur(1px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0px);
+  }
+}
+
+/* ── Orb buttons (send-btn, plus-btn) ── */
+@keyframes orbPress {
+  0% {
+    transform: scale(1);
+  }
+  30% {
+    transform: scaleX(1.12) scaleY(0.88);
+  }
+  100% {
+    transform: scale(0.88);
+  }
+}
+@keyframes orbRelease {
+  0% {
+    transform: scale(0.88);
+  }
+  40% {
+    transform: scaleY(1.14) scaleX(0.94);
+  }
+  65% {
+    transform: scale(0.98);
+  }
+  85% {
+    transform: scale(1.02);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* ── Pill / rect buttons (pill-btn, menu-toggle, tab-btn) ── */
+@keyframes btnPress {
+  0% {
+    transform: scale(1);
+  }
+  25% {
+    transform: scale(0.93) scaleX(1.07);
+  }
+  100% {
+    transform: scale(0.88);
+  }
+}
+@keyframes btnRelease {
+  0% {
+    transform: scale(0.88);
+  }
+  45% {
+    transform: scale(1.08) scaleX(0.96);
+  }
+  68% {
+    transform: scale(0.98);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* ── Platform toggle activation (inactive → active) ── */
+@keyframes toggleActivate {
+  0% {
+    transform: scale(0.9);
+  }
+  55% {
+    transform: scale(1.14);
+  }
+  80% {
+    transform: scale(1.06);
+  }
+  100% {
+    transform: scale(1.08);
+  }
+}
+@keyframes toggleDeactivate {
+  0% {
+    transform: scale(1.08);
+  }
+  40% {
+    transform: scale(0.88);
+  }
+  75% {
+    transform: scale(1.02);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* ── Light flash pulse ── */
+@keyframes lightPulse {
+  0% {
+    opacity: 1;
+  }
+  60% {
+    opacity: 0.4;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* ── Specular breathe on composer pill ── */
+@keyframes specularBreathe {
+  0%,
+  100% {
+    box-shadow:
+      0 12px 40px rgba(0, 0, 0, 0.5),
+      0 4px 16px rgba(0, 0, 0, 0.3),
+      inset 0 1.5px 0 rgba(255, 255, 255, 0.22),
+      inset 1px 0 0 rgba(255, 255, 255, 0.1),
+      inset 0 -1.5px 0 rgba(0, 0, 0, 0.18);
+  }
+  50% {
+    box-shadow:
+      0 12px 40px rgba(0, 0, 0, 0.5),
+      0 4px 16px rgba(0, 0, 0, 0.3),
+      inset 0 1.5px 0 rgba(255, 255, 255, 0.34),
+      inset 1px 0 0 rgba(255, 255, 255, 0.18),
+      inset 0 -1.5px 0 rgba(0, 0, 0, 0.18);
+  }
+}
+
+/* ── Modal spring in/out ── */
+@keyframes modalSpringIn {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.82) translateY(24px);
+    filter: blur(6px);
+  }
+  60% {
+    filter: blur(0px);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1) translateY(0);
+    filter: blur(0px);
+  }
+}
+@keyframes modalSpringOut {
+  from {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.88) translateY(12px);
+  }
+}
+
+/* ── Plus menu morph ── */
+@keyframes menuMorph {
+  0% {
+    opacity: 0;
+    transform: scale(0.6) translateY(-12px);
+    filter: blur(4px);
+  }
+  60% {
+    filter: blur(0px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+    filter: blur(0px);
+  }
+}
+@keyframes menuMorphOut {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.7) translateY(-8px);
+  }
+}
+
+/* ── Char counter pulse ── */
+@keyframes counterPulse {
+  0% {
+    transform: scale(1.12);
+  }
+  40% {
+    transform: scale(1.22);
+  }
+  100% {
+    transform: scale(1.12);
+  }
+}
+
+/* ── Toast slide in/out ── */
+@keyframes toastSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes toastSlideOut {
+  to {
+    opacity: 0;
+    transform: translateY(10px) scale(0.9);
+  }
+}
+
+/* ── Inline delete confirm morph ── */
+@keyframes confirmMorph {
+  0% {
+    opacity: 0;
+    transform: scale(0.82) translateX(10px);
+    filter: blur(3px);
+  }
+  60% {
+    filter: blur(0px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateX(0);
+  }
+}
+
+/* ── Card materialize entrance ── */
+@keyframes cardMaterialize {
+  0% {
+    opacity: 0;
+    transform: translateY(16px);
+    filter: blur(4px);
+  }
+  60% {
+    filter: blur(0px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0px);
+  }
+}
+
+/* ── Bottom sheet for mobile ── */
+@keyframes sheetSlideUp {
+  0% {
+    transform: translateY(100%);
+    opacity: 0.4;
+  }
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+@keyframes sheetSlideDown {
+  0% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+}
+
+/* ── Thread slide in/out ── */
+@keyframes threadSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px) scale(0.97);
+  }
+  to {
+    opacity: 0.6;
+    transform: translateY(0) scale(0.992);
+  }
+}
+@keyframes threadSlideOut {
+  from {
+    opacity: 1;
+    transform: scale(1);
+    max-height: 200px;
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.94) translateY(-6px);
+    max-height: 0;
+  }
+}
+
+/* ── Backdrop fade ── */
+@keyframes fadeInBg {
+  to {
+    opacity: 1;
+  }
+}
+
+/* ── Agent trace + insights ── */
+@keyframes shimmer-text {
+  0% {
+    background-position: 200% 0;
+  }
+
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes eq-bounce {
+  0%,
+  100% {
+    transform: scaleY(0.35);
+  }
+
+  50% {
+    transform: scaleY(1);
+  }
+}

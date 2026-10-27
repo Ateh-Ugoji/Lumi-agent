@@ -1,0 +1,180 @@
+/* ═══════════════════════════════════════
+   GLOBAL CSS — resets + CSS variables only
+   NOT a CSS Module — consumed via var(--name)
+   ═══════════════════════════════════════ */
+*,
+*::before,
+*::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+:root {
+  --black: #0a0a0a;
+  --bg: #0a0a0a;
+  --cream: #f5f4f0;
+  --green: #16a34a;
+  --green-glow: rgba(22, 163, 74, 0.35);
+  --text: #ffffff;
+  --text-dim: rgba(255, 255, 255, 0.65);
+  --text-muted: rgba(255, 255, 255, 0.4);
+  --r-pill: 100px;
+  --r-card: 20px;
+  --r-card-sm: 12px;
+  --r-icon: 14px;
+  --glass-base: rgba(255, 255, 255, 0.055);
+  --glass-mid: rgba(255, 255, 255, 0.08);
+  --glass-top: rgba(255, 255, 255, 0.12);
+  --glass-thick: rgba(255, 255, 255, 0.09);
+  --glass-border: rgba(255, 255, 255, 0.11);
+  --glass-border-h: rgba(255, 255, 255, 0.2);
+  --glass-border-f: rgba(22, 163, 74, 0.35);
+  --light-x: 30%;
+  --light-y: -10%;
+  --spec:
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.22),
+    inset 1px 0 0 rgba(255, 255, 255, 0.08), inset 0 -1px 0 rgba(0, 0, 0, 0.16);
+  --spec-sm: inset 0 1px 0 rgba(255, 255, 255, 0.16);
+  --spec-thick:
+    inset 0 2px 0 rgba(255, 255, 255, 0.28), inset 0 -2px 0 rgba(0, 0, 0, 0.2),
+    inset 1px 0 0 rgba(255, 255, 255, 0.1), inset -1px 0 0 rgba(0, 0, 0, 0.06);
+  --sh-sm: 0 4px 16px rgba(0, 0, 0, 0.4), 0 1px 4px rgba(0, 0, 0, 0.25);
+  --sh: 0 8px 32px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.3);
+  --sh-lg: 0 16px 56px rgba(0, 0, 0, 0.62), 0 4px 16px rgba(0, 0, 0, 0.38);
+  --sh-xl: 0 24px 80px rgba(0, 0, 0, 0.7), 0 8px 32px rgba(0, 0, 0, 0.45);
+  --blur-thin: blur(20px) saturate(180%);
+  --blur: blur(28px) saturate(200%);
+  --blur-thick: blur(44px) saturate(220%);
+  --blur-modal: blur(64px) saturate(240%);
+  --spring-enter: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --spring-leave: cubic-bezier(0.32, 0, 0.67, 0);
+  --spring-bounce: cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* Aliases used by LoginScreen, OAuthCallback, Sidebar */
+  --text-primary: #ffffff;
+  --glass-bg: rgba(255, 255, 255, 0.055);
+  --glass-highlight: rgba(255, 255, 255, 0.16);
+  --accent: #6366f1;
+  --input-bg: rgba(255, 255, 255, 0.06);
+}
+
+html {
+  background: var(--bg);
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Outfit", -apple-system, sans-serif;
+  min-height: 100vh;
+  position: relative;
+  overflow-x: hidden;
+}
+
+/* ── Modal shared tokens (referenced by per-component .module.css) ── */
+:root {
+  --modal-bg: var(--glass-thick);
+  --modal-backdrop: var(--blur-modal);
+  --modal-border: var(--glass-border);
+  --modal-radius: var(--r-card);
+  --modal-shadow: var(--spec-thick), var(--sh-xl);
+  --modal-padding: 24px;
+  --modal-z-bg: 900;
+  --modal-z-content: 901;
+}
+
+/* ── Light mode overrides ── */
+html.light,
+html.light body {
+  --bg: #f5f5f5;
+  --text: #1a1a1a;
+  --text-dim: rgba(0, 0, 0, 0.65);
+  --text-muted: rgba(0, 0, 0, 0.4);
+
+  --glass-base: rgba(255, 255, 255, 0.72);
+  --glass-mid: rgba(255, 255, 255, 0.82);
+  --glass-top: rgba(255, 255, 255, 0.92);
+  --glass-thick: rgba(255, 255, 255, 0.85);
+  --glass-border: rgba(0, 0, 0, 0.08);
+  --glass-border-h: rgba(0, 0, 0, 0.15);
+  --glass-border-f: rgba(22, 163, 74, 0.35);
+
+  --glass-bg: rgba(255, 255, 255, 0.72);
+  --glass-highlight: rgba(255, 255, 255, 0.95);
+
+  --sh-xs: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --sh-sm: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+  --sh-md: 0 4px 6px rgba(0, 0, 0, 0.06), 0 2px 4px rgba(0, 0, 0, 0.04);
+  --sh-lg: 0 10px 15px rgba(0, 0, 0, 0.08), 0 4px 6px rgba(0, 0, 0, 0.04);
+  --sh-xl: 0 20px 25px rgba(0, 0, 0, 0.1), 0 8px 10px rgba(0, 0, 0, 0.04);
+  --spec-sm: inset 0 1px 1px rgba(255, 255, 255, 0.6);
+  --spec-md: inset 0 2px 4px rgba(255, 255, 255, 0.7);
+  --spec-lg: inset 0 2px 6px rgba(255, 255, 255, 0.8);
+  --spec-thick: inset 0 2px 12px rgba(255, 255, 255, 0.9);
+}
+
+/* ── Insight palette (chart accents shared by agent cards) ── */
+:root {
+  --orange: #f68f3c;
+  --red: #ef4444;
+  --blue: #3d9aff;
+  --mono-font: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+/* ── Reference design tokens (PromptBar reference port) ──
+ * Aliases of the Lumi palette so reference components can use
+ * their native var() names. --ink/--surface/--ink-2 follow the theme
+ * automatically; --line-strong flips in light mode. */
+:root {
+  --ink: var(--text);
+  --ink-2: var(--text-dim);
+  --ink-3: var(--text-muted);
+  --surface: var(--bg);
+  --line-strong: rgba(255, 255, 255, 0.22);
+  --hover: rgba(255, 255, 255, 0.07);
+  --hover-2: rgba(255, 255, 255, 0.12);
+}
+
+body.light {
+  --line-strong: rgba(0, 0, 0, 0.16);
+  --hover: rgba(0, 0, 0, 0.05);
+  --hover-2: rgba(0, 0, 0, 0.08);
+}
+
+/* ── Soft edge dissolve for the chat scroll area (fade + blur) ──
+   Single tuning point: zones, blur strength, fade floor, gate timing. */
+:root {
+  --edge-top: 56px;
+  --edge-bottom: 96px;
+  --edge-blur: 8px;
+  --edge-fade-clear: transparent;
+  --edge-gate-time: 0.25s;
+}
+
+/* Registered so the gate colors animate smoothly inside the mask gradient */
+@property --edge-top-a {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: transparent;
+}
+
+@property --edge-bottom-a {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --edge-gate-time: 0s;
+  }
+}
+
+@media (prefers-contrast: more) {
+  :root {
+    --edge-blur: 0px;
+    --edge-fade-clear: rgba(0, 0, 0, 0.35);
+  }
+}

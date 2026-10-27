@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lumi @-handle bar — MVP</title>
+<style>
+  :root {
+    --bg: #0d0f13; --panel: #161a21; --panel2: #1d222b; --text: #e7e9ee;
+    --muted: #8b93a3; --accent: #7c8cff; --line: #2a303c;
+    --db: #4fb286; --cache: #7c8cff; --live: #e0a458;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; background: var(--bg); color: var(--text);
+    font: 15px/1.45 "Segoe UI", system-ui, sans-serif;
+    display: flex; flex-direction: column; align-items: center; padding: 48px 16px;
+  }
+  h1 { font-size: 20px; font-weight: 600; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: 13px; margin-bottom: 28px; text-align: center; max-width: 560px; }
+  .bar-wrap { position: relative; width: 100%; max-width: 560px; }
+  textarea {
+    width: 100%; min-height: 96px; resize: vertical; padding: 14px 16px;
+    background: var(--panel); color: var(--text); border: 1px solid var(--line);
+    border-radius: 12px; font: inherit; outline: none;
+  }
+  textarea:focus { border-color: var(--accent); }
+  .dropdown {
+    position: absolute; z-index: 10; left: 0; right: 0; top: calc(100% + 6px);
+    background: var(--panel2); border: 1px solid var(--line); border-radius: 12px;
+    overflow: hidden; box-shadow: 0 12px 32px rgba(0,0,0,.45); display: none;
+  }
+  .dropdown.open { display: block; }
+  .row { display: flex; align-items: center; gap: 10px; padding: 9px 12px; cursor: pointer; }
+  .row:hover, .row.active { background: rgba(124,140,255,.12); }
+  .row img { width: 34px; height: 34px; border-radius: 50%; background: var(--panel); object-fit: cover; }
+  .row .who { flex: 1; min-width: 0; }
+  .row .handle { font-weight: 600; }
+  .row .name { color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row .followers { color: var(--muted); font-size: 12px; white-space: nowrap; }
+  .badge { font-size: 10px; font-weight: 700; letter-spacing: .4px; padding: 2px 7px; border-radius: 999px; text-transform: uppercase; }
+  .badge.db { background: rgba(79,178,134,.15); color: var(--db); }
+  .badge.cache { background: rgba(124,140,255,.15); color: var(--cache); }
+  .badge.live { background: rgba(224,164,88,.15); color: var(--live); }
+  .empty { padding: 12px; color: var(--muted); font-size: 13px; }
+  .ctx { padding: 6px 12px 2px; color: var(--muted); font-size: 11px; letter-spacing: .2px; border-bottom: 1px solid var(--line); }
+  /* breathing loader — shown while the real search runs behind a db miss */
+  @keyframes breathe { 0%, 100% { opacity: .3; transform: scale(.94); } 50% { opacity: 1; transform: scale(1); } }
+  .breathe { padding: 12px; display: flex; flex-direction: column; gap: 14px; }
+  .breathe-row { display: flex; align-items: center; gap: 10px; }
+  .breathe-dot { width: 34px; height: 34px; border-radius: 50%; background: var(--line); flex: none; animation: breathe 2.4s ease-in-out infinite; }
+  .breathe-bars { display: flex; flex-direction: column; gap: 7px; }
+  .breathe-bars i { display: block; height: 9px; border-radius: 6px; background: var(--line); animation: breathe 2.4s ease-in-out infinite; }
+  .breathe-bars .w1 { width: 96px; }
+  .breathe-bars .w2 { width: 150px; animation-delay: .35s; }
+  .breathe-row:nth-child(2) .breathe-dot,
+  .breathe-row:nth-child(2) .breathe-bars i { animation-delay: .6s; }
+  .breathe-row:nth-child(2) { opacity: .8; }
+  /* small breathing dot under db-served rows while the real search refines */
+  .breathe-mini { display: flex; justify-content: center; padding: 7px 0 9px; border-top: 1px solid var(--line); }
+  .breathe-mini span { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); animation: breathe 1.8s ease-in-out infinite; }
+  .meter { display: flex; gap: 14px; margin-top: 10px; font-size: 12px; color: var(--muted); flex-wrap: wrap; }
+  .meter b { color: var(--text); font-weight: 600; }
+  .hint { margin-top: 26px; font-size: 12px; color: var(--muted); max-width: 560px; text-align: center; }
+  .hint code { background: var(--panel); padding: 1px 5px; border-radius: 4px; }
+  /* platform selector — multi-select; each selected platform works in the @ search */
+  .plats { display: flex; gap: 8px; margin: 0 0 12px; flex-wrap: wrap; justify-content: center; }
+  .plat-pill {
+    border: 1px solid var(--line); background: var(--panel); color: var(--muted);
+    padding: 5px 12px; border-radius: 999px; font-size: 12px; font-weight: 600;
+    cursor: pointer; font: inherit; font-size: 12px;
+  }
+  .plat-pill:hover { border-color: var(--accent); }
+  .plat-pill.on { color: var(--text); border-color: var(--accent); background: rgba(124,140,255,.14); }
+  .plat-pill.nolive { border-style: dashed; }
+  .plat-pill .cost { opacity: .72; font-weight: 500; }
+  .badge.plat {
+    background: rgba(231,233,238,.07); color: var(--muted);
+    border: 1px solid var(--line); text-transform: none;
+  }
+</style>
+</head>
+<body>
+  <h1>Lumi @-handle bar</h1>
+  <p class="sub">Type <b>@</b> in the bar — saved handles paint instantly as a head start, then the real search refines them: Local DB → remembered → cached (fresh for 60 min) → Xpoz live (budget-guarded, stale cache re-queries in real time). Pick the platforms in the selector — <b>X, Instagram, TikTok, Reddit</b> search live (2 / 12 / 5 / 2 credits per query, shown on each pill), <b>LinkedIn</b> has no live provider here and answers from saved handles only (never invented). The DB adds to results, never replaces them — only a fresh cached search can skip live for that platform. A db miss breathes until the actual people arrive. Every pulled handle, with picture, name and followers, is saved. The list is a half-and-half mix by where each handle came from on this search: about half the slots go to the saved half — everything served from memory (Local DB, remembered, cache), with local-DB handles like @AtehOfficial leading it — and half to the live half, what the fresh Xpoz pull just returned (a side that runs short hands its leftovers to the other so the list still fills to ten), with the exact handle you typed kept at the top.</p>
+
+  <div class="plats" id="platBar" aria-label="search these platforms"></div>
+
+  <div class="bar-wrap">
+    <textarea id="bar" placeholder="Write something and mention someone with @…" autofocus></textarea>
+    <div class="dropdown" id="dropdown"></div>
+  </div>
+
+  <div class="meter" id="meter"></div>
+
+  <p class="hint">Selection is remembered server-side (<code>POST /api/handles/select</code>) and reused by the next search — that's the cross-platform handle-mapping seed. Wiring into the main chat is deliberately out of MVP scope.</p>
+
+<script>
+const bar = document.getElementById("bar");
+const dropdown = document.getElementById("dropdown");
+const meter = document.getElementById("meter");
+const platBar = document.getElementById("platBar");
+let results = [], active = -1, timer = null, seq = 0, lastQuery = "";
+let lastContext = "", saved = [], pendingFull = false;
+// Multi-select platform selector (mirrors the server's PLATFORMS registry —
+// refreshed from /api/handles/stats). Each ticked platform works in the @ search;
+// at least one is always kept ticked.
+let platforms = new Set(["x"]);
+let PLATFORMS = [
+  { id: "x", label: "X", live: true, credits: 2 },
+  { id: "instagram", label: "Instagram", live: true, credits: 12 },
+  { id: "tiktok", label: "TikTok", live: true, credits: 5 },
+  { id: "reddit", label: "Reddit", live: true, credits: 2 },
+  { id: "linkedin", label: "LinkedIn", live: false, credits: 0 },
+];
+const platLabel = id => (PLATFORMS.find(p => p.id === id) || {}).label || id;
+const unavatarSvc = p => (p || "x") === "x" ? "x" : p;
+const platParam = () => [...platforms].join(",");
+
+function renderPlats() {
+  platBar.innerHTML = PLATFORMS.map(p => `
+    <button type="button" class="plat-pill ${platforms.has(p.id) ? "on" : ""} ${p.live ? "" : "nolive"}"
+      data-p="${p.id}"
+      title="${p.live ? p.credits + " credits per live search" : "no live search here yet — saved handles only"}">${p.label}<span class="cost">${p.live ? " · " + p.credits + "cr" : " · saved only"}</span></button>`).join("");
+  platBar.querySelectorAll(".plat-pill").forEach(el =>
+    el.addEventListener("click", () => {
+      const id = el.dataset.p;
+      if (platforms.has(id)) { if (platforms.size > 1) platforms.delete(id); } // never zero selected
+      else platforms.add(id);
+      renderPlats();
+      loadSaved();                       // instant snapshot follows the selection (0 credits)
+      bar.dispatchEvent(new Event("input")); // repaint + re-search an open @token on the new set
+    }));
+}
+
+const fmt = n => n == null ? "" : n >= 1e6 ? (n/1e6).toFixed(1)+"M" : n >= 1e3 ? (n/1e3).toFixed(1)+"k" : ""+n;
+const avatar = r => r.avatar_url || ("https://unavatar.io/" + unavatarSvc(r.platform) + "/" + encodeURIComponent(r.handle) + "?fallback=false");
+
+function tokenAtCaret() {
+  const upto = bar.value.slice(0, bar.selectionStart);
+  const m = upto.match(/@([A-Za-z0-9_.\-]{0,40})$/); // hyphen: Reddit handles
+  return m ? m[1] : null;
+}
+
+// The up-to-3 whole words typed immediately BEFORE the "@". Sent as `context` so
+// the search can rank ("founder openai @kar" boosts Karpathy). Not the query itself.
+function contextAtCaret() {
+  const upto = bar.value.slice(0, bar.selectionStart);
+  const m = upto.match(/^(.*?)@[A-Za-z0-9_.\-]{0,40}$/);
+  if (!m) return "";
+  const words = m[1].trim().split(/\s+/).filter(Boolean);
+  return words.slice(-3).join(" ");
+}
+
+async function refreshMeter() {
+  try {
+    const s = await (await fetch("/api/handles/stats")).json();
+    const origins = s.remembered_by_origin || {};
+    meter.innerHTML =
+      `<span>spent this session: <b>${s.credits_spent_this_session}</b> / ${s.live_budget} credits</span>` +
+      `<span>live queries: <b>${s.live_queries_this_session}</b></span>` +
+      `<span>saved handles: <b>${s.saved_handles}</b> (live pulls: <b>${origins.live || 0}</b>, selected: <b>${origins.selected || 0}</b>${origins.niche ? `, niche scans: <b>${origins.niche}</b>` : ""})</span>` +
+      `<span>cached searches: <b>${s.cached_searches}</b> · TTL ${s.cache_ttl_minutes}m</span>` +
+      (s.live_enabled ? "" : `<span style="color:var(--live)">live search disabled</span>`);
+    // single source of truth: the server's platform catalog drives the pills
+    if (Array.isArray(s.available_platforms) && s.available_platforms.length) {
+      PLATFORMS = s.available_platforms;
+      renderPlats();
+    }
+  } catch { /* server not ready */ }
+}
+
+// Instant suggest snapshot: every saved handle (local db + remembered store)
+// for the SELECTED platforms, fetched once at load and refreshed after each full
+// search / selection / platform toggle. Keystrokes filter THIS list in-browser —
+// 0 ms, no request, no credits.
+async function loadSaved() {
+  try {
+    const d = await (await fetch("/api/handles/saved?platforms=" + encodeURIComponent(platParam()))).json();
+    saved = d.results || [];
+  } catch { /* keep the previous snapshot */ }
+}
+
+function ctxScore(r, words) {
+  if (!words.length) return 1;
+  const text = (r.handle + " " + (r.display_name || "")).toLowerCase();
+  return words.some(w => text.includes(w)) ? 1 : 0;
+}
+
+// Prefix-match the snapshot, mirroring the server's 50/50 mix: within-group
+// ordering is context boost over snapshot followers, then split db vs rest,
+// fill MIX_TOTAL, exact handle first.
+function suggestLocal(q, context) {
+  const p = q.toLowerCase();
+  const words = (context || "").trim().split(/\s+/).filter(Boolean).slice(0, 3);
+  const MIX_HALF = 5, MIX_TOTAL = 10;
+  const hits = saved.filter(r => platforms.has(r.platform || "x") &&
+    r.handle.toLowerCase().startsWith(p));
+  if (words.length) hits.sort((a, b) => ctxScore(b, words) - ctxScore(a, words));
+  // local-db rows lead their group (mirrors the server's db tier); stable, so
+  // the context ranking above survives inside each group
+  hits.sort((a, b) => (a.source === "db" ? 0 : 1) - (b.source === "db" ? 0 : 1));
+  // 50/50 mix by WHERE the row came from, mirroring the server: saved half =
+  // memory (source "db"/"cache" — the snapshot is all memory, so this side is
+  // everything), live half = a fresh pull (source "live"; only reachable after a
+  // refined search repaints). Local-db rows lead the saved half, a short side
+  // backfills the other up to MIX_TOTAL, and the exact-typed handle leads.
+  const known = hits.filter(r => r.source !== "live");
+  const others = hits.filter(r => r.source === "live");
+  let k = Math.min(known.length, MIX_HALF);
+  let o = Math.min(others.length, MIX_HALF);
+  let deficit = MIX_TOTAL - (k + o);
+  if (deficit > 0) {
+    const extra = Math.min(deficit, known.length - k);
+    k += extra;
+    deficit -= extra;
+    o += Math.min(deficit, others.length - o);
+  }
+  const mixed = known.slice(0, k).concat(others.slice(0, o));
+  const ei = mixed.findIndex(r => r.handle.toLowerCase() === p);
+  if (ei > 0) mixed.unshift(mixed.splice(ei, 1)[0]);
+  return mixed.slice(0, MIX_TOTAL);
+}
+
+// Paint saved-handle matches immediately while typing, before the 300 ms
+// debounced full search (cache + live) comes back and refines the same dropdown.
+function paintLocal(q, context) {
+  seq++; // any in-flight full search for an older query is now stale
+  pendingFull = true; // the real search is coming — breathe until it lands
+  active = -1;
+  lastQuery = q;
+  lastContext = (context || "").trim();
+  results = suggestLocal(q, lastContext);
+  render(q, "local_pending", lastContext);
+}
+
+async function search(q, context) {
+  const mySeq = ++seq;
+  const ctx = (context || "").trim();
+  try {
+    const url = "/api/handles/search?q=" + encodeURIComponent(q) +
+      "&platforms=" + encodeURIComponent(platParam()) +
+      (ctx ? "&context=" + encodeURIComponent(ctx) : "");
+    const data = await (await fetch(url)).json();
+    if (mySeq !== seq) return; // stale response
+    results = data.results || [];
+    lastQuery = data.query || q;
+    lastContext = data.context !== undefined ? data.context : ctx;
+    active = -1;
+    pendingFull = false;
+    render(q, data.reason, lastContext);
+    refreshMeter();
+    loadSaved(); // newly pulled handles join the instant layer
+  } catch { pendingFull = false; render(q, "error"); }
+}
+
+// Breathing skeleton: two rows that gently scale/pulse in and out while the
+// debounced cache+live search runs behind a db miss (no claims, just motion).
+function breatheSkeleton() {
+  return `<div class="breathe" aria-label="searching">
+    <div class="breathe-row"><span class="breathe-dot"></span>
+      <span class="breathe-bars"><i class="w1"></i><i class="w2"></i></span></div>
+    <div class="breathe-row"><span class="breathe-dot"></span>
+      <span class="breathe-bars"><i class="w1"></i><i class="w2"></i></span></div>
+  </div>`;
+}
+
+function render(q, reason, context) {
+  // keydown re-renders call render() bare — fall back to the last context used
+  const ctxText = (context !== undefined ? context : lastContext || "").trim();
+  if (!results.length) {
+    if (reason === "local_pending") {
+      // db has nothing yet — breathe (in and out) instead of claiming to search
+      dropdown.innerHTML = breatheSkeleton();
+      dropdown.classList.add("open");
+      return;
+    }
+    const why = reason === "budget_exhausted" ? " — live budget spent, cache/db only"
+      : reason === "live_disabled" ? " — live search disabled"
+      : reason === "unsupported" ? " — no live search on this platform yet, saved handles only"
+      : reason === "min_length" ? "" : " — no matches";
+    dropdown.innerHTML = `<div class="empty">@${q}${why}</div>`;
+    dropdown.classList.add("open");
+    return;
+  }
+  const ctxLine = ctxText ? `<div class="ctx">ranking by context: ${ctxText}</div>` : "";
+  const footer = pendingFull ? `<div class="breathe-mini"><span></span></div>` : "";
+  // platform chip: shown for any non-X row, or whenever more than one platform is
+  // selected (so an all-X mixed list stays uncluttered)
+  const showPlat = r => platforms.size > 1 || (r.platform && r.platform !== "x");
+  dropdown.innerHTML = ctxLine + results.map((r, i) => `
+    <div class="row ${i === active ? "active" : ""}" data-i="${i}">
+      <img src="${avatar(r)}" onerror="this.src='https://unavatar.io/${unavatarSvc(r.platform)}/'+encodeURIComponent('${r.handle}')">
+      <div class="who">
+        <div><span class="handle">@${r.handle}</span>${showPlat(r) ? `<span class="badge plat">${platLabel(r.platform || "x")}</span>` : ""}</div>
+        <div class="name">${r.display_name || ""}</div>
+      </div>
+      <span class="followers">${fmt(r.followers)}</span>
+      <span class="badge ${r.source}">${r.source}</span>
+    </div>`).join("") + footer;
+  dropdown.classList.add("open");
+  dropdown.querySelectorAll(".row").forEach(el =>
+    el.addEventListener("mousedown", ev => { ev.preventDefault(); pick(+el.dataset.i); }));
+}
+
+function pick(i) {
+  const r = results[i];
+  if (!r) return;
+  const caret = bar.selectionStart;
+  const upto = bar.value.slice(0, caret);
+  const replaced = upto.replace(/@[A-Za-z0-9_.]*$/, "@" + r.handle + " ");
+  bar.value = replaced + bar.value.slice(caret);
+  bar.selectionStart = bar.selectionEnd = replaced.length;
+  bar.focus();
+  close();
+  fetch("/api/handles/select", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      handle: r.handle, platform: r.platform || "x", display_name: r.display_name,
+      avatar_url: r.avatar_url, followers: r.followers, selected_query: lastQuery
+    })
+  }).then(() => { refreshMeter(); loadSaved(); }).catch(() => {});
+}
+
+function close() {
+  dropdown.classList.remove("open");
+  results = []; active = -1; seq++; pendingFull = false;
+}
+
+bar.addEventListener("input", () => {
+  const q = tokenAtCaret();
+  clearTimeout(timer);
+  if (q === null || q.length < 2) { close(); return; }
+  paintLocal(q, contextAtCaret()); // instant: browser-side snapshot, 0 credits
+  timer = setTimeout(() => search(q, contextAtCaret()), 300); // debounce: cache + live refine
+});
+
+bar.addEventListener("keydown", ev => {
+  const open = dropdown.classList.contains("open") && results.length;
+  if (ev.key === "Escape") { close(); return; }
+  if (!open) return;
+  if (ev.key === "ArrowDown") { ev.preventDefault(); active = (active + 1) % results.length; render(); }
+  else if (ev.key === "ArrowUp") { ev.preventDefault(); active = (active - 1 + results.length) % results.length; render(); }
+  else if (ev.key === "Enter" || ev.key === "Tab") {
+    if (active >= 0) { ev.preventDefault(); pick(active); }
+    else if (ev.key === "Tab" && results.length) { ev.preventDefault(); pick(0); }
+  }
+});
+
+bar.addEventListener("blur", () => setTimeout(close, 150));
+renderPlats();
+refreshMeter();
+loadSaved();
+</script>
+</body>
+</html>
