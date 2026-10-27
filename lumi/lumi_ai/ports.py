@@ -38,7 +38,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Literal, Protocol, get_args, runtime_checkable
 
-PORTS_VERSION = "1.7"  # 1.1: SemanticJudge, 1.2: OwnPostSync, 1.3: AttemptIn.is_fallback, EvaluationRecord.attempt_id required, 1.4: MemoryStore.touch_notes, save_voice model/prompt_version, 1.5: tool_call_id, report query/peers, repurpose mode/brief, user request platform, 1.6: MatchStore, 1.7: create_request_with_attempts(source_post_id=)
+PORTS_VERSION = "1.9"  # 1.1: SemanticJudge, 1.2: OwnPostSync, 1.3: AttemptIn.is_fallback, EvaluationRecord.attempt_id required, 1.4: MemoryStore.touch_notes, save_voice model/prompt_version, 1.5: tool_call_id, report query/peers, repurpose mode/brief, user request platform, 1.6: MatchStore, 1.7: create_request_with_attempts(source_post_id=), 1.8: create_request_with_attempts(evaluations=) + EvaluationIn, 1.9: MediaRef.kind may be None (type unknown)
 
 # ---------------------------------------------------------------------------
 # Shared vocabulary
@@ -56,9 +56,14 @@ ToolCost = Literal["free", "credits", "llm", "write"]
 
 @dataclass(frozen=True, slots=True)
 class MediaRef:
-    """One media attachment of a post."""
+    """One media attachment of a post.
 
-    kind: MediaKind
+    ``kind`` is ``None`` (1.9) when the source gives only a URL and no type, as X's ``mediaUrls``
+    do. ``None`` means "unknown", never "image": a consumer that needs the type decides from the
+    URL itself and skips what it cannot tell.
+    """
+
+    kind: MediaKind | None
     url: str
 
 

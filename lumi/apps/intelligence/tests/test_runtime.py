@@ -12,6 +12,7 @@ from types import SimpleNamespace
 import pytest
 from asgiref.sync import async_to_sync
 
+from apps.connections import mcp_gateway
 from apps.core import jobs
 from apps.core.errors import ApiError
 from apps.core.jobs import JobError
@@ -57,6 +58,42 @@ class TestRuntimeWithoutKeys:
 
     def test_a_title_is_none_when_no_model_is_there_to_write_one(self, no_keys):
         assert async_to_sync(runtime.generate_title)("hello") is None
+
+
+class RecordingGateway:
+    """CONNECT's McpGateway port, recording what the loop asks of it."""
+
+    def __init__(self):
+        self.resolved = []
+
+    async def list_tools(self, profile_id):
+        return []
+
+    async def call(
+        self, profile_id, name, args
+    ):  # pragma: no cover - no model, no tool call
+        raise AssertionError("no tool should run without a model")
+
+    async def resolve_pending(self, profile_id, user_message):
+        self.resolved.append((profile_id, user_message))
+
+
+class TestMcpGateway:
+    def test_the_gateway_is_injected_and_asked_before_every_turn(
+        self, no_keys, profile, monkeypatch
+    ):
+        gateway = RecordingGateway()
+        monkeypatch.setattr(mcp_gateway, "build_mcp_gateway", lambda: gateway)
+        wiring.get_wiring.cache_clear()
+        assert wiring.get_wiring().loop.deps.mcp is gateway
+        with pytest.raises(
+            ApiError
+        ):  # no model keys: the turn stops, but only after the gateway
+            async_to_sync(runtime.run_turn)(profile.pk, "yes, go ahead")
+        assert gateway.resolved == [(profile.pk, "yes, go ahead")]
+
+    def test_the_real_gateway_builds_without_keys(self, no_keys):
+        assert wiring.get_wiring().loop.deps.mcp is not None
 
 
 class TestVoiceReader:

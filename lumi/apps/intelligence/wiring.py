@@ -16,6 +16,7 @@ from datetime import UTC, datetime
 
 from asgiref.sync import sync_to_async
 
+from apps.connections import mcp_gateway
 from apps.intelligence import repos
 from lumi_ai.agent.loop import AgentDeps, AgentLoop
 from lumi_ai.competitors import tools as competitor_tools
@@ -208,6 +209,8 @@ def get_wiring() -> Wiring:
         embedder=embedder,
         retriever=retriever,
     )
+    # CONNECT's gateway: connector tools for the registry and ``resolve_pending`` before each turn.
+    gateway = mcp_gateway.build_mcp_gateway()
     registry = build_registry(
         ToolDeps(
             profiles=profiles,
@@ -218,7 +221,7 @@ def get_wiring() -> Wiring:
             listening=repos.ListeningRepo(),
             repurpose=repurpose,
         ),
-        None,
+        gateway,
         extra=[
             *generation_tools.build(generation, posts),
             *rag_tools.build(memory),
@@ -237,7 +240,7 @@ def get_wiring() -> Wiring:
             memory=memory_store,
             turns=turns,
             judge=judge if judge.available else None,
-            mcp=None,
+            mcp=gateway,
             memory_extractor=extractor,
         )
     )

@@ -210,3 +210,13 @@ def test_ports_1_6_adds_the_match_store_without_touching_the_listening_store():
     assert "record_listening_match" not in dir(ports.ListeningStore)
     params = inspect.signature(ports.MatchStore.record_listening_match).parameters
     assert params["score"].default is None
+
+
+def test_a_media_ref_may_have_no_type_and_that_is_not_an_image():
+    """1.9: X gives media URLs without a type; ``None`` says so instead of guessing."""
+    assert tuple(map(int, ports.PORTS_VERSION.split("."))) >= (1, 9)
+    ref = ports.MediaRef(
+        kind=None, url="https://video.twimg.com/ext_tw_video/1/pu/vid/a.mp4"
+    )
+    assert ref.kind is None
+    assert ports.MediaRef(kind="video", url="u").kind == "video"
