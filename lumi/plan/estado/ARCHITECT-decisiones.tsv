@@ -31,3 +31,5 @@ ts	phase	decision	why	evidence	result
 2026-10-27T06:35:08Z	T3	core.0001_initial y chat.0001_initial	SCHEMA 6.2 y 6.4 tal cual; apps.chat en INSTALLED_APPS	apps/core/tests/test_models.py, apps/chat/tests/test_models.py (16+ tests)	ok
 2026-10-27T06:37:42Z	T3	auth routes, TokenAuthentication, IsProfileOwner, error handler	contract 2/3.1	uv run pytest: 678 passed	pushed
 2026-10-27T06:39:36Z	T1	docker compose, startup e2e tests, check_keys live test	close T1	uv run pytest: 843 passed, 3 deselected; compose YAML parsed, not run (no docker)	pushed
+2026-10-27T06:43:22Z	T0	dump file search	orchestrator: delete local log with env dump	grep -rIl declare -x over /workspace /tmp /home/box, git log --all -p -G for 6 patterns: 0 hits	no file found; nothing deleted (tool output only)
+2026-10-27T06:43:22Z	T3	admin read-only SafeModelAdmin, staff only, encrypted fields hidden + check lumi.E001	orchestrator order	uv run pytest 857 passed, check, makemigrations --check clean	pushed
