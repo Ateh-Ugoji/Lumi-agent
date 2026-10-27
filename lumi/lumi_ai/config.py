@@ -45,6 +45,8 @@ class AIConfig:
     est_chars_per_token: float = 3.5
     tool_timeout_seconds: float = 120.0
     sufficiency_threshold: float = 0.75
+    sufficiency_min_tools: int = 2  # tool calls before the judge is asked "enough?"
+    mcp_discovery_timeout_seconds: float = 3.0
     memory_worthy_threshold: float = 0.6
 
     # --- providers ---

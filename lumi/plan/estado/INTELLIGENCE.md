@@ -1,6 +1,6 @@
 # Estado de LUMI-INTELLIGENCE
 
-Rama: `lumi-orquestador`. Última actualización: 2026-10-27 (T3 en curso).
+Rama: `lumi-orquestador`. Última actualización: 2026-10-27 (T3 hecho salvo Django).
 
 ## Línea base (T0)
 
@@ -13,7 +13,7 @@ Rama: `lumi-orquestador`. Última actualización: 2026-10-27 (T3 en curso).
 | T0 Arranque | hecha | Línea base de 418 tests; `estado/` creado. |
 | T1 Esqueleto y puertos | hecha | `lumi_ai/ports.py` v1.0, `lumi_ai/config.py`, `lumi_ai/json_utils.py`, `lumi_ai/agent/result.py`. `uv run pytest lumi_ai -q`: 25 pasan. |
 | T2 Proveedores | hecha | `lumi_ai/providers/{chain,factory,audio,errors,urls}.py`, `lumi_ai/observability.py`, `lumi_ai/keys.py` (`build_probes(config)`: groq, openrouter, openlux, jev, neatlogs, video). `uv run pytest lumi_ai -q`: 64 pasan, 0 se omiten. Las sondas no se ejecutaron contra proveedores reales (sin keys). |
-| T3 Loop y tools | en curso | Hecho: `agent/{context,gates,turn_class}.py`, `judge/` (Jev → LLM pequeño), `tools/` (registry sin estado global + 12 tools con puerto). Falta: `agent/prompts.py`, `agent/loop.py`, `agent/streaming.py`, tests de integración con puertos falsos. Las tools de memoria, competidores, voz-extracción, repurpose y tendencias se registran en T5-T8 (traen su servicio). `uv run pytest lumi_ai -q`: 151 pasan, 0 se omiten. |
+| T3 Loop y tools | hecho (a falta del pegamento Django, T4) | `agent/{context,gates,turn_class,prompts,loop,streaming,support,result}.py`, `judge/` (Jev → LLM pequeño), `tools/` (registry sin estado global + 12 tools con puerto). El bucle recibe todo por `AgentDeps` (LLMChain, ToolRegistry, ChatStore, ProfileGateway, Clock, MemoryStore, TurnLogStore, SemanticJudge, McpGateway, MemoryExtractor); no hay estado de módulo. Las tools de memoria, competidores, voz-extracción, repurpose y tendencias se registran en T5-T8 (traen su servicio). `uv run pytest lumi_ai -q`: 197 pasan, 0 se omiten. |
 | T4 Pegamento Django | bloqueada por T4/T5 de ARCHITECT | |
 | T5-T12 | pendientes | |
 

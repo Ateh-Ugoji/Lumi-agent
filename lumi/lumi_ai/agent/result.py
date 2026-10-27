@@ -17,6 +17,19 @@ class ToolExecution:
     reason: str | None = None
     ok: bool = True
     sample_posts: Sequence[Mapping[str, Any]] = ()
+    #: Raw result, shipped only for ``get_analytics`` so the UI draws the exact numbers the agent saw.
+    result: Mapping[str, Any] | None = None
+
+    def as_dict(self) -> dict[str, Any]:
+        """The shape the frontend already parses (``name``, not ``tool``)."""
+        out: dict[str, Any] = {
+            "name": self.tool,
+            "arguments": dict(self.arguments),
+            "sample_posts": list(self.sample_posts),
+        }
+        if self.result is not None:
+            out["result"] = dict(self.result)
+        return out
 
 
 @dataclass(frozen=True, slots=True)
