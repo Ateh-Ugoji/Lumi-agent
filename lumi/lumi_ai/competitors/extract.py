@@ -18,6 +18,7 @@ import json
 import logging
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
+from typing import Protocol
 
 from pydantic import ValidationError
 
@@ -89,7 +90,20 @@ Batch size: {PeerConfig.BATCH_SIZE}. Framework confidence below
 """
 
 
-def build_tagging_messages(posts: Sequence[PostStats]) -> list[dict[str, str]]:
+class Taggable(Protocol):
+    """What the blind tagging reads: an id, an author and text. Nothing about performance."""
+
+    @property
+    def post_id(self) -> str: ...
+    @property
+    def handle(self) -> str: ...
+    @property
+    def text(self) -> str: ...
+    @property
+    def thread_texts(self) -> Sequence[str]: ...
+
+
+def build_tagging_messages(posts: Sequence[Taggable]) -> list[dict[str, str]]:
     """Blind payload: ids + text (+ thread continuation) only."""
     payload = [
         {"post_id": p.post_id, "text": p.text, "thread_texts": p.thread_texts}
@@ -112,7 +126,7 @@ def parse_analyses(content: str | None) -> PostAnalysisBatch:
 
 
 def _tagging(
-    post: PostStats,
+    post: Taggable,
     *,
     status: str,
     analysis: PostAnalysis | None = None,
@@ -136,11 +150,11 @@ def _tagging(
     )
 
 
-def _failed_batch(posts: Sequence[PostStats], reason: str) -> list[PostTagging]:
+def _failed_batch(posts: Sequence[Taggable], reason: str) -> list[PostTagging]:
     return [_tagging(p, status="failed", error=reason) for p in posts]
 
 
-async def tag_batch(llm: Completer, posts: Sequence[PostStats]) -> list[PostTagging]:
+async def tag_batch(llm: Completer, posts: Sequence[Taggable]) -> list[PostTagging]:
     """Tag one batch (<= ``PeerConfig.BATCH_SIZE`` posts). Never raises on provider or parse errors."""
     if not posts:
         return []
@@ -173,7 +187,7 @@ async def tag_batch(llm: Completer, posts: Sequence[PostStats]) -> list[PostTagg
     return out
 
 
-async def tag_posts(llm: Completer, posts: Sequence[PostStats]) -> list[PostTagging]:
+async def tag_posts(llm: Completer, posts: Sequence[Taggable]) -> list[PostTagging]:
     """Tag every post in batches of ``PeerConfig.BATCH_SIZE``, in input order."""
     size = PeerConfig.BATCH_SIZE
     taggings: list[PostTagging] = []

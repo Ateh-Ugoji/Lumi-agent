@@ -38,7 +38,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Literal, Protocol, get_args, runtime_checkable
 
-PORTS_VERSION = "1.5"  # 1.1: SemanticJudge, 1.2: OwnPostSync, 1.3: AttemptIn.is_fallback, EvaluationRecord.attempt_id required, 1.4: MemoryStore.touch_notes, save_voice model/prompt_version, 1.5: tool_call_id, report query/peers, repurpose mode/brief, user request platform
+PORTS_VERSION = "1.6"  # 1.1: SemanticJudge, 1.2: OwnPostSync, 1.3: AttemptIn.is_fallback, EvaluationRecord.attempt_id required, 1.4: MemoryStore.touch_notes, save_voice model/prompt_version, 1.5: tool_call_id, report query/peers, repurpose mode/brief, user request platform, 1.6: MatchStore
 
 # ---------------------------------------------------------------------------
 # Shared vocabulary
@@ -904,6 +904,21 @@ class ListeningStore(Protocol):
 
     async def set_listening(self, config: ListeningConfig) -> ListeningConfig:
         """Replace the listening config."""
+        ...
+
+
+@runtime_checkable
+class MatchStore(Protocol):
+    """Posts of other accounts a profile found while listening to its niche (``listening_matches``).
+
+    1.6. The row is a bridge ``(profile, post)``: the post itself (text, author, url, metrics) is
+    stored first through :class:`PeerPostStore`. Reading matches is the API's job, not the AI's.
+    """
+
+    async def record_listening_match(
+        self, profile_id: int, post_id: int, score: float | None = None
+    ) -> bool:
+        """Link a stored post to the profile; ``False`` when the link already existed."""
         ...
 
 

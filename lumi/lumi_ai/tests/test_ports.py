@@ -24,6 +24,7 @@ STORES = [
     ports.RepurposeStore,
     ports.RequestStore,
     ports.ListeningStore,
+    ports.MatchStore,
     ports.EvalStore,
 ]
 GATEWAYS = [
@@ -188,3 +189,16 @@ def test_ports_1_5_is_additive():
         .default
         is None
     )
+
+
+def test_ports_1_6_adds_the_match_store_without_touching_the_listening_store():
+    assert tuple(map(int, ports.PORTS_VERSION.split("."))) >= (1, 6)
+    assert {n for n in dir(ports.ListeningStore) if not n.startswith("_")} >= {
+        "unread_alerts",
+        "dismiss_alert",
+        "get_listening",
+        "set_listening",
+    }
+    assert "record_listening_match" not in dir(ports.ListeningStore)
+    params = inspect.signature(ports.MatchStore.record_listening_match).parameters
+    assert params["score"].default is None
