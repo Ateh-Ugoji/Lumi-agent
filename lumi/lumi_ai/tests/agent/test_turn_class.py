@@ -131,7 +131,7 @@ def test_allowed_tools_per_class():
     assert allowed_for("chitchat").costs == frozenset()
     assert allowed_for("history_meta").costs == frozenset()
     memory = allowed_for("memory")
-    assert memory.names == frozenset({"remember", "recall_memory"})
+    assert memory.names == frozenset({"recall_memory"})  # the model only reads memory
     assert allowed_for("read_cheap").costs == frozenset({"free"})
     assert allowed_for("live_scan").costs == frozenset({"free", "credits", "llm"})
     assert allowed_for("write").costs == frozenset({"free", "write"})

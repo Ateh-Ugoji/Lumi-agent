@@ -415,16 +415,15 @@ def test_clean_summary_strips_fences_and_headers():
 async def test_memory_tools_round_trip_through_the_registry():
     rig = Rig()
     registry = build_registry(ToolDeps(), extra=memory_tools.build(rig.service))
-    assert {"remember", "recall_memory"} <= set(registry.names)
+    assert "recall_memory" in set(registry.names)
+    assert "remember" not in set(registry.names)  # writes come from the extractor, not the model
     ctx = ToolContext(profile_id=1)
-    stored = await memory_tools.build(rig.service)[0].handler(
-        ctx, text="Runs a newsletter on Substack"
-    )
-    assert stored["status"] == "stored" and stored["searchable"] is True
-    found = await memory_tools.build(rig.service)[1].handler(
+    stored = await rig.service.remember(1, "Runs a newsletter on Substack")
+    assert stored.status == "stored" and stored.indexed is True
+    found = await memory_tools.build(rig.service)[0].handler(
         ctx, query="substack newsletter", limit="3"
     )
-    assert found["found"] and found["memories"][0]["id"] == stored["id"]
-    assert await memory_tools.build(rig.service)[1].handler(
+    assert found["found"] and found["memories"][0]["id"] == stored.note_id
+    assert await memory_tools.build(rig.service)[0].handler(
         ctx, query="x", limit="many"
     )

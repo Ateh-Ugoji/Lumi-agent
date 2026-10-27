@@ -39,6 +39,7 @@ ENV_FIELDS: tuple[str, ...] = (
     "video_timeout_seconds",
     "provider_cooldown_seconds",
     "provider_cooldown_max_seconds",
+    "rate_limit_retry_max_seconds",
     "llm_timeout_seconds",
 )
 
@@ -161,6 +162,9 @@ class AIConfig:
     provider_cooldown_max_seconds: float = (
         900.0  # ceiling when a provider sends Retry-After
     )
+    # A 429 that says "try again in a few seconds" (a per-minute token limit) is waited out and the
+    # same candidate retried once; a longer wait (a daily limit) goes straight to the next one.
+    rate_limit_retry_max_seconds: float = 15.0
     llm_timeout_seconds: float = 60.0
 
     # --- turn classifier, stage 2 ---

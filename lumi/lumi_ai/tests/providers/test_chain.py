@@ -19,7 +19,7 @@ GROQ_MODELS = ("openai/gpt-oss-120b", "qwen/qwen3.8-27b")
 OR_MODELS = ("meta-llama/llama-3.3-70b-instruct",)
 
 
-def make_chain(specs, *, clock=None, sink=None, config=None):
+def make_chain(specs, *, clock=None, sink=None, config=None, sleep=None):
     """specs: (name, models, script[, extra kwargs]) -> (chain, {name: FakeCreate})."""
     creates, providers = {}, []
     for name, models, script, *rest in specs:
@@ -33,8 +33,9 @@ def make_chain(specs, *, clock=None, sink=None, config=None):
                 **(rest[0] if rest else {}),
             )
         )
+    extra = {"sleep": sleep} if sleep is not None else {}
     chain = LLMChain(
-        providers, config or AIConfig(), usage_sink=sink, clock=clock or Clock()
+        providers, config or AIConfig(), usage_sink=sink, clock=clock or Clock(), **extra
     )
     return chain, creates
 
@@ -262,3 +263,75 @@ async def test_a_broken_usage_sink_does_not_break_the_call():
 
     chain, _ = make_chain([("groq", GROQ_MODELS[:1], ["ok"])], sink=boom)
     assert (await chain.complete(MSG, [])).provider == "groq"
+
+
+class _Sleeps:
+    def __init__(self) -> None:
+        self.waits: list[float] = []
+
+    async def __call__(self, seconds: float) -> None:
+        self.waits.append(seconds)
+
+
+async def test_a_short_429_waits_and_retries_the_same_model():
+    sleeps = _Sleeps()
+    chain, c = make_chain(
+        [("groq", GROQ_MODELS, [api_error(429, {"x-ratelimit-reset-tokens": "1.5s"}), "ok"])],
+        sleep=sleeps,
+    )
+    result = await chain.complete(MSG, [])
+    assert (result.provider, result.model) == ("groq", GROQ_MODELS[0])
+    assert c["groq"].models == [GROQ_MODELS[0], GROQ_MODELS[0]]
+    assert sleeps.waits == [1.5]
+    assert result.attempts == ()
+
+
+async def test_retry_after_is_read_before_the_token_reset_header():
+    sleeps = _Sleeps()
+    chain, _ = make_chain(
+        [
+            (
+                "groq",
+                GROQ_MODELS,
+                [api_error(429, {"retry-after": "3", "x-ratelimit-reset-tokens": "9s"}), "ok"],
+            )
+        ],
+        sleep=sleeps,
+    )
+    await chain.complete(MSG, [])
+    assert sleeps.waits == [3.0]
+
+
+async def test_a_long_429_goes_to_the_next_model_without_waiting():
+    sleeps = _Sleeps()
+    chain, c = make_chain(
+        [("groq", GROQ_MODELS, [api_error(429, {"retry-after": "5000"}), "ok"])],
+        sleep=sleeps,
+    )
+    result = await chain.complete(MSG, [])
+    assert result.model == GROQ_MODELS[1]
+    assert c["groq"].models == list(GROQ_MODELS)
+    assert sleeps.waits == []
+
+
+async def test_a_429_without_a_wait_hint_does_not_wait():
+    sleeps = _Sleeps()
+    chain, c = make_chain(
+        [("groq", GROQ_MODELS, [api_error(429), "ok"])], sleep=sleeps
+    )
+    await chain.complete(MSG, [])
+    assert c["groq"].models == list(GROQ_MODELS)
+    assert sleeps.waits == []
+
+
+async def test_the_wait_is_tried_once_then_the_next_model_answers():
+    sleeps = _Sleeps()
+    hint = {"retry-after": "2"}
+    chain, c = make_chain(
+        [("groq", GROQ_MODELS, [api_error(429, hint), api_error(429, hint), "ok"])],
+        sleep=sleeps,
+    )
+    result = await chain.complete(MSG, [])
+    assert result.model == GROQ_MODELS[1]
+    assert c["groq"].models == [GROQ_MODELS[0], GROQ_MODELS[0], GROQ_MODELS[1]]
+    assert sleeps.waits == [2.0]

@@ -42,6 +42,7 @@ from lumi_ai.agent.support import (
 )
 from lumi_ai.agent.turn_class import (
     FREE_TIER_CLASSES,
+    MEMORY,
     allowed_for,
     classify_turn,
     is_greeting_only,
@@ -120,7 +121,13 @@ class AgentLoop:
         )
         turn = _Turn(self, profile, user_message, message_id, on_event)
         result = await turn.run()
-        self._spawn(self._extract_memories(profile_id, user_message, result.content))
+        cls = turn.classification
+        explicit = cls is not None and cls.final_class == MEMORY
+        self._spawn(
+            self._extract_memories(
+                profile_id, user_message, result.content, explicit=explicit
+            )
+        )
         return result
 
     async def drain(self) -> None:
@@ -144,12 +151,17 @@ class AgentLoop:
         task.add_done_callback(_done)
 
     async def _extract_memories(
-        self, profile_id: int, user_message: str, reply: str
+        self, profile_id: int, user_message: str, reply: str, *, explicit: bool = False
     ) -> None:
+        """Save durable facts after the reply. The model has no write tool for this.
+
+        ``explicit``: the user asked to be remembered ("remember that..."), so the worth-keeping
+        gate is skipped; it would cost one more model call and could only say no to a direct order.
+        """
         extractor = self.deps.memory_extractor
         if extractor is None or not reply.strip():
             return
-        if not await memory_worthy(
+        if not explicit and not await memory_worthy(
             self.deps.judge, self.deps.config, user_message, reply
         ):
             logger.info("memory gate: skipping extraction")

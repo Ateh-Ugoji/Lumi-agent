@@ -9,6 +9,8 @@ Behaviour kept from ``lumi/legacy/app/agent/providers.py``:
 
 New in lumi_ai:
 
+* A 429 whose reset is a few seconds away (a per-minute token limit) is waited out and the SAME
+  candidate is retried once, instead of burning the next candidate and resting this one.
 * A candidate that answered 401/402/403/429 rests for ``provider_cooldown_seconds`` (or the
   provider's ``Retry-After``, capped), so an empty OpenRouter balance is not paid for with a
   failed call on every turn. When every candidate is resting, they are tried anyway, soonest
@@ -22,10 +24,12 @@ New in lumi_ai:
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
+import re
 import time
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
@@ -166,8 +170,10 @@ class LLMChain:
         *,
         usage_sink: UsageSink | None = None,
         clock: Callable[[], float] = time.monotonic,
+        sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
     ) -> None:
         self._providers = tuple(providers)
+        self._sleep = sleep
         self._config = config
         self._usage_sink = usage_sink
         self._cooldowns = _Cooldowns(clock)
@@ -262,7 +268,10 @@ class LLMChain:
             [{**payload, "reasoning_effort": effort}, payload] if effort else [payload]
         )
         failure: _Outcome | None = None
-        for variant in variants:
+        rate_retried = False
+        index = 0
+        while index < len(variants):
+            variant = variants[index]
             started = self._clock()
             try:
                 completion = await spec.client.chat.completions.create(**variant)
@@ -281,12 +290,25 @@ class LLMChain:
                 failure = _Outcome(
                     None, Attempt(spec.name, name, kind, status, _short(exc)), exc
                 )
+                if kind == "rate_limit" and not rate_retried:
+                    wait = _rate_limit_wait(exc)
+                    if wait is not None and wait <= self._config.rate_limit_retry_max_seconds:
+                        rate_retried = True
+                        logger.info(
+                            "%s/%s rate limited; waiting %.1fs and retrying once",
+                            spec.name,
+                            name,
+                            wait,
+                        )
+                        await self._sleep(wait)
+                        continue  # same variant again
                 if "reasoning_effort" in variant and status == 400:
                     logger.warning(
                         "%s/%s rejected reasoning_effort; retrying without it",
                         spec.name,
                         name,
                     )
+                    index += 1
                     continue
                 self._maybe_rest(spec.name, name, kind, exc)
                 logger.warning(
@@ -355,6 +377,37 @@ class LLMChain:
             self._usage_sink(record)
         except Exception:
             logger.exception("usage sink failed")
+
+
+_DURATION = re.compile(r"(?:(\d+(?:\.\d+)?)h)?(?:(\d+(?:\.\d+)?)m(?!s))?(?:(\d+(?:\.\d+)?)s)?(?:(\d+(?:\.\d+)?)ms)?$")
+
+
+def _parse_duration(raw: str) -> float | None:
+    """Seconds from ``1.657s``, ``2m52.8s``, ``607ms`` or a bare number; None if unreadable."""
+    text = raw.strip()
+    try:
+        return float(text)
+    except ValueError:
+        pass
+    match = _DURATION.fullmatch(text)
+    if not text or match is None:
+        return None
+    hours, minutes, seconds, millis = (float(g) if g else 0.0 for g in match.groups())
+    return hours * 3600 + minutes * 60 + seconds + millis / 1000
+
+
+def _rate_limit_wait(exc: BaseException) -> float | None:
+    """How long a 429 says to wait: ``Retry-After``, else Groq's token-reset header."""
+    headers = getattr(getattr(exc, "response", None), "headers", None)
+    if not headers:
+        return None
+    for key in ("retry-after", "x-ratelimit-reset-tokens"):
+        raw = headers.get(key)
+        if raw is not None:
+            wait = _parse_duration(str(raw))
+            if wait is not None:
+                return max(wait, 0.0)
+    return None
 
 
 def _short(exc: BaseException) -> str:

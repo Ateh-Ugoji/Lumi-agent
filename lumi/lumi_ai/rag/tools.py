@@ -1,4 +1,9 @@
-"""Agent tools over memory: ``remember`` and ``recall_memory``."""
+"""Agent tool over memory: ``recall_memory``.
+
+There is no ``remember`` tool on purpose: a write tool costs a second model call (the loop must answer
+after the tool result) and the extractor already saves durable facts after the reply, so the
+model only reads memory.
+"""
 
 from __future__ import annotations
 
@@ -9,20 +14,6 @@ from lumi_ai.tools.registry import ToolContext, ToolSpec
 
 
 def build(service: MemoryService) -> list[ToolSpec]:
-    async def remember(
-        ctx: ToolContext, text: str, kind: str = "fact"
-    ) -> dict[str, Any]:
-        outcome = await service.remember(
-            ctx.profile_id, str(text or ""), str(kind or "fact")
-        )
-        out: dict[str, Any] = {"status": outcome.status}
-        if outcome.note_id is not None:
-            out["id"] = outcome.note_id
-            out["searchable"] = outcome.indexed
-        if outcome.warning:
-            out["warning"] = outcome.warning
-        return out
-
     async def recall_memory(
         ctx: ToolContext, query: str, limit: int = 5
     ) -> dict[str, Any]:
@@ -34,31 +25,6 @@ def build(service: MemoryService) -> list[ToolSpec]:
 
     profile = {"profile_id": {"type": "integer"}}
     return [
-        ToolSpec(
-            name="remember",
-            description=(
-                "Store one durable fact the user told you (a preference, a decision, project "
-                "context) so it can be recalled in later sessions. Not for passing remarks."
-            ),
-            parameters={
-                "type": "object",
-                "properties": {
-                    **profile,
-                    "text": {
-                        "type": "string",
-                        "description": "One standalone sentence, under 500 characters.",
-                    },
-                    "kind": {
-                        "type": "string",
-                        "description": "fact, preference or decision.",
-                    },
-                },
-                "required": ["profile_id", "text"],
-            },
-            handler=remember,
-            side_effects="writes_db",
-            cache_ttl=0,
-        ),
         ToolSpec(
             name="recall_memory",
             description=(

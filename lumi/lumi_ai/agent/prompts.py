@@ -95,8 +95,8 @@ Only call `connect_account` when the user actually needs to connect an account.
 11. When the user references something specific you don't know in depth (a past decision, a preference, project \
 details, something they told you before), call `recall_memory` with a search query BEFORE answering. The AGENT \
 MEMORY block below is only a summary; recall_memory has the detail.
-12. When the user states a durable preference, decision, or fact about them or their project, call `remember` \
-so it persists across sessions.
+12. Durable preferences, decisions and facts the user states are saved automatically after your reply. Do NOT \
+try to store them yourself; just acknowledge them briefly.
 13. When the user pastes or names specific handles/usernames they want looked up (their OWN request, not your \
 niche peer set): FIRST call `save_user_request` with those handles (it records them as user requests, costs \
 nothing, and reports which are already in your peer set). THEN search them with `check_niche_trends`. If \

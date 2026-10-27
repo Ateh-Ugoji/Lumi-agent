@@ -691,6 +691,20 @@ async def test_memory_extraction_is_gated_by_the_judge_and_fails_open():
     assert len(rig.extractor.calls) == 1  # no verdict, extract anyway
 
 
+async def test_an_explicit_remember_order_skips_the_worth_keeping_gate():
+    deny = Judge(lambda q: {"durable": 0.0} if "durable" in q else None)
+    rig = make_rig([say("Noted.")], [tool("ok")], judge=deny)
+    await rig.run("remember that I hate hashtags")
+    assert len(rig.extractor.calls) == 1  # a direct order is not second-guessed by the gate
+
+
+async def test_the_model_is_never_offered_a_memory_write_tool():
+    rig = make_rig([say("Noted.")], [tool("ok")])
+    await rig.run("remember that I hate hashtags")
+    offered = {t["function"]["name"] for t in rig.llm.tools_seen[0] or []}
+    assert "remember" not in offered
+
+
 # --- turn log ---------------------------------------------------------------------
 
 

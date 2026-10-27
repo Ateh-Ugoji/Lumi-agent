@@ -39,6 +39,7 @@ Orden: **OpenLux** (opcional, no acepta modelo fijado) → **Groq** (`openai/gpt
 (`meta-llama/llama-3.3-70b-instruct`, de pago). Solo entran los proveedores que tienen key; sin ninguna key la cadena está vacía y las llamadas lanzan `NoProviderConfigured`.
 
 - Un candidato que contesta 401/402/403/429 descansa `PROVIDER_COOLDOWN_SECONDS` (300 s; con `Retry-After`, tope 900 s) para no pagar una llamada fallida por turno. Si todos descansan, se prueban igual (el más cercano a expirar primero).
+- Un 429 cuya espera sea corta (`Retry-After` o `x-ratelimit-reset-tokens` ≤ `RATE_LIMIT_RETRY_MAX_SECONDS`, 15 s: un límite de tokens por minuto) se espera y se reintenta **una vez** el mismo candidato, antes de pasar al siguiente. Una espera larga (un límite diario) pasa directo al siguiente. Un turno con herramienta hace dos llamadas al modelo, y con el límite de 8.000 tokens por minuto de Groq esto importa.
 - Un `model=` o `tier=` explícito fija **un** candidato por proveedor: una petición "small" nunca sube de nivel en silencio.
 - `effort` va como `reasoning_effort`; un 400 reintenta el mismo candidato una vez sin él.
 - Todas las llamadas (éxitos y fallos) van a un `UsageSink` (tabla de uso en Postgres).
@@ -58,6 +59,7 @@ PostgreSQL guarda todo texto; **Chroma solo guarda vectores y metadatos de filtr
 - Embedder local sin key: `onnx-minilm-l6-v2` (384 dim, 79 MB que se descargan una vez a `~/.cache/chroma`). Es mejor en inglés; en español funciona, pero separa menos. Si cambia el embedder, Chroma lo detecta (`VectorIndexMismatch`) y hay que reindexar.
 - Chroma Cloud si hay `CHROMA_API_KEY` (+ `CHROMA_TENANT`, `CHROMA_DATABASE`); si no, un cliente local persistente en `CHROMA_PATH` (`.chroma`; falta añadirlo a `.gitignore`, que es de ARCHITECT).
 - Recuperación (`retrieval.py`): consulta los ids en Chroma y pide el texto a Postgres. Las memorias más lejanas que `memory_max_distance` (0.85, **sin calibrar**) no se ofrecen; `MemoryService.decay` borra las notas sin uso en `memory_decay_days` (90) y sus vectores.
+- **Escritura de memoria:** el modelo **no** tiene una herramienta `remember` (solo `recall_memory`). Una herramienta de escritura cuesta una segunda llamada al modelo y duplicaba lo que ya guarda el extractor al final del turno. Si el turno es una orden explícita de recordar (clase `memory`), el extractor se salta el filtro `memory_worthy`.
 - **Reindexar**: `uv run python manage.py reindex_vectors [--collection voice_corpus|peer_posts|agent_memory] [--profile ID] [--no-reset]`.
   Por defecto reinicia cada colección (borra vectores de filas ya eliminadas y los de un embedder anterior) y re-embebe todas las filas de todos los perfiles; `--profile` implica `--no-reset`. Postgres manda: siempre se puede borrar Chroma y reconstruirlo con los mismos ids (`apps/intelligence/tests/test_reindex.py`).
 

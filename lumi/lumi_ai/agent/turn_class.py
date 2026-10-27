@@ -68,7 +68,7 @@ class AllowedTools:
 CLASS_ALLOWED: dict[str, AllowedTools] = {
     CHITCHAT: AllowedTools(frozenset()),
     HISTORY_META: AllowedTools(frozenset()),
-    MEMORY: AllowedTools(frozenset({"free"}), frozenset({"remember", "recall_memory"})),
+    MEMORY: AllowedTools(frozenset({"free"}), frozenset({"recall_memory"})),
     READ_CHEAP: AllowedTools(frozenset({"free"})),
     LIVE_SCAN: AllowedTools(frozenset({"free", "credits", "llm"})),
     WRITE: AllowedTools(frozenset({"free", "write"})),
