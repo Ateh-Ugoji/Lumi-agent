@@ -12,7 +12,11 @@ from django.db import connection, connections
 
 from apps.connections.clients.credits import CreditEntry
 from apps.connections.config import ConnectionsConfig
-from apps.connections.errors import ProviderAuthError, ProviderUnavailable
+from apps.connections.errors import (
+    OAuthStateError,
+    ProviderAuthError,
+    ProviderUnavailable,
+)
 from apps.connections.handles.service import HandleSearch
 from apps.connections.handles.types import CacheEntry, HandleRow
 from apps.connections.models import (
@@ -68,29 +72,59 @@ def test_state_is_used_once_and_returns_the_decrypted_verifier(user) -> None:
     (stored,) = [r[0] for r in _raw("SELECT code_verifier FROM oauth_states")]
     assert "VERIFIER" not in stored
 
-    first = async_to_sync(store.consume)("state-1", "x")
+    first = async_to_sync(store.consume)("state-1", "x", user_id=user.pk)
     assert first is not None
     assert first.user_id == user.pk and first.code_verifier == "VERIFIER-1"
     assert first.redirect_after == "/settings"
     assert first.redirect_uri == redirect_uri_for("x")
-    assert async_to_sync(store.consume)("state-1", "x") is None
+    assert async_to_sync(store.consume)("state-1", "x", user_id=user.pk) is None
 
 
 def test_unknown_expired_and_other_provider_states_are_refused(user) -> None:
     store = DjangoOAuthStateStore(redirect_uri_for)
     async_to_sync(store.save)(record(user, "fresh", "linkedin"))
     async_to_sync(store.save)(record(user, "old", "x", minutes=-1))
-    assert async_to_sync(store.consume)("nope", "x") is None
-    assert async_to_sync(store.consume)("old", "x") is None
+    assert async_to_sync(store.consume)("nope", "x", user_id=user.pk) is None
+    with pytest.raises(OAuthStateError) as expired:
+        async_to_sync(store.consume)("old", "x", user_id=user.pk)
+    assert expired.value.code == "state_expired"
     # A callback of another provider neither works nor burns the state.
-    assert async_to_sync(store.consume)("fresh", "x") is None
-    assert async_to_sync(store.consume)("fresh", "linkedin") is not None
+    assert async_to_sync(store.consume)("fresh", "x", user_id=user.pk) is None
+    assert (
+        async_to_sync(store.consume)("fresh", "linkedin", user_id=user.pk) is not None
+    )
+
+
+def test_consume_needs_the_user_who_is_asking(user) -> None:
+    """Without a user the store has nothing to bind the state to, so it must not run."""
+    store = DjangoOAuthStateStore(redirect_uri_for)
+    async_to_sync(store.save)(record(user))
+    with pytest.raises(TypeError):
+        async_to_sync(store.consume)("state-1", "x")  # type: ignore[call-arg]
+    with pytest.raises(TypeError):
+        store._consume("state-1", "x")  # type: ignore[call-arg]
+    assert OAuthState.objects.get(state="state-1").consumed_at is None
+
+
+def test_another_user_can_neither_consume_nor_see_the_expiry_of_my_state(
+    user, other_user
+) -> None:
+    store = DjangoOAuthStateStore(redirect_uri_for)
+    async_to_sync(store.save)(record(user, "live"))
+    async_to_sync(store.save)(record(user, "old", minutes=-1))
+    with pytest.raises(OAuthStateError) as foreign:
+        async_to_sync(store.consume)("live", "x", user_id=other_user.pk)
+    assert foreign.value.code == "state_mismatch"
+    assert OAuthState.objects.get(state="live").consumed_at is None
+    # An expired state of someone else looks like any unknown state.
+    assert async_to_sync(store.consume)("old", "x", user_id=other_user.pk) is None
+    assert async_to_sync(store.consume)("live", "x", user_id=user.pk) is not None
 
 
 def test_a_state_without_a_verifier_comes_back_as_none(user) -> None:
     store = DjangoOAuthStateStore(redirect_uri_for)
     async_to_sync(store.save)(record(user, verifier=None))
-    got = async_to_sync(store.consume)("state-1", "x")
+    got = async_to_sync(store.consume)("state-1", "x", user_id=user.pk)
     assert got is not None and got.code_verifier is None
 
 
@@ -99,7 +133,7 @@ def test_expired_and_used_states_are_purged(user) -> None:
     async_to_sync(store.save)(record(user, "live"))
     async_to_sync(store.save)(record(user, "used"))
     async_to_sync(store.save)(record(user, "gone", minutes=-5))
-    async_to_sync(store.consume)("used", "x")
+    async_to_sync(store.consume)("used", "x", user_id=user.pk)
     assert purge_expired_states() == 2
     assert list(OAuthState.objects.values_list("state", flat=True)) == ["live"]
 
@@ -115,7 +149,7 @@ def test_two_callbacks_cannot_both_win(user) -> None:
     def callback() -> None:
         try:
             start.wait(timeout=10)
-            got = store._consume("state-1", "x")
+            got = store._consume("state-1", "x", user.pk)
             with lock:
                 winners.append(got)
         finally:
@@ -403,5 +437,5 @@ def test_oauth_state_carries_the_profile_to_the_callback(user, profile) -> None:
         profile_id=profile.pk,
     )
     async_to_sync(store.save)(record)
-    got = async_to_sync(store.consume)("with-profile", "meta")
+    got = async_to_sync(store.consume)("with-profile", "meta", user_id=user.pk)
     assert got is not None and got.profile_id == profile.pk

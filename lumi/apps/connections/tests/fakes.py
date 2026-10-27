@@ -66,14 +66,14 @@ class MemoryStateStore:
         self.records[record.state] = record
 
     async def consume(
-        self, state: str, provider: str, *, user_id=None
+        self, state: str, provider: str, *, user_id
     ) -> OAuthStateRecord | None:
         from apps.connections.errors import OAuthStateError
 
         record = self.records.get(state)
         if record is None or record.provider != provider:
             return None
-        if user_id is not None and str(record.user_id) != str(user_id):
+        if str(record.user_id) != str(user_id):
             raise OAuthStateError("state_mismatch")
         del self.records[state]
         return record

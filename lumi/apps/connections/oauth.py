@@ -60,12 +60,13 @@ class OAuthStateStore(Protocol):
     async def save(self, record: OAuthStateRecord) -> None: ...
 
     async def consume(
-        self, state: str, provider: str, *, user_id: int | str | None = None
+        self, state: str, provider: str, *, user_id: int | str
     ) -> OAuthStateRecord | None:
         """Return the record and mark it used, atomically. ``None`` if unknown or used.
 
-        With ``user_id`` the state is consumed only when that user started it. A live state of
-        someone else raises ``OAuthStateError("state_mismatch")`` and stays unused.
+        ``user_id`` is required: the state is consumed only when that user started it. A live
+        state of someone else raises ``OAuthStateError("state_mismatch")`` and stays unused.
+        An expired state of the caller's own raises ``OAuthStateError("state_expired")``.
         """
         ...
 
@@ -169,11 +170,11 @@ class OAuthFlow:
         return request
 
     async def complete(
-        self, *, state: str, code: str, expected_user_id: int | str | None = None
+        self, *, state: str, code: str, expected_user_id: int | str
     ) -> CompletedAuth:
         """Finish the callback.
 
-        Pass ``expected_user_id`` (the logged-in user) so a state started by someone else cannot
+        ``expected_user_id`` (the logged-in user) is required, so a state started by someone else cannot
         attach its account to this session. The store checks the owner inside the same atomic
         update that consumes the state. After that, a failed exchange burns it and the user
         must start again.
@@ -185,9 +186,7 @@ class OAuthFlow:
         )
         if record is None:
             raise OAuthStateError("state_invalid")
-        if expected_user_id is not None and str(record.user_id) != str(
-            expected_user_id
-        ):
+        if str(record.user_id) != str(expected_user_id):
             # A store that ignored ``user_id`` already burned the state. Never trust it alone.
             raise OAuthStateError("state_mismatch")
         if record.expires_at <= self._clock():

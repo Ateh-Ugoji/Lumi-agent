@@ -65,7 +65,7 @@ _CONSUME_SQL = """
 UPDATE oauth_states
    SET consumed_at = now()
  WHERE state = %s AND provider = %s AND consumed_at IS NULL AND expires_at > now()
-   AND (%s::bigint IS NULL OR user_id = %s)
+   AND user_id = %s
 RETURNING user_id, provider, code_verifier, redirect_after, expires_at, social_profile_id
 """
 
@@ -80,10 +80,10 @@ class DjangoOAuthStateStore:
         await sync_to_async(self._save, thread_sensitive=True)(record)
 
     async def consume(
-        self, state: str, provider: str, *, user_id: int | str | None = None
+        self, state: str, provider: str, *, user_id: int | str
     ) -> OAuthStateRecord | None:
         return await sync_to_async(self._consume, thread_sensitive=True)(
-            state, provider, None if user_id is None else int(user_id)
+            state, provider, int(user_id)
         )
 
     def _save(self, record: OAuthStateRecord) -> None:
@@ -98,24 +98,23 @@ class DjangoOAuthStateStore:
         )
 
     def _consume(
-        self, state: str, provider: str, user_id: int | None = None
+        self, state: str, provider: str, user_id: int
     ) -> OAuthStateRecord | None:
         from apps.core.fields import decrypt_value
 
         with connection.cursor() as cursor:
-            cursor.execute(_CONSUME_SQL, [state, provider, user_id, user_id])
+            cursor.execute(_CONSUME_SQL, [state, provider, user_id])
             row = cursor.fetchone()
         if row is None:
-            if (
-                user_id is not None
-                and OAuthState.objects.filter(
-                    state=state,
-                    provider=provider,
-                    consumed_at__isnull=True,
-                    expires_at__gt=Now(),
-                ).exists()
-            ):
+            unused = OAuthState.objects.filter(
+                state=state, provider=provider, consumed_at__isnull=True
+            )
+            if unused.filter(expires_at__gt=Now()).exclude(user_id=user_id).exists():
                 raise OAuthStateError("state_mismatch")
+            # Only the owner learns that the state was theirs and ran out. Everyone else,
+            # and an unknown or used state, gets the same ``state_invalid``.
+            if unused.filter(user_id=user_id, expires_at__lte=Now()).exists():
+                raise OAuthStateError("state_expired")
             return None
         user_id, found_provider, verifier, redirect_after, expires_at, profile_id = row
         # RETURNING bypasses the field, so the verifier is still ciphertext here.

@@ -56,6 +56,15 @@ def test_a_mismatch_does_not_tell_apart_unknown_states_from_expired_ones(
     assert expired.status_code == unknown.status_code == 400
 
 
+def test_my_own_expired_state_says_so(api, env, providers, user) -> None:
+    state = start_meta(api, env, providers)
+    OAuthState.objects.filter(state=state).update(expires_at="2000-01-01T00:00:00Z")
+    expired = complete("meta", state, "c0de", user=user)
+    assert expired.status_code == 400
+    assert expired.json()["error"]["code"] == "connections.state_expired"
+    assert providers.requests("meta") == []  # nothing was exchanged
+
+
 def test_the_user_saying_no_burns_the_state(api, env, providers, user) -> None:
     state = start_meta(api, env, providers)
     denied = complete_body(
@@ -115,6 +124,14 @@ def test_callback_needs_a_login_and_a_known_provider(api, env, providers) -> Non
         "/api/v1/connections/pfm/callback", {"code": "c", "state": "s"}, format="json"
     )
     assert pfm.status_code == 400
+
+
+@pytest.mark.parametrize("body", [{}, {"code": "c"}, {"state": "s"}, None])
+def test_pfm_callback_is_unsupported_whatever_the_body(api, body) -> None:
+    """Post for Me has no state, so an empty body must not turn into a validation error."""
+    response = api.post("/api/v1/connections/pfm/callback", body, format="json")
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "connections.unsupported"
 
 
 def test_a_state_completes_only_once(api, env, providers, user) -> None:

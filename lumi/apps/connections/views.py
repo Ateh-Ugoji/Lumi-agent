@@ -64,6 +64,7 @@ class CallbackView(APIView):
         summary="Finish an OAuth grant with the code the provider returned",
     )
     def post(self, request, provider: str):
+        accounts.ensure_callback_provider(provider)  # before the body is validated
         body = CallbackRequestSerializer(data=request.data or {})
         body.is_valid(raise_exception=True)
         data = body.validated_data

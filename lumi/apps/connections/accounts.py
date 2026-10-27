@@ -247,6 +247,15 @@ def frontend_redirect(
     return urlunsplit(parts._replace(query=urlencode(merged)))
 
 
+def ensure_callback_provider(provider: str) -> None:
+    """404 for an unknown provider and 400 ``unsupported`` for Post for Me, which has no state."""
+    require_provider(provider)
+    if provider == "pfm":
+        raise ApiError(
+            "connections.unsupported", "Post for Me no usa este paso.", status_code=400
+        )
+
+
 def complete_connect(
     user, provider: str, *, state: str, code: str = "", error: str = ""
 ) -> dict[str, Any]:
@@ -257,11 +266,7 @@ def complete_connect(
     and stays unused, so its owner can still finish. ``error`` is what the provider put in its
     redirect when the user said no: the state is burned and the answer is 400.
     """
-    require_provider(provider)
-    if provider == "pfm":
-        raise ApiError(
-            "connections.unsupported", "Post for Me no usa este paso.", status_code=400
-        )
+    ensure_callback_provider(provider)
     config = get_config()
     store = DjangoOAuthStateStore(config.redirect_uri)
     try:

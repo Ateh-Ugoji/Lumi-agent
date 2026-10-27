@@ -122,18 +122,20 @@ async def test_complete_exchanges_the_code_and_state_is_single_use() -> None:
     )
     oauth, _ = flow("meta", store, handler)
     request = await oauth.start(user_id=1)
-    done = await oauth.complete(state=request.state, code="abc")
+    done = await oauth.complete(state=request.state, code="abc", expected_user_id=1)
     assert done.tokens.access_token == "meta-long-FAKE"
     assert done.record.user_id == 1
     with pytest.raises(OAuthStateError) as info:
-        await oauth.complete(state=request.state, code="abc")  # replay
+        await oauth.complete(
+            state=request.state, code="abc", expected_user_id=1
+        )  # replay
     assert info.value.code == "state_invalid"
 
 
 async def test_unknown_state_is_rejected_before_any_request() -> None:
     oauth, rec = flow("meta", MemoryStateStore())
     with pytest.raises(OAuthStateError):
-        await oauth.complete(state="forged", code="abc")
+        await oauth.complete(state="forged", code="abc", expected_user_id=1)
     assert rec.requests == []
 
 
@@ -143,7 +145,7 @@ async def test_state_of_another_provider_is_rejected() -> None:
     li_flow, rec = flow("x", store)
     request = await meta_flow.start(user_id=1)
     with pytest.raises(OAuthStateError):
-        await li_flow.complete(state=request.state, code="abc")
+        await li_flow.complete(state=request.state, code="abc", expected_user_id=1)
     assert rec.requests == []
 
 
@@ -154,7 +156,7 @@ async def test_expired_state_is_rejected_without_exchange() -> None:
     request = await oauth.start(user_id=1)
     now[0] = NOW + timedelta(minutes=11)
     with pytest.raises(OAuthStateError) as info:
-        await oauth.complete(state=request.state, code="abc")
+        await oauth.complete(state=request.state, code="abc", expected_user_id=1)
     assert info.value.code == "state_expired"
     assert rec.requests == []
 
@@ -172,8 +174,10 @@ async def test_callback_for_another_user_is_rejected() -> None:
 class _StoreThatIgnoresTheUser(MemoryStateStore):
     """A buggy store: it hands the record back whoever asks."""
 
-    async def consume(self, state, provider, *, user_id=None):
-        return await super().consume(state, provider, user_id=None)
+    async def consume(self, state, provider, *, user_id):
+        return await super().consume(
+            state, provider, user_id=self.records[state].user_id
+        )
 
 
 async def test_the_flow_refuses_a_foreign_state_even_if_the_store_does_not() -> None:
@@ -191,7 +195,7 @@ async def test_malformed_state_never_reaches_the_store(state: str) -> None:
     store = MemoryStateStore()
     oauth, rec = flow("meta", store)
     with pytest.raises(OAuthStateError):
-        await oauth.complete(state=state, code="abc")
+        await oauth.complete(state=state, code="abc", expected_user_id=1)
     assert rec.requests == []
 
 
@@ -204,6 +208,15 @@ async def test_failed_exchange_burns_the_state() -> None:
     )
     request = await oauth.start(user_id=1)
     with pytest.raises(Exception):  # noqa: B017 - any typed provider error
-        await oauth.complete(state=request.state, code="abc")
+        await oauth.complete(state=request.state, code="abc", expected_user_id=1)
     with pytest.raises(OAuthStateError):
-        await oauth.complete(state=request.state, code="abc")
+        await oauth.complete(state=request.state, code="abc", expected_user_id=1)
+
+
+async def test_complete_cannot_be_called_without_the_user() -> None:
+    store = MemoryStateStore()
+    oauth, rec = flow("meta", store)
+    request = await oauth.start(user_id=1)
+    with pytest.raises(TypeError):
+        await oauth.complete(state=request.state, code="abc")  # type: ignore[call-arg]
+    assert request.state in store.records and rec.requests == []
