@@ -30,6 +30,7 @@ INSTALLED_APPS = [
     "drf_spectacular",
     "apps.core",
     "apps.accounts",
+    "apps.profiles",
     "apps.connections",
 ]
 
