@@ -112,8 +112,8 @@ Prefijo nuevo `/api/v1/`; `/health` queda en la raíz. Mismas funciones, mismos 
 | `GET /profiles/{id}/analytics` (con efectos secundarios) | `GET /api/v1/profiles/{id}/analytics` (solo lectura) + `POST /api/v1/profiles/{id}/refresh` (efectos) | ARCHITECT |
 | `GET /profiles/{id}/alerts/unread` | `/api/v1/profiles/{id}/alerts/unread` | ARCHITECT |
 | `GET /trends/matches`, `POST /trends/scan` | `/api/v1/trends/matches`, `/api/v1/trends/scan` (pasa por el registro de tools, no lo evita) | ARCHITECT (llama a INTELLIGENCE) |
-| `POST /pfm/connect`, `GET /pfm/callback` | `/api/v1/connections/pfm/connect`, `/api/v1/connections/pfm/callback` (el callback redirige al frontend, no devuelve JSON) | CONNECT |
-| `GET /mcp/google/{connect,callback,status}` | `/api/v1/connections/google/{connect,callback,status}` | CONNECT |
+| `POST /pfm/connect`, `GET /pfm/callback` | `/api/v1/connections/pfm/connect` y `POST /api/v1/connections/pfm/sync` (PFM no manda `state`: la página del frontend llama al sync; `pfm/callback` responde `400 connections.unsupported`) | CONNECT |
+| `GET /mcp/google/{connect,callback,status}` | `POST /api/v1/connections/google/connect`, `POST /api/v1/connections/google/callback` (autenticada: la llama la página del frontend con `{state, code}` y el Token del usuario) y `GET /api/v1/connections/google/status`. No hay callback público del backend. | CONNECT |
 | `GET /handles/search`, `GET /handles/saved`, `POST /handles/select`, `GET /handles/stats` | `/api/v1/handles/{search,saved,select,stats}` | CONNECT (modelo `SocialHandle` es tuyo) |
 | `POST /voice/transcribe` | `/api/v1/voice/transcribe` | INTELLIGENCE |
 | `POST /repurpose` | `/api/v1/repurpose` | INTELLIGENCE |
