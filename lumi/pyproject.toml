@@ -39,7 +39,10 @@ dependencies = [
 package = false
 
 [tool.ruff]
-extend-exclude = ["alembic/versions"]
+extend-exclude = ["alembic/versions", "apps/*/migrations"]
+
+[tool.ruff.lint.per-file-ignores]
+"apps/**/models.py" = ["RUF012"]  # Django Meta and class attributes
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

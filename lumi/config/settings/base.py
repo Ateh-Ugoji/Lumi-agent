@@ -21,15 +21,20 @@ SECRET_KEY = env.get("SECRET_KEY")
 
 ALLOWED_HOSTS = env.get_list("ALLOWED_HOSTS", "localhost,127.0.0.1,[::1]")
 
-# contrib.auth, admin, sessions and apps.accounts enter in T3 together with AUTH_USER_MODEL,
-# so no table is created under a user model that will be replaced.
 INSTALLED_APPS = [
+    "django.contrib.contenttypes",
+    "django.contrib.auth",
     "django.contrib.staticfiles",
     "corsheaders",
     "rest_framework",
     "drf_spectacular",
     "apps.core",
+    "apps.accounts",
+    "apps.connections",
 ]
+
+AUTH_USER_MODEL = "accounts.User"
+AUTH_TOKEN_TTL_DAYS = env.get_int("AUTH_TOKEN_TTL_DAYS", 30)
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
