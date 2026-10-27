@@ -666,7 +666,10 @@ export default function App() {
             const args = evt.arguments || {};
             let label = `Executing ${toolName}...`;
             let kind: SimStepKind = "action";
-            let platforms: string[] = ["x"];
+            // The connected account's platform drives the header icon: steps
+            // marked "social" crossfade the ball into that platform's logo.
+            const activePlatform: string = profiles[0]?.platform || "x";
+            let platforms: string[] = [activePlatform];
 
             if (toolName === "connect_account") {
               label = "Generating secure X authorization link...";
@@ -686,8 +689,28 @@ export default function App() {
               platforms = ["x", "linkedin"];
             } else if (toolName === "extract_voice_profile") {
               label = "Extracting your creator voice profile";
-              kind = "analysis";
-              platforms = ["x"];
+              kind = "social";
+              platforms = [activePlatform];
+            } else if (toolName === "get_posts") {
+              label = "Fetching your recent posts";
+              kind = "social";
+              platforms = [activePlatform];
+            } else if (toolName === "get_user_activity") {
+              label = "Reviewing your replies and activity";
+              kind = "social";
+              platforms = [activePlatform];
+            } else if (toolName === "get_analytics") {
+              label = "Pulling your performance analytics";
+              kind = "social";
+              platforms = [activePlatform];
+            } else if (toolName === "check_trending") {
+              label = "Watching your posts for velocity spikes";
+              kind = "social";
+              platforms = [activePlatform];
+            } else if (toolName === "backfill_posts") {
+              label = "Backfilling your post history";
+              kind = "social";
+              platforms = [activePlatform];
             } else if (toolName === "repurpose_caption") {
               label = `Repurposing caption for ${args.target_platform || "socials"}`;
               kind = "writing";

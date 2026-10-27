@@ -10,6 +10,7 @@ import {
 import SocialIcon from "../ThinkingState/SocialIcons";
 import { formatDuration } from "../../simulation/formatDuration";
 import type { SimScript, SimStep } from "../../simulation/simScripts";
+import WorkingMark from "./WorkingMark";
 import usePrefersReducedMotion from "./usePrefersReducedMotion";
 import { formatClock } from "./formatClock";
 import styles from "./AgentThinking.module.css";
@@ -254,10 +255,7 @@ function StepRow({
       {showCheck ? (
         <Check />
       ) : (
-        <span
-          className={styles.spinner}
-          style={{ animation: "spin 700ms linear infinite" }}
-        />
+        <WorkingMark size={16} variant="busy" className={styles.rowMark} />
       )}
       <span className={styles.rowBody}>
         <span className={styles.rowLine}>
@@ -300,6 +298,8 @@ function StepRow({
 /** Header icon keyed by identity so the crossfade knows what is swapping. */
 function iconNode(key: string, reduced: boolean): ReactNode {
   if (key === "spark") return <Sparkle />;
+  if (key === "busy" || key === "calm")
+    return <WorkingMark size={20} variant={key} />;
   if (key.startsWith("social:"))
     return (
       <SocialIconCycler

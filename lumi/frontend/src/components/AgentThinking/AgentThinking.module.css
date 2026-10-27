@@ -298,15 +298,11 @@
   color: var(--text);
 }
 
-.spinner {
+.rowMark {
   flex-shrink: 0;
-  width: 12px;
-  height: 12px;
   margin-top: 2px;
-  border-radius: 50%;
-  border: 1.5px solid rgba(255, 255, 255, 0.25);
-  border-top-color: var(--text-dim);
 }
+
 .meta {
   flex-shrink: 0;
   font-family: "DM Sans", sans-serif;
@@ -404,6 +400,44 @@
   background: #ffffff;
   padding: 2px;
   box-sizing: border-box;
+}
+
+/* ------------------------------------------------------------------ *
+ * WorkingMark — sprite-strip flipbook window. Both sheets are mounted
+ * up front at opacity 0.001 (decoded, invisible); the active sheet is
+ * brought forward by inline styles. Frame advance is a transform on
+ * the inner strip inside the clipped window — no layout, no repaint.
+ * ------------------------------------------------------------------ */
+
+.markWindow {
+  position: relative;
+  display: inline-block;
+  flex-shrink: 0;
+  overflow: clip;
+  vertical-align: middle;
+}
+
+/* Clay base dot under the sprite (the reference's 7px-at-20px ClayMark). */
+.markDot {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: #d97757;
+}
+
+.markSheet {
+  position: absolute;
+  inset: 0;
+  overflow: clip;
+}
+
+.markStrip {
+  display: block;
+  width: 100%;
+  background-repeat: no-repeat;
+  background-size: 100% auto;
 }
 
 @media (prefers-reduced-motion: reduce) {
