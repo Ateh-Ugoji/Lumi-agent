@@ -45,8 +45,9 @@ Catálogo de códigos de error. Los equipos pueden añadir códigos propios con 
 | `upstream_error` | 502 | Falló un proveedor externo. El mensaje no incluye datos sensibles. |
 | `not_configured` | 503 | Falta una variable opcional del servicio pedido. `details.env_vars` la nombra. |
 | `internal_error` | 500 | Error no previsto. El detalle va al log, no a la respuesta. |
+| `method_not_allowed` | 405 | Verbo no admitido en la ruta. |
 
-El manejador `apps/core/errors.py` (T6) traduce las excepciones de DRF y de Django a este formato.
+El manejador `apps/core/errors.py` traduce las excepciones de DRF y de Django a este formato, también las rutas inexistentes (`404`) y los fallos del servidor (`500`). Para un error de dominio, un servicio lanza `ApiError(code, message, status_code=..., details=...)`. Los `message` están en español y son para mostrar; el cliente decide por `code`.
 
 ## 3. Rutas de ARCHITECT
 
@@ -180,8 +181,9 @@ Cualquier cambio de esquema posterior va en `0002_*` de la app dueña. Los enums
 | `apps.core.choices` | `Platform`, `IngestSource`, `PostKind`, `JobStatus`. |
 | `apps.core.fields.EncryptedTextField` | `TextField` cifrado con Fernet. Clave `TOKEN_ENCRYPTION_KEY`; para rotar, la clave anterior pasa a `TOKEN_ENCRYPTION_KEY_PREVIOUS` (varias, separadas por coma). `None` y `""` no se cifran. No admite filtros por valor (solo `isnull`). Una clave que no abre el valor lanza `TokenDecryptError` sin incluir el valor. Helpers: `encrypt_value`, `decrypt_value`, `needs_rotation`, `rotate_value`. |
 | `apps.core.keys` | Registro de servicios, ver sección 8. |
-| `apps.core.permissions.IsProfileOwner` | T6. |
-| `apps.core.errors` | Manejador de errores, T6. |
+| `apps.core.permissions.IsProfileOwner` | Comprueba `profile_id` (URL, query o cuerpo, en ese orden) y deja el perfil en `request.profile`. Un id ajeno, inexistente o mal formado da `404`. Úsese junto a `IsAuthenticated` o solo: un anónimo recibe `401`. `get_owned_profile(user, id)` hace la misma comprobación fuera de una vista. |
+| `apps.core.errors` | `ApiError`, `exception_handler`, `error_body`. |
+| `apps.accounts.authentication.TokenAuthentication` | Autenticación por defecto de DRF. Deja la fila `AuthToken` en `request.auth`. Actualiza `last_used_at` como mucho una vez por hora. |
 
 Formato del cifrado: token Fernet estándar, igual que `apps.connections.crypto.TokenCipher`. Los dos leen lo que escribe el otro (hay un test que lo fija). CONNECT puede dejar `TokenCipher` para uso fuera de modelos, o delegar en `apps.core.fields`. `core` no importa `connections`, por eso la lógica mínima está en los dos sitios.
 
@@ -251,6 +253,8 @@ Cambios que el orquestador debe copiar a sus documentos (ARCHITECT no los edita)
 | 10 | `User.email` | `unique=True` más `CHECK (email = lower(email))`, en lugar del único sobre `Lower(email)` de `SCHEMA.md` v2: Django exige `unique` en `USERNAME_FIELD`. El efecto es el mismo. | ARCHITECT |
 | 11 | `tool_call_id` | Falta en `ChatMessageIn` y `ChatMessageOut` de `ports.py` (sección 5). | INTELLIGENCE |
 | 12 | `contrib.admin`, `sessions` | No están en `INSTALLED_APPS`. Todo el acceso es por token. Se añadirá `admin` solo si el orquestador lo pide. | Orquestador |
+| 13 | Documentación OpenAPI | `/api/schema/` y `/api/docs/` son públicas: describen rutas, no datos. | Orquestador |
+| 14 | Registro duplicado | `POST /auth/register` con un email ya usado responde `409 conflict`. Revela que el email existe; el límite de 10 por minuto acota el sondeo. | Orquestador |
 
 ## 12. Cómo se pide un cambio
 
