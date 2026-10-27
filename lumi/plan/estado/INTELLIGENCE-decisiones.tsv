@@ -1,0 +1,7 @@
+fecha	qué	por qué	evidencia	resultado
+2026-10-27	Puertos todos async excepto Embedder, VectorStore y Clock	El loop es async; Chroma y el modelo ONNX son bloqueantes y se envuelven con asyncio.to_thread	lumi_ai/tests/test_ports.py::test_every_method_of_a_store_or_gateway_is_async	hecho
+2026-10-27	Los puertos no usan los modelos pydantic de competitors; los payloads cruzan como dict JSON	Evita que ports.py dependa de módulos que aún no existen y mantiene el contrato estable	ports.py: NicheReportIn.payload, VoiceProfileOut.payload	hecho
+2026-10-27	Agregados PeerPostStore, RequestStore, ListeningStore, RepurposeStore al listado del plan	Las tools de datos del legado (listening, user requests, repurpose) necesitan puerto; Chroma ya no guarda texto, así que los posts de pares viven en Postgres	lumi/app/models/{listening,user_request,repurpose}.py	hecho
+2026-10-27	RepurposeStore.create_request_with_attempts guarda solicitud e intentos en una transacción	Defecto del legado: repurpose_caption guardaba la solicitud antes de trabajar y dejaba huérfanos	plan T8	hecho
+2026-10-27	Marcador pytest live registrado en lumi_ai/tests/conftest.py	pyproject.toml es de ARCHITECT; el skip sin LUMI_RUN_LIVE=1 evita llamadas con cuota	conftest.py	hecho
+2026-10-27	/architect sin la fase arena	arena está prohibida; el boceto de tipos lo hice yo a mano partiendo del uso real en lumi/app	—	hecho
