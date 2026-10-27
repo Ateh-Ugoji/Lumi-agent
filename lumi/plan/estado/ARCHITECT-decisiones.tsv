@@ -36,3 +36,4 @@ ts	phase	decision	why	evidence	result
 2026-10-27T06:44:27Z	T1	apps.intelligence in INSTALLED_APPS, AI_CONFIG from AIConfig.from_env, .env.example model vars, CONTRATOS ports 1.5	INTELLIGENCE request	pytest 914 passed; check_keys lists groq(required),openrouter,openlux,jev,neatlogs,video	pushed
 2026-10-27T06:45:20Z	T2	docs/schema public only with DEBUG, staff in prod; CONTRATOS section 11 updated	orchestrator steering A	925 passed	pushed
 2026-10-27T06:51:17Z	T7	profiles.services publicado antes de las rutas	CONNECT lo necesita para ingesta	49 tests de servicios en Postgres real	ok
+2026-10-27T06:51:54Z	T7	montar connections.urls en api/v1/	ruta pedida por CONNECT; sin choques con auth ni CONTRATOS	test_url_mounts	ok
