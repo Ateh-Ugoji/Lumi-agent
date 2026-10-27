@@ -169,6 +169,23 @@ async def test_callback_for_another_user_is_rejected() -> None:
     assert request.state in store.records  # refused without being consumed
 
 
+class _StoreThatIgnoresTheUser(MemoryStateStore):
+    """A buggy store: it hands the record back whoever asks."""
+
+    async def consume(self, state, provider, *, user_id=None):
+        return await super().consume(state, provider, user_id=None)
+
+
+async def test_the_flow_refuses_a_foreign_state_even_if_the_store_does_not() -> None:
+    store = _StoreThatIgnoresTheUser()
+    oauth, rec = flow("meta", store)
+    request = await oauth.start(user_id=1)
+    with pytest.raises(OAuthStateError) as info:
+        await oauth.complete(state=request.state, code="abc", expected_user_id=2)
+    assert info.value.code == "state_mismatch"
+    assert rec.requests == []  # the code was never exchanged
+
+
 @pytest.mark.parametrize("state", ["", "x" * 257])
 async def test_malformed_state_never_reaches_the_store(state: str) -> None:
     store = MemoryStateStore()
