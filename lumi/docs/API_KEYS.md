@@ -50,7 +50,7 @@ Son opcionales: sin ellas Lumi funciona, con menos calidad de evaluación y sin 
 | `HANDLE_CACHE_TTL_MINUTES` | real | Minutos de vigencia de la caché de búsqueda de handles. Por defecto `60`. Sustituye a `MVP_CACHE_TTL_MINUTES` | no es una key |
 | `TOKEN_ENCRYPTION_KEY_PREVIOUS` | real | Clave Fernet anterior, solo mientras se rota `TOKEN_ENCRYPTION_KEY`. Vacía en el uso normal | no es una key |
 | `LINKEDIN_API_VERSION`, `META_GRAPH_VERSION` | real | Versiones de API que usan los adaptadores. Por defecto `202609` y `v26.0` | no son keys |
-| `PUBLIC_BASE_URL`, `FRONTEND_URL` | real | URL pública del backend (para redirect URIs de OAuth, por defecto `http://localhost:8000`) y del frontend (adónde vuelve el usuario tras conectar, por defecto `http://localhost:3010`) | no son keys |
+| `FRONTEND_URL` | real | URL del frontend, por defecto `http://localhost:3010`. Todas las redirect URIs de OAuth salen de ella: el proveedor vuelve a una página del frontend, y esa página hace un POST autenticado al backend. El hosting tiene que servir `index.html` en `/connections/*`. (`PUBLIC_BASE_URL` es obsoleta: Django ya no la lee) | no es key |
 
 ## Ajustes de Django (opcionales, no son keys)
 
@@ -60,7 +60,7 @@ Son opcionales: sin ellas Lumi funciona, con menos calidad de evaluación y sin 
 | `CORS_ALLOWED_ORIGINS` | real | Orígenes del frontend permitidos. Local: `http://localhost:3010,http://127.0.0.1:3010` |
 | `DJANGO_SETTINGS_MODULE`, `DEBUG`, `ALLOWED_HOSTS`, `CSRF_TRUSTED_ORIGINS`, `LOG_LEVEL`, `REDIS_URL`, `LUMI_ENV_FILE` | real | Ajustes estándar. `LUMI_ENV_FILE` cambia la ruta del `.env` (por defecto `lumi/.env`) |
 
-Las diez variables que CONTRATOS §8 añadió a esta guía: `PUBLIC_BASE_URL`, `FRONTEND_URL`, `XPOZ_LIVE_ENABLED`, `XPOZ_RUN_CREDIT_BUDGET`, `HANDLE_CACHE_TTL_MINUTES`, `TOKEN_ENCRYPTION_KEY_PREVIOUS`, `LINKEDIN_API_VERSION`, `META_GRAPH_VERSION`, `AUTH_TOKEN_TTL_DAYS`, `CORS_ALLOWED_ORIGINS`.
+Las variables que CONTRATOS §8 añadió a esta guía: `FRONTEND_URL`, `XPOZ_LIVE_ENABLED`, `XPOZ_RUN_CREDIT_BUDGET`, `HANDLE_CACHE_TTL_MINUTES`, `TOKEN_ENCRYPTION_KEY_PREVIOUS`, `LINKEDIN_API_VERSION`, `META_GRAPH_VERSION`, `AUTH_TOKEN_TTL_DAYS`, `CORS_ALLOWED_ORIGINS`.
 
 Trámites que ninguna key resuelve (solo Christian):
 
@@ -72,7 +72,18 @@ Los datos de Meta, LinkedIn, X, Post for Me y Xpoz se revalidaron el 2026-10-27 
 
 ## Cómo crear cada app
 
-Redirect URIs. Todas siguen el patrón `{PUBLIC_BASE_URL}/api/v1/connections/<provider>/callback`. Las URIs exactas para local y producción están en `docs/CONEXIONES.md`, sección "Redirect URIs exactas". Pega la URI sin barra final y sin cambios.
+Redirect URIs. Todas siguen el patrón `{FRONTEND_URL}/connections/<provider>/callback` (por defecto `http://localhost:3010`). El callback llega al frontend y no al backend; así el `state` queda atado al usuario con sesión iniciada. Pega la URI sin barra final y sin cambios.
+
+| Proveedor | Redirect URI | Nota |
+| --- | --- | --- |
+| Meta (Instagram y Facebook, una sola app) | `{FRONTEND_URL}/connections/meta/callback` | |
+| LinkedIn | `{FRONTEND_URL}/connections/linkedin/callback` | Exige HTTPS: en local, un túnel en `FRONTEND_URL` |
+| X | `{FRONTEND_URL}/connections/x/callback` | En local usa `http://127.0.0.1:3010`, no `localhost` |
+| Google | `{FRONTEND_URL}/connections/google/callback` | Lo controla `GOOGLE_OAUTH_REDIRECT_URI` |
+| Post for Me | `{FRONTEND_URL}/connections/pfm/callback` | Se pone en el panel de PFM; el código no manda un redirect. Sin verificar con una cuenta real |
+| TikTok | no tiene OAuth | Solo lectura vía Xpoz |
+
+El detalle está en `docs/CONEXIONES.md`.
 
 Orden recomendado: Google, Xpoz, Meta, LinkedIn, Post for Me, X. Los dos trámites largos (App Review de Meta y Community Management API de LinkedIn) no bloquean nada de lo anterior, y se pueden dejar para cuando Lumi se abra a otras personas.
 
@@ -85,9 +96,9 @@ Fuentes https://developers.google.com/identity/protocols/oauth2/web-server y htt
 3. Configura la pantalla de consentimiento en Google Auth Platform. Las secciones se llaman Branding, Audience y Data Access (https://support.google.com/cloud/answer/6158849). Mientras la app esté en modo de prueba, añade tu correo como usuario de prueba en Audience. El nombre exacto de ese botón no lo pude comprobar, sin verificar en la consola.
 4. Abre la página Clients de Google Auth Platform y pulsa Create Client.
 5. Elige el tipo "Web application".
-6. En "Authorized redirect URIs" pega `http://localhost:8000/api/v1/connections/google/callback`. Para producción añade la misma ruta con tu dominio HTTPS.
+6. En "Authorized redirect URIs" pega `http://localhost:3010/connections/google/callback`. Para producción añade la misma ruta con tu dominio HTTPS.
 7. Pulsa Create. Copia el ID de cliente a `GOOGLE_OAUTH_CLIENT_ID` y el secreto a `GOOGLE_OAUTH_CLIENT_SECRET`. Pon la misma URI del paso 6 en `GOOGLE_OAUTH_REDIRECT_URI`.
-8. `GOOGLE_OAUTH_REDIRECT_URI` es siempre `{PUBLIC_BASE_URL}/api/v1/connections/google/callback` (CONTRATOS §8). La ruta vieja `/mcp/google/callback` es del backend FastAPI; regístrala también solo mientras ese backend siga en uso.
+8. `GOOGLE_OAUTH_REDIRECT_URI` es `{FRONTEND_URL}/connections/google/callback`, que es su valor por defecto en `.env.example` (CONTRATOS §4). La ruta vieja `/mcp/google/callback` es del backend FastAPI; regístrala también solo mientras ese backend siga en uso.
 
 ### Xpoz (escucha de competidores en X)
 
@@ -111,7 +122,7 @@ Modo Development, sin revisión. Sirve para publicar en tus propias páginas.
 4. Cuando pregunte por el portfolio de negocio, elige "I don't want to connect a business portfolio yet" o el que ya tengas. Se puede conectar después. El texto exacto del botón está sin verificar.
 5. Sigue las pantallas Requirements y Overview y pulsa "Go to dashboard".
 6. En Settings > Basic copia App ID a `META_APP_ID` y App Secret a `META_APP_SECRET`. El secreto pide tu contraseña para mostrarse.
-7. Añade la redirect URI. La documentación pide registrarla en Facebook Login > Settings > Client OAuth Settings > Valid OAuth Redirect URIs (https://developers.facebook.com/docs/facebook-login/guides/advanced/manual-flow). Pega `http://localhost:8000/api/v1/connections/meta/callback`. En apps nuevas con casos de uso, la ruta del menú puede cambiar, sin verificar en la consola.
+7. Añade la redirect URI. La documentación pide registrarla en Facebook Login > Settings > Client OAuth Settings > Valid OAuth Redirect URIs (https://developers.facebook.com/docs/facebook-login/guides/advanced/manual-flow). Pega `http://localhost:3010/connections/meta/callback`. En apps nuevas con casos de uso, la ruta del menú puede cambiar, sin verificar en la consola.
 8. Deja la app en modo Development (https://developers.facebook.com/docs/development/build-and-test/app-modes). En ese modo solo entran personas con rol en la app: administrador, desarrollador o tester (https://developers.facebook.com/docs/development/build-and-test/app-roles). Añade a cada tester en App roles > Roles.
 9. Ten en cuenta el límite de un máximo de 15 apps sin verificar por desarrollador.
 10. Prueba con `uv run python manage.py check_keys --only meta`.
@@ -137,7 +148,7 @@ Perfil personal, autoservicio.
 2. Crea la app en https://www.linkedin.com/developers/apps/new. Escribe nombre, elige la página de empresa, pega la URL de tu política de privacidad y sube el logo.
 3. Pide al administrador de la página que verifique la app. En la pestaña Settings pulsa Verify > Generate URL (la URL vale 30 días) y envíasela al administrador.
 4. En la pestaña Products solicita "Share on LinkedIn" y "Sign In with LinkedIn using OpenID Connect". Ambos son de autoservicio. Con ellos obtienes los scopes `w_member_social` y `openid profile email`.
-5. En la pestaña Auth, en "Authorized redirect URLs for your app", pega la URL HTTPS de callback (`https://<tu-dominio-o-túnel>/api/v1/connections/linkedin/callback`). LinkedIn pide HTTPS (https://learn.microsoft.com/en-us/linkedin/shared/authentication/authorization-code-flow). En local usa un túnel.
+5. En la pestaña Auth, en "Authorized redirect URLs for your app", pega la URL HTTPS de callback (`https://<tu-dominio-o-túnel-del-frontend>/connections/linkedin/callback`). LinkedIn pide HTTPS (https://learn.microsoft.com/en-us/linkedin/shared/authentication/authorization-code-flow). En local usa un túnel.
 6. En la misma pestaña copia Client ID a `LINKEDIN_CLIENT_ID` y Primary Client Secret a `LINKEDIN_CLIENT_SECRET`.
 7. Deja `LINKEDIN_API_VERSION=202609`. La versión 202511 se retira el 2026-11-16.
 8. Prueba con `uv run python manage.py check_keys --only linkedin`. La comprobación valida formato y endpoint, sin canjear códigos.
@@ -171,7 +182,7 @@ No hagas el paso 5 hasta decidir gastar. Los pasos 1 a 4 no cuestan.
 
 1. Entra en https://console.x.com con la cuenta de X y acepta el Developer Agreement.
 2. Crea una app. Elige el tipo "Web App" (cliente confidencial), que entrega `client_secret`.
-3. En la configuración de OAuth 2.0 pega la callback `http://127.0.0.1:8000/api/v1/connections/x/callback`. X pide `127.0.0.1` y no acepta `localhost`. Para producción añade la URL HTTPS. Marca los permisos de lectura y escritura. Los scopes que pide Lumi son `tweet.read tweet.write users.read offline.access media.write`.
+3. En la configuración de OAuth 2.0 pega la callback `http://127.0.0.1:3010/connections/x/callback`. X pide `127.0.0.1` y no acepta `localhost`. Para producción añade la URL HTTPS. Marca los permisos de lectura y escritura. Los scopes que pide Lumi son `tweet.read tweet.write users.read offline.access media.write`.
 4. Copia Client ID a `X_CLIENT_ID` y Client Secret a `X_CLIENT_SECRET`. El secreto se muestra una sola vez. Deja `X_LIVE_ENABLED=false`.
 5. Para activar X compra créditos en la consola y fija un tope de gasto por ciclo antes de cargar nada. Un post cuesta $0.015, uno con enlace $0.20 y leer un post $0.005. Hay un bono de $20 al guardar tarjeta y comprar créditos. Después cambia `X_LIVE_ENABLED=true`.
 6. El código de autorización de X caduca a los 30 segundos. Lumi lo canjea de inmediato.

@@ -63,7 +63,7 @@ Del orquestador (cambia lo que decía el borrador anterior):
 13. **Una sola rama compartida: `lumi-orquestador`** (antes: una rama por bot). Christian lo pidió el 2026-10-27 ("creas 1 solo branch y ahí comiteas todo"). Cada bot commitea en su ámbito de archivos en cada cambio importante y como mínimo cada hora, con `git pull --rebase origin lumi-orquestador` antes de cada push. Nunca `push --force`, nunca merge a `main`, nunca deploy. Al final, el orquestador abre un solo Draft PR de `lumi-orquestador` a `main`.
 14. Los ámbitos de archivos no se solapan (secciones 2 de cada PLAN); los contratos entre bots son `docs/SCHEMA.md` y `docs/CONTRATOS.md` (ARCHITECT) y `lumi_ai/ports.py` (INTELLIGENCE). El contrato se aprueba con la línea `CONTRATO ARCHITECT ACEPTADO <sha>` en el estado de cada bot.
 15. El código FastAPI solo se borra cuando exista la matriz de paridad completa (T12 de ARCHITECT).
-16. Política de keys. Obligatorias: `DATABASE_URL`, `SECRET_KEY`, `TOKEN_ENCRYPTION_KEY` (Fernet), `GROQ_API_KEY`. Opcionales con aviso al arrancar: `OPENROUTER_API_KEY` (respaldo), `TYPESAFE_API_KEY`, `NEATLOGS_API_KEY` (pasa de obligatoria a opcional), `PFM_JWT_TOKEN`, `XPOZ_API_KEY`, `XPOZ_API_KEY_2`, `OPENLUX_*`, `CHROMA_*`, `META_APP_ID/SECRET`, `LINKEDIN_CLIENT_ID/SECRET`, `X_CLIENT_ID/SECRET`, `X_LIVE_ENABLED` (false), `VIDEO_PROVIDER` y `VIDEO_API_KEY`, `GOOGLE_OAUTH_*`, `MCP_*`, `PUBLIC_BASE_URL`, `FRONTEND_URL`. Detalle en `lumi/docs/API_KEYS.md`. Solo se nombran variables; nunca valores.
+16. Política de keys. Obligatorias: `DATABASE_URL`, `SECRET_KEY`, `TOKEN_ENCRYPTION_KEY` (Fernet), `GROQ_API_KEY`. Opcionales con aviso al arrancar: `OPENROUTER_API_KEY` (respaldo), `TYPESAFE_API_KEY`, `NEATLOGS_API_KEY` (pasa de obligatoria a opcional), `PFM_JWT_TOKEN`, `XPOZ_API_KEY`, `XPOZ_API_KEY_2`, `OPENLUX_*`, `CHROMA_*`, `META_APP_ID/SECRET`, `LINKEDIN_CLIENT_ID/SECRET`, `X_CLIENT_ID/SECRET`, `X_LIVE_ENABLED` (false), `VIDEO_PROVIDER` y `VIDEO_API_KEY`, `GOOGLE_OAUTH_*`, `MCP_*`, `FRONTEND_URL` (`PUBLIC_BASE_URL` quedó obsoleta el 27 oct). Detalle en `lumi/docs/API_KEYS.md`. Solo se nombran variables; nunca valores.
 17. El agente nunca publica solo: publicar es una acción del usuario confirmada en la interfaz y pasa por los adaptadores de CONNECT.
 
 ## 4. Equipo
@@ -201,7 +201,7 @@ Cada tarea: responsable, entregable y cómo se verifica. Los detalles y rutas es
 - **Siguen pendientes de Christian:** las 5 preguntas de `MUSE.md`, renovar `PFM_JWT_TOKEN`, créditos de Xpoz, las keys y dejar `lumi.db`.
 
 ## Pendientes nuevos de Christian (27 oct 2026, 07:15 UTC)
-- Al crear la app de Post for Me, poner en su panel la URL de retorno `PUBLIC_BASE_URL/api/v1/connections/pfm/callback` (pedido de CONNECT).
+- Al crear la app de Post for Me, poner en su panel la URL de retorno `{FRONTEND_URL}/connections/pfm/callback` (cambió el 27 oct con el arreglo del OAuth) (pedido de CONNECT).
 - Antes del lanzamiento, decidir si el registro con un email repetido sigue respondiendo 409 o si responde igual que un registro nuevo y avisa por email (CONTRATOS §11, pedido de ARCHITECT). Por ahora queda el 409, con límite de 10 por minuto.
 - Cuando haya keys, aportar posts reales aceptados y rechazados para calibrar los umbrales de los jueces (Jev y la rúbrica de T9, pedido de INTELLIGENCE).
 - Para crear un superusuario en `/admin/`: `uv run python manage.py createsuperuser`.
@@ -259,3 +259,10 @@ El orquestador eligió (c) mientras Christian decide. Entretanto, ARCHITECT comp
 - **INTELLIGENCE** (último `f4a660c`, 08:08): códigos `voice.transcription_*`, `VIDEO_TIMEOUT_SECONDS` en `from_env`, paridad de `test_niche_schemas`. Sigue esperando las keys y las 4 decisiones de Christian (Gemini de pago para video, términos de uso de video de terceros, autorizar tests live, posts reales para calibrar jueces). T10 sigue sin fuente de URLs de medios. Lleva ~1 h sin commits, menos de 2 h.
 - Ningún bot lleva más de 2 horas sin commits ni reportó un bloqueo nuevo que el orquestador pueda destrabar. No se escribió a ningún bot.
 - Sigue sin aparecer `/workspace/lumi-data/lumi.db` ni un dump.
+
+## 09:20 UTC
+- **ARCHITECT** aprobó el arreglo de OAuth de CONNECT (rama `alto1v2`, `456873b`; CONNECT dice que pasan 1702 pytest, 55 tests de frontend y 10 e2e). CONNECT lo sube después de rebasar sobre `b0c7051`. Las redirect URIs salen ahora de `{FRONTEND_URL}/connections/<provider>/callback` y `PUBLIC_BASE_URL` es obsoleta (`242791e`). El orquestador ya actualizó `API_KEYS.md` (con una tabla por proveedor), `AGENT_KEYS_SETUP.md` y este archivo. Contrato: se añade `POST /connections/pfm/sync` con throttle, y `GET /pfm/status` ya no escribe (fila 26, `b0c7051`).
+- **ARCHITECT**: `posts.last_checked_at` (`660bd1e`). Paridad con los 422 tests legados (main sumó 4): 350 cubiertos, 45 reemplazados, 3 desvíos, 10 retirados y 14 huecos, todos de CONNECT. El pytest por defecto pasa sin keys desde `17b7280`. Fixture de `claim_due_polls` con CTE materializado (`ca41934`).
+- **Primera conexión social real**: la decide Christian, y solo cuando el arreglo esté en la rama.
+- **Pendiente de portar los avatares de main `632217e`**: `listening_matches.author_avatar_url` y trends le tocan a ARCHITECT; `handle_db` le toca a CONNECT.
+- `AGENTS.md:88` y `README.md:119` describen el backend legado y no se tocan.
