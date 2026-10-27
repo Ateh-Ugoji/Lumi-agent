@@ -19,7 +19,7 @@ from urllib.parse import urlsplit
 
 from .config import ConnectionsConfig
 from .errors import OAuthStateError
-from .providers.base import AuthorizationRequest, SocialProvider, TokenSet
+from .providers.base import AuthorizationRequest, Capabilities, TokenSet
 
 STATE_TTL = timedelta(minutes=10)
 MAX_STATE_LENGTH = 256
@@ -98,10 +98,26 @@ class CompletedAuth:
     tokens: TokenSet
 
 
+class OAuthProvider(Protocol):
+    """What the flow needs from a provider. Social providers and Google OAuth both fit."""
+
+    name: str
+
+    def capabilities(self) -> Capabilities: ...
+
+    def build_authorize_url(
+        self, *, state: str, redirect_uri: str, code_challenge: str | None = None
+    ) -> AuthorizationRequest: ...
+
+    async def exchange_code(
+        self, *, code: str, redirect_uri: str, code_verifier: str | None = None
+    ) -> TokenSet: ...
+
+
 class OAuthFlow:
     def __init__(
         self,
-        provider: SocialProvider,
+        provider: OAuthProvider,
         store: OAuthStateStore,
         config: ConnectionsConfig,
         *,

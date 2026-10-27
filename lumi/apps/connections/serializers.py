@@ -52,6 +52,10 @@ class StatusSerializer(serializers.Serializer):
     connected = serializers.BooleanField()
     stale = serializers.BooleanField()
     accounts = ConnectedAccountSerializer(many=True)
+    details = serializers.DictField(
+        required=False,
+        help_text="Datos propios del proveedor que no son cuentas (Google: scopes, caducidad).",
+    )
 
 
 class DisconnectSerializer(serializers.Serializer):

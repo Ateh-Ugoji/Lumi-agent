@@ -18,6 +18,9 @@ DEFAULT_LINKEDIN_VERSION = "202609"
 DEFAULT_META_GRAPH_VERSION = "v26.0"
 DEFAULT_XPOZ_RUN_CREDIT_BUDGET = 10
 DEFAULT_HANDLE_CACHE_TTL_MINUTES = 60
+DEFAULT_MCP_TOOLS_TTL_SECONDS = 300
+DEFAULT_MCP_CALL_TIMEOUT_SECONDS = 60
+DEFAULT_MCP_REFRESH_TIMEOUT_SECONDS = 8
 
 _TRUE = {"1", "true", "yes", "on"}
 _FALSE = {"", "0", "false", "no", "off"}
@@ -62,6 +65,12 @@ class ConnectionsConfig:
     x_client_id: str = ""
     x_client_secret: str = field(default="", repr=False)
     pfm_jwt_token: str = field(default="", repr=False)
+    google_client_id: str = ""
+    google_client_secret: str = field(default="", repr=False)
+    google_redirect_uri: str = ""
+    mcp_tools_ttl_seconds: int = DEFAULT_MCP_TOOLS_TTL_SECONDS
+    mcp_call_timeout_seconds: int = DEFAULT_MCP_CALL_TIMEOUT_SECONDS
+    mcp_refresh_timeout_seconds: int = DEFAULT_MCP_REFRESH_TIMEOUT_SECONDS
     xpoz_api_key: str = field(default="", repr=False)
     xpoz_api_key_2: str = field(default="", repr=False)
     xpoz_live_enabled: bool = False
@@ -92,6 +101,24 @@ class ConnectionsConfig:
             x_client_id=get("X_CLIENT_ID"),
             x_client_secret=get("X_CLIENT_SECRET"),
             pfm_jwt_token=get("PFM_JWT_TOKEN"),
+            google_client_id=get("GOOGLE_OAUTH_CLIENT_ID"),
+            google_client_secret=get("GOOGLE_OAUTH_CLIENT_SECRET"),
+            google_redirect_uri=get("GOOGLE_OAUTH_REDIRECT_URI"),
+            mcp_tools_ttl_seconds=parse_non_negative_int(
+                env.get("MCP_TOOLS_TTL_SECONDS"),
+                name="MCP_TOOLS_TTL_SECONDS",
+                default=DEFAULT_MCP_TOOLS_TTL_SECONDS,
+            ),
+            mcp_call_timeout_seconds=parse_non_negative_int(
+                env.get("MCP_CALL_TIMEOUT_SECONDS"),
+                name="MCP_CALL_TIMEOUT_SECONDS",
+                default=DEFAULT_MCP_CALL_TIMEOUT_SECONDS,
+            ),
+            mcp_refresh_timeout_seconds=parse_non_negative_int(
+                env.get("MCP_REFRESH_TIMEOUT_SECONDS"),
+                name="MCP_REFRESH_TIMEOUT_SECONDS",
+                default=DEFAULT_MCP_REFRESH_TIMEOUT_SECONDS,
+            ),
             xpoz_api_key=get("XPOZ_API_KEY"),
             xpoz_api_key_2=get("XPOZ_API_KEY_2"),
             xpoz_live_enabled=parse_bool(
@@ -115,4 +142,6 @@ class ConnectionsConfig:
         return tuple(k for k in (self.xpoz_api_key, self.xpoz_api_key_2) if k)
 
     def redirect_uri(self, provider: str) -> str:
+        if provider == "google" and self.google_redirect_uri:
+            return self.google_redirect_uri
         return f"{self.public_base_url}/api/v1/connections/{provider}/callback"

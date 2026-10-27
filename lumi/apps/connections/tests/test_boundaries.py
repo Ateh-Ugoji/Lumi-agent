@@ -33,6 +33,7 @@ DJANGO_GLUE = {
     "accounts.py",
     "handles_api.py",
     "publish_api.py",
+    "mcp_gateway.py",
     "views.py",
     "serializers.py",
     "urls.py",

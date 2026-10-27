@@ -148,3 +148,49 @@ def test_xpoz_probe_never_touches_the_network_or_spends_credits(monkeypatch) -> 
     result = keys.run_probe(keys.get_spec("xpoz"))
     assert result.status == "skipped" and "s3cr3t" not in result.detail
     assert "1 key" in result.detail and "créditos" in result.detail
+
+
+def _google_probe(monkeypatch, handler):
+    real = httpx.AsyncClient
+    monkeypatch.setattr(
+        "apps.connections.keys.httpx.AsyncClient",
+        lambda **kw: real(transport=httpx.MockTransport(handler), **kw),
+    )
+    monkeypatch.setenv("GOOGLE_OAUTH_CLIENT_ID", "g-id")
+    monkeypatch.setenv("GOOGLE_OAUTH_CLIENT_SECRET", "g-s3cr3t")
+    connection_keys.register_all()
+    return keys.run_probe(keys.get_spec("google"))
+
+
+def test_google_is_registered_and_optional() -> None:
+    connection_keys.register_all()
+    spec = keys.get_spec("google")
+    assert not spec.required
+    assert spec.env_vars == ("GOOGLE_OAUTH_CLIENT_ID", "GOOGLE_OAUTH_CLIENT_SECRET")
+
+
+def test_google_probe_accepts_a_client_that_rejects_only_the_code(monkeypatch) -> None:
+    seen = []
+
+    def handler(request):
+        seen.append(request.url.host)
+        return httpx.Response(400, json={"error": "invalid_grant"})
+
+    assert _google_probe(monkeypatch, handler).status == "ok"
+    assert seen == ["oauth2.googleapis.com"]
+
+
+def test_google_probe_rejects_a_bad_client_without_the_secret(monkeypatch) -> None:
+    result = _google_probe(
+        monkeypatch,
+        lambda r: httpx.Response(401, json={"error": "invalid_client"}),
+    )
+    assert result.status == "error" and "s3cr3t" not in result.detail
+
+
+def test_google_probe_survives_an_outage(monkeypatch) -> None:
+    def down(request):
+        raise httpx.ConnectError("boom g-s3cr3t")
+
+    result = _google_probe(monkeypatch, down)
+    assert result.status == "error" and "s3cr3t" not in result.detail

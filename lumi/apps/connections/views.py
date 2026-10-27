@@ -88,6 +88,7 @@ class ProviderView(APIView):
                     "connected": status.connected,
                     "stale": status.stale,
                     "accounts": status.accounts,
+                    "details": status.details,
                 }
             ).data
         )

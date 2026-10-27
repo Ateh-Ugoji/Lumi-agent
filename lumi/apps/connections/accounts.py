@@ -12,7 +12,7 @@ from __future__ import annotations
 import logging
 import os
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit, urlunsplit
 
@@ -34,11 +34,18 @@ from .errors import (
     UnsupportedOperation,
     ValidationFailed,
 )
-from .models import AccountStatus, ConnectedAccount, Provider
-from .oauth import OAuthFlow
+from .mcp.google import GoogleOAuth
+from .models import (
+    AccountStatus,
+    ConnectedAccount,
+    McpAuthAccount,
+    McpPendingWrite,
+    Provider,
+)
+from .oauth import OAuthFlow, OAuthProvider
 from .providers.base import AccountInfo, SocialProvider, TokenSet
 from .providers.registry import build_provider
-from .stores import DjangoOAuthStateStore
+from .stores import DjangoOAuthStateStore, save_google_tokens
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +59,7 @@ REQUIRED_ENV: dict[str, tuple[str, ...]] = {
     "meta": ("META_APP_ID", "META_APP_SECRET"),
     "linkedin": ("LINKEDIN_CLIENT_ID", "LINKEDIN_CLIENT_SECRET"),
     "x": ("X_CLIENT_ID", "X_CLIENT_SECRET"),
+    "google": ("GOOGLE_OAUTH_CLIENT_ID", "GOOGLE_OAUTH_CLIENT_SECRET"),
 }
 _CONFIG_ATTR = {
     "PFM_JWT_TOKEN": "pfm_jwt_token",
@@ -61,6 +69,8 @@ _CONFIG_ATTR = {
     "LINKEDIN_CLIENT_SECRET": "linkedin_client_secret",
     "X_CLIENT_ID": "x_client_id",
     "X_CLIENT_SECRET": "x_client_secret",
+    "GOOGLE_OAUTH_CLIENT_ID": "google_client_id",
+    "GOOGLE_OAUTH_CLIENT_SECRET": "google_client_secret",
 }
 
 
@@ -71,6 +81,15 @@ def get_config() -> ConnectionsConfig:
 def make_provider(name: str) -> SocialProvider:
     """Build a provider. Tests replace this to inject a mock transport."""
     return build_provider(name, get_config())
+
+
+def make_google() -> GoogleOAuth:
+    """Build the Google OAuth client. Tests replace this to inject a mock transport."""
+    return GoogleOAuth(get_config())
+
+
+def oauth_provider(name: str) -> OAuthProvider:
+    return make_google() if name == "google" else make_provider(name)
 
 
 def make_pfm() -> PfmClient:
@@ -93,13 +112,7 @@ def missing_env(provider: str, config: ConnectionsConfig) -> list[str]:
 
 
 def require_provider(name: str) -> str:
-    if name == "google":
-        raise ApiError(
-            "connections.not_implemented",
-            "Google se conecta por MCP y todavía no está disponible.",
-            status_code=501,
-        )
-    if name not in {p.value for p in Provider}:
+    if name not in ALL_PROVIDERS:
         raise ApiError("not_found", "Proveedor desconocido.", status_code=404)
     return name
 
@@ -183,7 +196,7 @@ def start_connect(
             )
             return auth.url
         flow = OAuthFlow(
-            make_provider(provider),
+            oauth_provider(provider),
             DjangoOAuthStateStore(config.redirect_uri),
             config,
         )
@@ -231,7 +244,9 @@ def finish_callback(provider: str, params: Mapping[str, str]) -> str:
         if not code or not state:
             return frontend_redirect(config, target, error="connections.state_invalid")
         flow = OAuthFlow(
-            make_provider(provider), DjangoOAuthStateStore(config.redirect_uri), config
+            oauth_provider(provider),
+            DjangoOAuthStateStore(config.redirect_uri),
+            config,
         )
         done = async_to_sync(flow.complete)(state=state, code=code)
         target = done.record.redirect_after
@@ -280,6 +295,10 @@ def store_accounts(
     provider: str, *, user_id: int, tokens: TokenSet, profile_id: int | None
 ) -> int:
     """Save every account the grant gives access to. Returns how many were stored."""
+    if provider == "google":
+        # One Google grant per user. It is not tied to a social profile.
+        save_google_tokens(user_id, tokens)
+        return 1
     adapter = make_provider(provider)
     infos = async_to_sync(adapter.list_accounts)(tokens)
     if not infos:
@@ -343,12 +362,38 @@ class ProviderStatus:
     connected: bool
     stale: bool
     accounts: list[ConnectedAccount]
+    # Provider-specific facts that are not accounts (Google's grant). Never a token.
+    details: dict = field(default_factory=dict)
+
+
+def _google_status(user, configured: bool) -> ProviderStatus:
+    row = McpAuthAccount.objects.filter(user=user, account="google").first()
+    if row is None or not row.access_token:
+        return ProviderStatus("google", configured, False, False, [], {})
+    expired = row.expires_at is not None and row.expires_at <= datetime.now(UTC)
+    has_refresh = bool(row.refresh_token)
+    # Without a refresh token the grant dies with the access token (about an hour).
+    stale = expired and not has_refresh
+    return ProviderStatus(
+        "google",
+        configured,
+        not stale,
+        stale,
+        [],
+        {
+            "scopes": list(row.scopes),
+            "expires_at": row.expires_at,
+            "has_refresh_token": has_refresh,
+        },
+    )
 
 
 def provider_status(user, provider: str) -> ProviderStatus:
     require_provider(provider)
     config = get_config()
     configured = not missing_env(provider, config)
+    if provider == "google":
+        return _google_status(user, configured)
     stale = False
     if provider == "pfm" and configured:
         try:
@@ -416,6 +461,8 @@ def token_set(row: ConnectedAccount) -> TokenSet:
 def disconnect(user, provider: str, *, account_id: str | None = None) -> dict:
     """Revoke at the provider (best effort) and delete the local rows with their tokens."""
     require_provider(provider)
+    if provider == "google":
+        return _disconnect_google(user)
     rows = ConnectedAccount.objects.filter(user=user, provider=provider)
     if account_id:
         rows = rows.filter(external_account_id=account_id)
@@ -429,6 +476,26 @@ def disconnect(user, provider: str, *, account_id: str | None = None) -> dict:
         row.delete()
         deleted += 1
     return {"provider": provider, "disconnected": deleted, "remote_revoked": revoked}
+
+
+def _disconnect_google(user) -> dict:
+    """Revoke the grant at Google (best effort), then delete the tokens and parked writes."""
+    row = McpAuthAccount.objects.filter(user=user, account="google").first()
+    if row is None:
+        return {"provider": "google", "disconnected": 0, "remote_revoked": 0}
+    revoked = 0
+    try:
+        tokens = TokenSet(
+            access_token=row.access_token, refresh_token=row.refresh_token or None
+        )
+        if async_to_sync(make_google().revoke)(tokens).remote_revoked:
+            revoked = 1
+    except SocialDataError:
+        logger.warning("remote revoke failed for google", exc_info=False)
+    with transaction.atomic():
+        McpPendingWrite.objects.filter(user=user).delete()
+        row.delete()
+    return {"provider": "google", "disconnected": 1, "remote_revoked": revoked}
 
 
 def _revoke_remote(provider: str, row: ConnectedAccount) -> bool:

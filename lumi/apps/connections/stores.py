@@ -25,16 +25,19 @@ from apps.profiles.models import HandleOrigin, SocialHandle, SocialProfile
 
 from .clients.credits import CreditEntry
 from .handles.types import CacheEntry, HandleRow
+from .mcp.gateway import PendingWrite
 from .models import (
     HandleSearchCache,
     HandleSearchCacheEntry,
+    McpAuthAccount,
+    McpPendingWrite,
     OAuthState,
     PublishJob,
     PublishStatus,
     XpozCreditLedger,
 )
 from .oauth import OAuthStateRecord
-from .providers.base import PublishResult
+from .providers.base import PublishResult, TokenSet
 from .publishing import LedgerEntry, LedgerStatus, PublishInProgress
 
 _HANDLE_RE = re.compile(r"^[a-z0-9._-]{1,100}$")
@@ -488,3 +491,101 @@ __all__ = [
     "normalize_handle",
     "purge_expired_states",
 ]
+
+
+class DjangoMcpStore:
+    """Google tokens in ``mcp_auth_accounts`` and parked writes in ``mcp_pending_writes``."""
+
+    ACCOUNT = "google"
+
+    async def owner_of(self, profile_id: int) -> int | None:
+        return await sync_to_async(self._owner_of, thread_sensitive=True)(profile_id)
+
+    async def load_tokens(self, user_id: int) -> TokenSet | None:
+        return await sync_to_async(self._load, thread_sensitive=True)(user_id)
+
+    async def save_tokens(self, user_id: int, tokens: TokenSet) -> None:
+        await sync_to_async(save_google_tokens, thread_sensitive=True)(user_id, tokens)
+
+    async def park(self, write: PendingWrite) -> None:
+        await sync_to_async(self._park, thread_sensitive=True)(write)
+
+    async def claim(self, profile_id: int) -> PendingWrite | None:
+        return await sync_to_async(self._claim, thread_sensitive=True)(profile_id)
+
+    @staticmethod
+    def _owner_of(profile_id: int) -> int | None:
+        return (
+            SocialProfile.objects.filter(pk=profile_id)
+            .values_list("user_id", flat=True)
+            .first()
+        )
+
+    def _load(self, user_id: int) -> TokenSet | None:
+        row = McpAuthAccount.objects.filter(
+            user_id=user_id, account=self.ACCOUNT
+        ).first()
+        if row is None or not row.access_token:
+            return None
+        return TokenSet(
+            access_token=row.access_token,
+            refresh_token=row.refresh_token or None,
+            expires_at=row.expires_at,
+            scopes=tuple(row.scopes),
+            token_type=row.token_type or "Bearer",
+        )
+
+    @staticmethod
+    def _park(write: PendingWrite) -> None:
+        McpPendingWrite.objects.update_or_create(
+            social_profile_id=write.profile_id,
+            defaults={
+                "user_id": write.user_id,
+                "tool": write.tool,
+                "server_tool": write.server_tool,
+                "arguments": dict(write.arguments),
+                "summary": write.summary,
+                "expires_at": write.expires_at,
+            },
+        )
+
+    @staticmethod
+    def _claim(profile_id: int) -> PendingWrite | None:
+        with transaction.atomic():
+            row = (
+                McpPendingWrite.objects.select_for_update(skip_locked=True)
+                .filter(social_profile_id=profile_id)
+                .first()
+            )
+            if row is None:
+                return None
+            write = PendingWrite(
+                user_id=row.user_id,
+                profile_id=profile_id,
+                tool=row.tool,
+                server_tool=row.server_tool,
+                arguments=row.arguments,
+                summary=row.summary,
+                expires_at=row.expires_at,
+            )
+            row.delete()
+        return write
+
+
+def save_google_tokens(user_id: int, tokens: TokenSet) -> None:
+    """Upsert the user's Google grant. A refresh response without a refresh token keeps the old."""
+    existing = McpAuthAccount.objects.filter(
+        user_id=user_id, account=DjangoMcpStore.ACCOUNT
+    ).first()
+    refresh = tokens.refresh_token or (existing.refresh_token if existing else "")
+    McpAuthAccount.objects.update_or_create(
+        user_id=user_id,
+        account=DjangoMcpStore.ACCOUNT,
+        defaults={
+            "access_token": tokens.access_token,
+            "refresh_token": refresh or "",
+            "token_type": tokens.token_type,
+            "scopes": list(tokens.scopes),
+            "expires_at": tokens.expires_at,
+        },
+    )

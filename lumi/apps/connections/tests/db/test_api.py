@@ -149,11 +149,14 @@ def test_every_route_needs_the_token_except_the_callback(env) -> None:
     assert anonymous.get("/api/v1/connections/meta/callback").status_code == 302
 
 
-def test_unknown_provider_is_404_and_google_is_not_implemented_yet(api) -> None:
+def test_unknown_provider_is_404_and_google_asks_for_its_keys(api) -> None:
     assert connect(api, "myspace").status_code == 404
     response = connect(api, "google")
-    assert response.status_code == 501
-    assert response.json()["error"]["code"] == "connections.not_implemented"
+    assert response.status_code == 503
+    assert response.json()["error"]["details"]["env_vars"] == [
+        "GOOGLE_OAUTH_CLIENT_ID",
+        "GOOGLE_OAUTH_CLIENT_SECRET",
+    ]
     assert api.get("/api/v1/connections/myspace/status").status_code == 404
 
 
@@ -411,6 +414,7 @@ def test_status_of_a_provider_with_no_accounts(api) -> None:
         "connected": False,
         "stale": False,
         "accounts": [],
+        "details": {},
     }
 
 

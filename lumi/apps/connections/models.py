@@ -214,6 +214,33 @@ class McpAuthAccount(models.Model):
         ]
 
 
+class McpPendingWrite(models.Model):
+    """A write the model asked for and the user has not confirmed yet.
+
+    One per profile: a newer request replaces the older one. It lives here, not in process
+    memory, so it survives several workers and restarts. The claim is an atomic delete.
+    """
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="mcp_pending_writes",
+    )
+    social_profile = models.OneToOneField(
+        SocialProfile, on_delete=models.CASCADE, related_name="mcp_pending_write"
+    )
+    tool = models.CharField(max_length=200)
+    server_tool = models.CharField(max_length=200)
+    arguments = models.JSONField(db_default={}, default=dict)
+    summary = models.TextField(db_default="", blank=True)
+    created_at = models.DateTimeField(db_default=Now(), editable=False)
+    expires_at = models.DateTimeField()
+
+    class Meta:
+        db_table = "mcp_pending_writes"
+        indexes = [models.Index(fields=["expires_at"], name="ix_mcp_pending_expiry")]
+
+
 class HandleSearchCache(models.Model):
     platform = models.CharField(max_length=20, choices=Platform.choices)
     query_normalized = models.CharField(max_length=100)

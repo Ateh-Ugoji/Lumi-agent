@@ -11,11 +11,14 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 
+import httpx
+
 from apps.core import keys
 
 from .clients.pfm import PfmClient
 from .config import ConnectionsConfig
 from .errors import ProviderAuthError, SocialDataError
+from .mcp.connectors import GOOGLE_TOKEN_URL
 from .providers.registry import build_provider
 
 
@@ -66,6 +69,33 @@ async def probe_pfm() -> Outcome:
     return Outcome("ok", "PFM aceptó el token (lectura gratuita de cuentas)")
 
 
+async def probe_google() -> Outcome:
+    """Send a deliberately wrong code. ``invalid_grant`` proves Google accepted the client."""
+    config = _config()
+    data = {
+        "grant_type": "authorization_code",
+        "code": "lumi-check-keys-invalid-code",
+        "redirect_uri": config.redirect_uri("google"),
+        "client_id": config.google_client_id or "",
+        "client_secret": config.google_client_secret or "",
+    }
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(GOOGLE_TOKEN_URL, data=data)
+        error = response.json().get("error")
+    except Exception as exc:  # noqa: BLE001 - never include the message
+        return Outcome("error", f"sonda de Google falló ({type(exc).__name__})")
+    if error == "invalid_grant":
+        return Outcome(
+            "ok", "Google aceptó el cliente OAuth (rechazó el código de prueba)"
+        )
+    if error in ("invalid_client", "unauthorized_client"):
+        return Outcome("error", "Google rechazó GOOGLE_OAUTH_CLIENT_ID o el secreto")
+    return Outcome(
+        "error", f"respuesta inesperada de Google ({error or response.status_code})"
+    )
+
+
 def probe_xpoz() -> Outcome:
     config = _config()
     count = len(config.xpoz_api_keys)
@@ -87,4 +117,9 @@ def register_all() -> None:
     )
     keys.register("x", probe_x, env_vars=("X_CLIENT_ID", "X_CLIENT_SECRET"))
     keys.register("pfm", probe_pfm, env_vars=("PFM_JWT_TOKEN",))
+    keys.register(
+        "google",
+        probe_google,
+        env_vars=("GOOGLE_OAUTH_CLIENT_ID", "GOOGLE_OAUTH_CLIENT_SECRET"),
+    )
     keys.register("xpoz", probe_xpoz, env_vars=("XPOZ_API_KEY",))
