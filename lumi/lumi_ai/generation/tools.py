@@ -75,6 +75,7 @@ def _view(result: GenerationResult) -> dict[str, Any]:
         notes.append(review.feedback)
     if review.needs_retry and not review.failures:
         notes.append(review.revision_note)
+    ev = review.evaluation
     judge: dict[str, Any] | None = None
     if review.judge_verdict is not None:
         judge = {"verdict": review.judge_verdict, "confidence": review.judge_confidence}
@@ -89,8 +90,21 @@ def _view(result: GenerationResult) -> dict[str, Any]:
         "changes": [{"change": c.change, "reason": c.reason} for c in draft.changes],
         "must_keep_passed": review.must_keep_passed,
         "judge": judge,
-        "needs_review": review.needs_retry or review.judge_source == "none",
-        "notes": notes,
+        "needs_review": (
+            review.needs_retry
+            or review.judge_source == "none"
+            or (ev is not None and ev.judge == "rules")
+        ),
+        "evaluation": None
+        if ev is None
+        else {
+            "decision": ev.decision,
+            "judge": ev.judge,
+            "scores": dict(ev.scores),
+            "reasons": dict(ev.reasons),
+            "style_similarity": ev.style_similarity,
+        },
+        "notes": [*notes, *result.warnings],
         "model": draft.model,
         "provider": draft.provider,
         "tier": draft.tier,

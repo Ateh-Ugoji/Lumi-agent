@@ -132,6 +132,21 @@ class AIConfig:
         0.8  # a "yes" below this confidence is regenerated
     )
 
+    # --- quality gate (uncalibrated starting points: tune them against posts the user really accepted) ---
+    quality_min_criterion: float = (
+        0.5  # any rubric criterion below this means regenerate
+    )
+    quality_pass_mean: float = 0.7  # the mean of the criteria must reach this to pass
+    quality_fail_below: float = (
+        0.3  # the mean, or "no invented facts", below this means fail
+    )
+    quality_min_style_similarity: float = (
+        0.0  # 0 = recorded but not used: the raw cosine has no calibrated scale yet
+    )
+    quality_style_examples: int = (
+        3  # the author's closest posts that style similarity averages
+    )
+
     # --- providers ---
     provider_cooldown_seconds: float = (
         300.0  # after a 401/402/403/429 a candidate rests this long

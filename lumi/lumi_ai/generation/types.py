@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Literal, Protocol
 
+from lumi_ai.evaluation.types import Evaluation
 from lumi_ai.ports import AttemptIn, Platform, Tier
 
 Mode = Literal["repurpose", "topic"]
@@ -60,6 +61,7 @@ class Review:
     )
     needs_retry: bool = False
     revision_note: str = ""  # what the next attempt must fix
+    evaluation: Evaluation | None = None  # set by the quality reviewer
 
 
 class Reviewer(Protocol):

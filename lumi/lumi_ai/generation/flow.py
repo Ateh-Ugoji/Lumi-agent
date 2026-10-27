@@ -12,6 +12,7 @@ from dataclasses import dataclass
 
 from lumi_ai.agent.support import Completer
 from lumi_ai.config import AIConfig
+from lumi_ai.evaluation.evaluator import to_record
 from lumi_ai.generation.context import ContextBuilder
 from lumi_ai.generation.difficulty import ROUTE_TIERS, classify_difficulty
 from lumi_ai.generation.platforms import rules_for
@@ -24,7 +25,14 @@ from lumi_ai.generation.types import (
     Reviewer,
 )
 from lumi_ai.generation.writer import DraftUnusable, Revision, Writer
-from lumi_ai.ports import AttemptIn, AttemptOut, RepurposeStore, SemanticJudge, Tier
+from lumi_ai.ports import (
+    AttemptIn,
+    AttemptOut,
+    EvalStore,
+    RepurposeStore,
+    SemanticJudge,
+    Tier,
+)
 
 log = logging.getLogger(__name__)
 
@@ -38,6 +46,7 @@ class GenerationResult:
     request_id: int
     saved: tuple[AttemptOut, ...]
     outcome: GenerationOutcome
+    warnings: tuple[str, ...] = ()  # e.g. an evaluation that could not be saved
 
     @property
     def attempt(self) -> AttemptOut:
@@ -52,16 +61,22 @@ class GenerationResult:
         return self.outcome.reviews[self.outcome.chosen]
 
 
+_DECISION_RANK = {"fail": 0, "regenerate": 1, "pass": 2}
+
+
 def best_attempt(reviews: list[Review]) -> int:
     """The draft to show: passes the hard checks, then the judge, then the later (revised) one."""
 
-    def score(i: int) -> tuple[bool, bool, bool, float, int]:
+    def score(i: int) -> tuple[bool, bool, int, bool, float, float, int]:
         r = reviews[i]
+        ev = r.evaluation
         return (
             r.must_keep_passed,
             not r.needs_retry,
+            _DECISION_RANK[ev.decision] if ev else 0,
             r.judge_verdict == "yes",
             r.judge_confidence or 0.0,
+            (ev.mean_score or 0.0) if ev else 0.0,
             i,
         )
 
@@ -77,12 +92,14 @@ class GenerationService:
         store: RepurposeStore,
         *,
         judge: SemanticJudge | None = None,
+        evaluations: EvalStore | None = None,
     ) -> None:
         self._writer = Writer(llm)
         self._context = context
         self._reviewer = reviewer
         self._store = store
         self._judge = judge
+        self._evaluations = evaluations
 
     async def run(self, brief: GenerationBrief, config: AIConfig) -> GenerationResult:
         rules = rules_for(brief.platform)
@@ -155,7 +172,33 @@ class GenerationService:
             chosen=best_attempt(reviews),
             context=used,
         )
-        return GenerationResult(request_id, tuple(saved), outcome)
+        warnings = await self._save_evaluations(brief, drafts, reviews, saved)
+        return GenerationResult(request_id, tuple(saved), outcome, tuple(warnings))
+
+    async def _save_evaluations(
+        self,
+        brief: GenerationBrief,
+        drafts: list[Draft],
+        reviews: list[Review],
+        saved: list[AttemptOut],
+    ) -> list[str]:
+        """Evaluations need the attempt ids, so they are saved right after the attempts."""
+        if self._evaluations is None:
+            return []
+        warnings: list[str] = []
+        for draft, review, row in zip(drafts, reviews, saved, strict=True):
+            if review.evaluation is None:
+                continue
+            try:
+                await self._evaluations.save_evaluation(
+                    to_record(brief, draft.text, review.evaluation, row.id)
+                )
+            except Exception as exc:
+                log.exception("evaluation of attempt %s was not saved", row.id)
+                warnings.append(
+                    f"evaluation of attempt {row.attempt_no} was not saved: {exc}"
+                )
+        return warnings
 
     async def _route(self, brief: GenerationBrief) -> Difficulty:
         if brief.mode == "topic" or not brief.source_text:
