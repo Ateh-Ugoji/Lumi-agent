@@ -120,8 +120,8 @@ ARCHITECT monta los `urls.py` de cada app vacíos. El equipo dueño llena el suy
 | --- | --- | --- |
 | `POST /connections/{provider}/connect` | CONNECT | Responde JSON `{authorize_url}` y **no** redirige: una navegación del navegador no puede enviar `Authorization`. El frontend hace el `fetch` y luego `window.location = authorize_url`. |
 | `GET /connections/{provider}/callback` (pública) | CONNECT | El proveedor redirige aquí. Identifica al usuario por la fila de `oauth_states`, no por cabecera. Responde `302` a `FRONTEND_URL`, nunca JSON. |
-| `GET /connections/{provider}/status`, `DELETE /connections/{provider}` | CONNECT | `provider` en `pfm`, `meta`, `linkedin`, `x`, `google`. |
-| `GET /handles/search`, `GET /handles/saved`, `POST /handles/select`, `GET /handles/stats` | CONNECT | El modelo `SocialHandle` es de ARCHITECT. |
+| `GET /connections/{provider}/status`, `DELETE /connections/{provider}` | CONNECT | `provider` en `pfm`, `meta`, `linkedin`, `x`, `google`. El estado trae `provider`, `configured`, `connected`, `stale` y `accounts`, más `details` (objeto opcional con datos del proveedor que no son cuentas; vacío salvo en Google). En Google: `scopes` (lista), `expires_at` (fecha o `null`) y `has_refresh_token` (booleano). Nunca un token. Sin refresh token, la concesión caduca con el access token y el estado sale `stale`. |
+| `GET /handles/search`, `GET /handles/saved`, `POST /handles/select`, `GET /handles/stats` | CONNECT | El modelo `SocialHandle` es de ARCHITECT. `stats` devuelve `live_budget` (tope por ejecución, `XPOZ_RUN_CREDIT_BUDGET`) y `live_budget_by_platform`: objeto `{red: tope}` solo para las redes con búsqueda de usuarios en vivo (hoy `x`, `instagram` y `tiktok`). Cada valor es `XPOZ_RUN_CREDIT_BUDGET_<RED>` si existe y, si no, `live_budget`. |
 | `POST /publish` | CONNECT | Cuerpo con `attempt_id` o texto, `platform`, `dry_run`. Cabecera `Idempotency-Key`. |
 | `POST /voice/transcribe` | INTELLIGENCE | |
 | `POST /repurpose` | INTELLIGENCE | |
@@ -176,10 +176,11 @@ Las apps ajenas declaran `dependencies = [("profiles", "0001_initial")]` (o la q
 | `profiles.0001_initial` | `SocialHandle`, `HandleSnapshot`, `SocialProfile`, `ProfileBaseline`, `PollConfig`, `ListeningKeyword`, `Post`, `PostMedia`, `MetricSnapshot`, `Alert`, `ListeningMatch` | publicada |
 | `core.0001_initial` | `BackgroundJob`, `LegacyImportMap` | T3 |
 | `chat.0001_initial` | `ChatMessage` | T3 |
+| `connections.0001` a `0005` | `0001_initial` (cuentas, estados OAuth, publicaciones, caché y libro de créditos), `0002_account_details_and_state_profile`, `0003_publish_job_attempt_fk`, `0004_mcp_pending_writes`, `0005_provider_google` (añade `google` al CHECK `ck_connected_accounts_provider`) | publicadas (CONNECT) |
 
 Cualquier cambio de esquema posterior va en `0002_*` de la app dueña. Los enums compartidos de `apps/core/choices.py` los cambia ARCHITECT a petición del equipo que los necesite.
 
-`apps.connections` ya está en `INSTALLED_APPS`. Todavía no tiene `models.py` ni migraciones: las crea CONNECT (T3) con dependencias sobre las dos migraciones publicadas.
+`apps.connections` ya está en `INSTALLED_APPS` y tiene sus modelos y migraciones (CONNECT).
 
 ## 7. Utilidades compartidas
 
@@ -265,7 +266,7 @@ Pendiente de otros equipos, sin importador hoy (el `--verify` los marca `sin imp
 | Dueño | Tablas |
 | --- | --- |
 | INTELLIGENCE | `user_search_requests`, `turn_classifications`, `voice_profiles`, `style_answers`, `own_post_analysis`, `post_taggings`, `peer_frameworks`, `niche_framework_reports`, `repurpose_requests`, `repurpose_attempts`, `user_actions` y el texto de `--memory-md` |
-| CONNECT | `mcp_auth_accounts` y las `connected_accounts` de pfm. Lee `profiles.pfm_account_id` del legado por su cuenta, usa `profile_targets(ctx)` y cifra el valor con `EncryptedTextField`. Un id que empieza por `demo-` no crea cuenta. |
+| CONNECT | `mcp_auth_accounts` y las `connected_accounts` de pfm. Lee `profiles.pfm_account_id` del legado por su cuenta, usa `profile_targets(ctx)` y guarda el valor en `connected_accounts.external_account_id` **en claro** (fila 20 de la sección 11). Un id que empieza por `demo-` no crea cuenta. |
 
 ## 11. Desviaciones y choques con el plan o con otros equipos
 
@@ -290,6 +291,7 @@ Pendiente de otros equipos, sin importador hoy (el `--verify` los marca `sin imp
 | 17 | `niche_reports.origin` | **Aceptado.** `varchar(24)` en lugar de `varchar(20)`: `legacy_peer_frameworks` tiene 22 caracteres. `SCHEMA.md` queda corregido. | INTELLIGENCE |
 | 18 | Analytics | **Aceptado por el orquestador.** Los totales suman la lectura más reciente de cada post. El código legado sumaba todas las lecturas y contaba un post varias veces. Las series (`reach_series`, `saves_series`) siguen usando todas las lecturas. Está en la matriz de paridad (`plan/estado/ARCHITECT.md`) con test. | Orquestador |
 | 19 | Importador | **Aceptado**: todo en una transacción (un savepoint por importador) e ids conservados solo en perfiles, posts y chat (sección 10). **Rechazado** perder la lectura de métricas duplicada: cero pérdida verificable; `legacy_import_map` guarda `outcome` y el `payload` de cada fila fusionada u omitida (`SCHEMA.md` 10). | Orquestador |
+| 20 | `connected_accounts.external_account_id` de PFM | **Aceptado.** Va en texto plano, no cifrado. Es el identificador con el que se llama a PFM y la clave del único (`provider`, `external_account_id`), no una credencial: PFM guarda las credenciales. Cifrarlo impediría la restricción única y la búsqueda. Corrige cualquier texto anterior de ARCHITECT que dijera que se cifraba. Los tokens (`access_token`, `refresh_token`) siguen cifrados. | CONNECT |
 
 ## 12. Cómo se pide un cambio
 

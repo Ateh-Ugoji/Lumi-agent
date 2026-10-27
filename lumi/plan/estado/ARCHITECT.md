@@ -39,6 +39,7 @@ Rama: `lumi-orquestador`. Registro de decisiones: `ARCHITECT-decisiones.tsv`.
 - [x] Quitar el plugin `lumi_pytest_env` y su `addopts` (hecho: `DJANGO_SETTINGS_MODULE` en `pyproject.toml`, `conftest.py` omite `live` salvo `LUMI_RUN_LIVE=1`).
 - Ejecutar `collectstatic` en el build de Railway (estáticos del admin con whitenoise).
 - Docker se valida solo como YAML; no hay Docker en la máquina de trabajo.
+- No hay Celery beat todavía: `connections.refresh_expiring` se programa cuando exista beat (T9) y se quita el cron de `manage.py refresh_connections`. Hasta entonces sigue en cron.
 
 ## Matriz de paridad
 
