@@ -30,3 +30,4 @@ ts	phase	decision	why	evidence	result
 2026-10-27T07:08:53Z	mcp	session open moved inside wait_for in _execute	MCP_CALL_TIMEOUT=0 test hung	test_gateway timeout tests	fixed
 2026-10-27T07:16:27Z	T8	importador connections.mcp_auth_accounts (200) y pfm_accounts (210); provider google en 0005; id pfm en external_account_id en claro	external_account_id es la clave única de las llamadas PFM; el id no es un token; cifrar exige duplicarlo	1395 pruebas pasan; mutante demo- muerto	bdd8abe
 2026-10-27T07:19:59Z	T11	media PFM solo con tipo declarado; X sin media hasta MediaKind|None	tipo adivinado seria dato inventado	test_ingest	commit local
+2026-10-27T07:27:23Z	T11	Frontend: cliente unico /api/v1, auth, conexiones, publicar	Un solo cliente evita rutas y errores duplicados; connect_url del servidor marca las tarjetas	typecheck limpio, build ok, 48 tests node (13 nuevos archivos de test)	implementado, falta prueba con Django+Vite
