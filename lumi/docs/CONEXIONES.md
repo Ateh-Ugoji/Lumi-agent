@@ -195,3 +195,26 @@ Las respuestas de prueba (`tests/fixtures/*.json`) están **escritas a mano** a 
 - `stores.py` escribe `SocialHandle` con el ORM porque `apps.profiles.services` (`get_or_create_handle`, `upsert_posts`) aún no existe. Hay que cambiarlo cuando se publique.
 - `PublishJob.external_url` y `HandleSearchCacheEntry.rank` son columnas que añadí a SCHEMA §8 para poder repetir una respuesta y conservar el orden. Falta que ARCHITECT las refleje en `docs/SCHEMA.md`.
 - Borrar `crypto.py` exige que ARCHITECT quite `test_interoperates_with_the_connections_token_cipher` de `apps/core/tests/test_fields.py`.
+- Falta que ARCHITECT monte las rutas: `path("api/v1/", include("apps.connections.urls"))` en `config/urls.py`. Hasta entonces las vistas solo se prueban con un urlconf de pruebas.
+- `0002` añade `platform`, `display_name` y `handle` a `connected_accounts` (PFM necesita saber la red de cada cuenta) y `social_profile_id` a `oauth_states` (para enlazar la cuenta al perfil que se indicó en `connect`). Hay que reflejarlo en SCHEMA §8.
+
+### Rutas de conexión (T5)
+
+Todas bajo `/api/v1/connections/{provider}`, con `provider` en `pfm|meta|linkedin|x`. `google` responde 501 hasta T9.
+
+| Ruta | Qué hace |
+| --- | --- |
+| `POST .../connect` | Cuerpo opcional `profile_id`, `redirect_after`, `platform` (solo PFM). Responde `{"authorize_url"}`. Sin llaves de la app responde 503 `not_configured` con `details.env_vars`. X apagado responde 409 `connections.live_disabled`. |
+| `GET .../callback` | Pública. Siempre 302 al frontend con `?connected=<provider>` o `?error=<código>`. Nunca devuelve JSON ni repite el texto del proveedor. |
+| `GET .../status` | `configured`, `connected`, `stale` y la lista de cuentas sin tokens. En PFM sincroniza antes con `GET /v1/social-accounts?external_id=lumi-user-<id>`. |
+| `DELETE .../{provider}` | Revoca en el proveedor (si falla, borra igual) y borra las filas con sus tokens. `?account_id=` limita a una cuenta. |
+
+Códigos de `?error=`: `connections.state_invalid`, `connections.state_expired`, `connections.access_denied`, `connections.account_taken`, `connections.no_accounts`, `connections.pfm_failed`, `connections.provider_rejected`, `upstream_error`, `internal_error`.
+
+Decisiones:
+
+- Meta guarda una fila por Página, con el token de la Página y sin vencimiento. Solo se enlaza a un perfil si la concesión trae una única cuenta.
+- PFM guarda el id de cuenta de PFM y deja los tokens vacíos, porque PFM conserva los suyos. Usa `external_id = lumi-user-<id>`: PFM rechaza una cuenta que ya tiene otro `external_id`, así que dos usuarios de Lumi no pueden compartir una cuenta de red social. La redirección de PFM no trae `state` de Lumi, por eso el callback de PFM no identifica a nadie y el frontend llama a `status` justo después.
+- La URL de retorno de PFM se configura en su panel (`PUBLIC_BASE_URL/api/v1/connections/pfm/callback`). `redirect_url_override` existe en la API pero no se usa. Sin verificar contra una cuenta real.
+- Renovación: `accounts.refresh_due()` (cola `connections.refresh_expiring` en `tasks.py` y comando `refresh_connections`). Renueva lo que vence en 7 días. Bloquea la fila durante la llamada porque X rota el refresh token. X apagado no envía nada. Falta que ARCHITECT programe la tarea en Celery beat.
+- Sin verificar: `DELETE /me/permissions` de Meta con un token de Página (se guarda el token de Página, no el de usuario).

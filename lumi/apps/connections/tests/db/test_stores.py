@@ -388,3 +388,20 @@ def test_a_failed_live_call_is_not_cached(db) -> None:
     result = async_to_sync(search.search)("karp", platforms="x")
     assert result.reason == "provider_unavailable"
     assert HandleSearchCache.objects.count() == 0
+
+
+def test_oauth_state_carries_the_profile_to_the_callback(user, profile) -> None:
+
+    store = DjangoOAuthStateStore(lambda provider: f"https://t.example/{provider}")
+    record = OAuthStateRecord(
+        state="with-profile",
+        provider="meta",
+        user_id=user.pk,
+        redirect_uri="https://t.example/meta",
+        redirect_after="/",
+        expires_at=datetime.now(UTC) + timedelta(minutes=5),
+        profile_id=profile.pk,
+    )
+    async_to_sync(store.save)(record)
+    got = async_to_sync(store.consume)("with-profile", "meta")
+    assert got is not None and got.profile_id == profile.pk

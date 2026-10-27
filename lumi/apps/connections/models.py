@@ -61,6 +61,10 @@ class ConnectedAccount(TimestampedModel):
     )
     provider = models.CharField(max_length=12, choices=Provider.choices)
     external_account_id = models.CharField(max_length=128)
+    # Network of the account. Needed for pfm, where one provider fronts many networks.
+    platform = models.CharField(max_length=20, db_default="", blank=True)
+    display_name = models.CharField(max_length=200, db_default="", blank=True)
+    handle = models.CharField(max_length=100, db_default="", blank=True)
     status = models.CharField(
         max_length=10, choices=AccountStatus.choices, db_default=AccountStatus.ACTIVE
     )
@@ -109,6 +113,14 @@ class OAuthState(models.Model):
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="oauth_states"
     )
     provider = models.CharField(max_length=12)
+    # Profile the account will be linked to once the callback succeeds.
+    social_profile = models.ForeignKey(
+        SocialProfile,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="oauth_states",
+    )
     code_verifier = EncryptedTextField(db_default="", blank=True)
     redirect_after = models.TextField(db_default="/", blank=True)
     created_at = models.DateTimeField(db_default=Now(), editable=False)

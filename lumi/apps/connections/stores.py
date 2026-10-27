@@ -55,7 +55,7 @@ _CONSUME_SQL = """
 UPDATE oauth_states
    SET consumed_at = now()
  WHERE state = %s AND provider = %s AND consumed_at IS NULL AND expires_at > now()
-RETURNING user_id, provider, code_verifier, redirect_after, expires_at
+RETURNING user_id, provider, code_verifier, redirect_after, expires_at, social_profile_id
 """
 
 
@@ -78,6 +78,7 @@ class DjangoOAuthStateStore:
             state=record.state,
             user_id=record.user_id,
             provider=record.provider,
+            social_profile_id=record.profile_id,
             code_verifier=record.code_verifier or "",
             redirect_after=record.redirect_after,
             expires_at=record.expires_at,
@@ -91,7 +92,7 @@ class DjangoOAuthStateStore:
             row = cursor.fetchone()
         if row is None:
             return None
-        user_id, found_provider, verifier, redirect_after, expires_at = row
+        user_id, found_provider, verifier, redirect_after, expires_at, profile_id = row
         # RETURNING bypasses the field, so the verifier is still ciphertext here.
         return OAuthStateRecord(
             state=state,
@@ -101,6 +102,7 @@ class DjangoOAuthStateStore:
             redirect_after=redirect_after,
             expires_at=expires_at,
             code_verifier=decrypt_value(verifier) if verifier else None,
+            profile_id=profile_id,
         )
 
 

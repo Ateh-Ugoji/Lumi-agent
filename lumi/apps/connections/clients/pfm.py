@@ -197,12 +197,26 @@ class PfmClient:
         )
         return parse_account(body)
 
+    async def disconnect_social_account(self, account_id: str) -> PfmAccount:
+        """Remove the platform tokens PFM holds. The record stays and can be reconnected."""
+        if not account_id:
+            raise ValidationFailed("account_id is required", provider=PROVIDER)
+        body = await self._call("POST", f"/v1/social-accounts/{account_id}/disconnect")
+        return parse_account(body)
+
     async def list_social_accounts(
-        self, *, limit: int = 50, offset: int = 0, platform: str | None = None
+        self,
+        *,
+        limit: int = 50,
+        offset: int = 0,
+        platform: str | None = None,
+        external_id: str | None = None,
     ) -> list[PfmAccount]:
         params: dict[str, Any] = {"limit": limit, "offset": offset}
         if platform:
             params["platform"] = platform
+        if external_id:
+            params["external_id"] = external_id
         body = await self._call(
             "GET", "/v1/social-accounts", params=params, retries=READ_RETRIES
         )

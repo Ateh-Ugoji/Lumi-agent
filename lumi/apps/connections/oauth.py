@@ -53,6 +53,7 @@ class OAuthStateRecord:
     redirect_after: str
     expires_at: datetime
     code_verifier: str | None = field(default=None, repr=False)
+    profile_id: int | None = None
 
 
 class OAuthStateStore(Protocol):
@@ -112,7 +113,11 @@ class OAuthFlow:
         self._clock = clock
 
     async def start(
-        self, user_id: int | str, redirect_after: str | None = None
+        self,
+        user_id: int | str,
+        redirect_after: str | None = None,
+        *,
+        profile_id: int | None = None,
     ) -> AuthorizationRequest:
         name = self._provider.name
         redirect_uri = self._config.redirect_uri(name)
@@ -136,6 +141,7 @@ class OAuthFlow:
                 ),
                 expires_at=self._clock() + STATE_TTL,
                 code_verifier=verifier,
+                profile_id=profile_id,
             )
         )
         return request

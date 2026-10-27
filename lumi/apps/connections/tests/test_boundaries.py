@@ -26,7 +26,16 @@ FORBIDDEN_ROOTS = {
 
 
 # Django glue. Everything else is the pure core and must not import a web framework.
-DJANGO_GLUE = {"apps.py", "models.py", "stores.py"}
+DJANGO_GLUE = {
+    "apps.py",
+    "models.py",
+    "stores.py",
+    "accounts.py",
+    "views.py",
+    "serializers.py",
+    "urls.py",
+    "tasks.py",
+}
 
 
 def _sources() -> list[Path]:
@@ -39,7 +48,10 @@ def test_core_does_not_import_a_web_framework_or_the_legacy_backend() -> None:
     offenders = []
     for path in _sources():
         relative = path.relative_to(PACKAGE)
-        if relative.parts[0] == "migrations" or relative.name in DJANGO_GLUE:
+        if (
+            relative.parts[0] in {"migrations", "management"}
+            or relative.name in DJANGO_GLUE
+        ):
             continue
         for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
             roots: list[str] = []

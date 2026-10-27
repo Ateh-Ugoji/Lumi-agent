@@ -14,7 +14,8 @@ Rama `lumi-orquestador`. Se actualiza en cada reporte.
 | T3 modelos | hecho | 7 modelos, `0001_initial`, almacenes Django y 53 pruebas contra Postgres real. Ida y vuelta de migración y `makemigrations --check` limpios |
 | T7 clientes PFM y Xpoz | hecha (sin red) | Mocks y fixtures. Sin llamadas en vivo. La ingesta a Postgres espera `apps.profiles.services` (T5 de ARCHITECT) |
 | T8 búsqueda de handles | almacén Postgres hecho | Falta la ruta `/handles/*` (T5) |
-| T4 a T12 y T14 | pendientes | `CONTRATOS.md` v1.0 ya está aceptado. Sigue T5 (vistas) |
+| T5 cuentas y rutas de conexión | hecho (sin montar) | `connect`, `callback`, `status`, `DELETE`, renovación. 36 pruebas de API en Postgres real. Falta que ARCHITECT monte `apps.connections.urls` |
+| T4, T6, T9 a T12 y T14 | pendientes | `CONTRATOS.md` v1.0 ya está aceptado. Sigue T6 (publicación) y `/handles/*` |
 
 ## Contrato
 
