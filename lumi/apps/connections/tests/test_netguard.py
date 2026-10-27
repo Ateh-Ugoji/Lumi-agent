@@ -92,3 +92,59 @@ def test_a_test_that_swallows_the_block_still_fails_at_teardown(pytester) -> Non
     result = pytester.runpytest_subprocess("-p", "no:django", "-p", "no:cacheprovider")
     result.assert_outcomes(passed=1, errors=1)
     result.stdout.fnmatch_lines(["*tried to reach the network: 203.0.113.9:443*"])
+
+
+def _run_in_exporter_module(tmp_path, package: str) -> tuple[list, list]:
+    """Call ``socket.getaddrinfo`` from a thread whose stack passes through ``<package>/exporter.py``."""
+    import importlib.util
+    import threading
+
+    module_dir = tmp_path / package
+    module_dir.mkdir(parents=True)
+    (module_dir / "exporter.py").write_text(
+        "import socket\n"
+        "def export(errors):\n"
+        "    try:\n"
+        "        socket.getaddrinfo('ingest.example.com', 443)\n"
+        "    except OSError as error:\n"
+        "        errors.append(type(error).__name__)\n"
+    )
+    spec = importlib.util.spec_from_file_location(
+        f"{package.replace('/', '_')}_exporter", module_dir / "exporter.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    errors: list = []
+    thread = threading.Thread(target=module.export, args=(errors,))
+    thread.start()
+    thread.join()
+    return errors, []
+
+
+@pytest.mark.parametrize("package", ["opentelemetry", "neatlogs"])
+def test_a_tracing_exporter_thread_is_blocked_but_is_not_blamed_on_the_test(
+    net_attempts, tmp_path, package
+) -> None:
+    errors, _ = _run_in_exporter_module(tmp_path, package)
+    assert errors == ["NetworkBlocked"]  # it never reached the network
+    assert net_attempts == []  # and the running test is not failed for it
+
+
+def test_the_same_call_from_any_other_module_is_still_blamed(
+    net_attempts, tmp_path
+) -> None:
+    errors, _ = _run_in_exporter_module(tmp_path, "somelib")
+    assert errors == ["NetworkBlocked"]
+    assert net_attempts == ["ingest.example.com:443"]
+    net_attempts.clear()
+
+
+def test_the_thread_wrapper_that_tracing_adds_does_not_excuse_a_test_thread(
+    net_attempts, tmp_path
+) -> None:
+    errors, _ = _run_in_exporter_module(
+        tmp_path, "opentelemetry/instrumentation/threading"
+    )
+    assert errors == ["NetworkBlocked"]
+    assert net_attempts == ["ingest.example.com:443"]
+    net_attempts.clear()

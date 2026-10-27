@@ -13,12 +13,19 @@ from __future__ import annotations
 
 import ipaddress
 import socket
+import traceback
 from collections.abc import Iterator
 from typing import Any
 
 import pytest
 
 LOOPBACK_NAMES = frozenset({"localhost", "localhost.localdomain"})
+# A tracing exporter that an earlier test (the legacy ``tests/``) started keeps a thread alive and
+# retries its endpoint at any time. It is blocked like any other attempt, but it is not this test's.
+# OpenTelemetry wraps every new thread once tracing is on, so its wrapper frame sits at the
+# bottom of *every* thread's stack. It says nothing about who started the thread.
+THREAD_WRAPPERS = "/opentelemetry/instrumentation/"
+BACKGROUND_EXPORTERS = ("/opentelemetry/", "/neatlogs/")
 
 
 class NetworkBlocked(OSError):
@@ -42,6 +49,16 @@ def _target(address: Any) -> Any:
     return address[0] if isinstance(address, tuple) and address else address
 
 
+def _from_a_background_exporter() -> bool:
+    for frame in traceback.extract_stack():
+        filename = frame.filename.replace("\\", "/")
+        if THREAD_WRAPPERS in filename:
+            continue
+        if any(marker in filename for marker in BACKGROUND_EXPORTERS):
+            return True
+    return False
+
+
 class Guard:
     def __init__(self) -> None:
         self.attempts: list[str] = []
@@ -49,7 +66,8 @@ class Guard:
     def check(self, host: Any, port: Any = None) -> None:
         if is_loopback(host):
             return
-        self.attempts.append(f"{host}:{port}")
+        if not _from_a_background_exporter():
+            self.attempts.append(f"{host}:{port}")
         raise NetworkBlocked(
             f"test tried to reach {host}:{port}; only loopback is allowed"
         )
