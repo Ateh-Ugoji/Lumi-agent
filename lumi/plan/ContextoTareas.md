@@ -2,7 +2,7 @@
 
 Registro de tareas del orquestador (Grok Bot). Cualquier agente que retome este trabajo debe leer este archivo completo y su PLAN antes de actuar, y actualizar lo que le toca al terminar cada tarea.
 
-Última actualización: 2026-10-27 05:36 UTC.
+Última actualización: 2026-10-27 07:15 UTC.
 
 Ubicación: `lumi/plan/` en la rama `lumi-orquestador` (copia de trabajo en `/workspace/lumi-plan/`). Planes por bot en esa misma carpeta: [PLAN_LUMI-ARCHITECT.md](PLAN_LUMI-ARCHITECT.md), [PLAN_LUMI-INTELLIGENCE.md](PLAN_LUMI-INTELLIGENCE.md), [PLAN_LUMI-CONNECT.md](PLAN_LUMI-CONNECT.md). Guías de keys en `lumi/docs/API_KEYS.md` y `lumi/docs/AGENT_KEYS_SETUP.md`.
 
@@ -75,7 +75,7 @@ Del orquestador (cambia lo que decía el borrador anterior):
 | LUMI-INTELLIGENCE | a84a1345-b5b8-4313-8388-58ea71766c79 | `lumi_ai/` (Python puro) y `apps/intelligence/`: agente, proveedores, estilo, competidores, RAG, generación por plataforma, evaluación, video | [PLAN_LUMI-INTELLIGENCE.md](PLAN_LUMI-INTELLIGENCE.md) |
 | LUMI-CONNECT | 4c242e68-4666-4132-ab34-da80d3e2bed4 | `apps/connections/`: OAuth y adaptadores (Facebook, LinkedIn, X, Post for Me), Xpoz, ingesta, handles, MCP de Google; frontend único; e2e; `MUSE.md` | [PLAN_LUMI-CONNECT.md](PLAN_LUMI-CONNECT.md) |
 
-Estado de los bots: **EN PAUSA por orden de Christian** (2026-10-27 05:05 UTC). No reactivarlos hasta que él lo diga.
+Estado de los bots: **ACTIVOS** desde el 2026-10-27 06:00 UTC (los activó Christian).
 
 ### Resumen de cada plan
 
@@ -173,7 +173,7 @@ Cada tarea: responsable, entregable y cómo se verifica. Los detalles y rutas es
 ## Actualización 27 oct 2026, 05:58 UTC: main 62056d4 traído a lumi-orquestador
 - El dueño subió a `main` el commit `62056d4`: agrega `lumi/docs/how-to-setup.md` (guía de instalación local del stack FastAPI actual) y quita el orbe de `AgentThinking` (borra `lumi/frontend/src/components/AgentThinking/WorkingMark.tsx`).
 - El orquestador lo fusionó en `lumi-orquestador` (merge `0f9bd49`, sin conflictos). Antes de empezar, cada bot hace `git pull --rebase origin lumi-orquestador`. Si `main` vuelve a cambiar, el orquestador lo fusiona en la rama.
-- `WorkingMark` NO se porta en la fusión de frontends: el dueño lo quitó a propósito.
+- ~~`WorkingMark` NO se porta~~. **Revertido por el dueño a las 07:09 en `main` `ba305aa`**: el orbe `WorkingMark` vuelve y se conserva (ver actualización de 07:15).
 - `how-to-setup.md` describe el backend FastAPI y SQLite. Cuando el port a Django esté listo, ARCHITECT lo actualiza (Postgres obligatorio, `manage.py`, `check_keys`) y CONNECT actualiza la parte del frontend.
 
 
@@ -189,3 +189,13 @@ Cada tarea: responsable, entregable y cómo se verifica. Los detalles y rutas es
 - **CONNECT:** fase 1 cerrada (frontend fusionado, `MUSE.md`); capa de adaptadores lista (139 tests). T3 espera las migraciones y CONTRATOS.
 - **Pendientes de Christian:** las 5 preguntas de `MUSE.md`, renovar el token de Post for Me (`PFM_JWT_TOKEN`, vencido) y los créditos de Xpoz (casi agotados).
 - **Orquestador:** `API_KEYS.md`, `AGENT_KEYS_SETUP.md` y `DATA_IMPORT.md` alineados a CONTRATOS §8 y §10 y a `.env.example`. Faltan en `.env.example` (INTELLIGENCE debe añadirlas): `GROQ_MODEL_LARGE`, `GROQ_MODEL_SMALL`, `GROQ_MODEL_FALLBACK`, `OPENROUTER_MODEL`, `WHISPER_MODEL`, `PROVIDER_COOLDOWN_SECONDS`, `PROVIDER_COOLDOWN_MAX_SECONDS`, `LLM_TIMEOUT_SECONDS`. Revisión de secretos en el historial: sin secretos reales.
+
+## Actualización 27 oct 2026, 07:15 UTC (revisión horaria)
+
+- **`main` avanzó a `ba305aa`** (dueño, "Revert AgentThinking to the orb version; light up social logos on account steps"): restaura `lumi/frontend/src/components/AgentThinking/WorkingMark.tsx` (el orbe) y su CSS, y en `App.tsx` marca como pasos `social` las tools que recorren la cuenta (`extract_voice_profile`, `get_posts`, `get_user_activity`, `get_analytics`, `check_trending`, `backfill_posts`). El orquestador lo fusionó en `lumi-orquestador` sin conflictos. **Nueva regla: el orbe `WorkingMark` se queda; nadie lo borra.** CONNECT: al integrar React con Django, conservar ese mapeo de pasos `social`.
+- **ARCHITECT** (último commit 07:05, `39999e5`): T1 cerrada (docker compose, tests de arranque reales, `check_keys` live). Rutas `/auth`, `TokenAuthentication`, `IsProfileOwner`; admin solo staff y de solo lectura; OpenAPI pública solo con DEBUG; servicios de perfiles, handles, posts, alertas y escucha con sus rutas; registro de jobs en segundo plano; chat con rutas y SSE con cancelación; trends (matches y scan por el runtime); rutas de `connections` montadas en `api/v1/`; CONTRATOS con puertos 1.7. Pendiente: resto de T4 a T12 (importador, Celery, CI, matriz de paridad). Sin bloqueos.
+- **INTELLIGENCE** (último commit 07:03, `397cd1d`): T0 a T3 hechas; T4 (pegamento Django) en curso con modelos y migración `0001` de `apps/intelligence` (crea `repurpose_attempts`); sondas en `check_keys`; T5 a T7 (estilo, RAG de vectores, competidores) hechas en `lumi_ai`; T8 generación y T9 evaluación hechas en `lumi_ai` (26 casos dorados SINTÉTICOS, `manage.py ai_eval`), falta el guardado real en T4. Puertos 1.7. Pendiente: T10 a T12. **Bloqueos:** (1) T10 vídeo sin fuente de URLs de medios: ni PFM ni Xpoz rellenan `PostIn.media`; opciones: que CONNECT obtenga las URLs con otra llamada del proveedor o que el usuario pegue el enlace; mientras tanto T10 trabaja solo con URL explícita. (2) Instagram cuesta 12 créditos de Xpoz y `XPOZ_RUN_CREDIT_BUDGET` vale 10; el tope vive en el adaptador de CONNECT (subirlo a 12 o hacerlo por plataforma).
+- **CONNECT** (último commit 06:56, `d0b5a45`): T3 modelos hecho (+ `0002` con la FK a `repurpose_attempts`); T5 rutas de conexión (connect, callback, status, DELETE, renovación) hechas y ya montadas por ARCHITECT; T7 clientes PFM y Xpoz sin red; T8 `/handles/search`, `saved`, `select`, `stats`; T6 `POST /api/v1/publish` con `Idempotency-Key`. Pendiente: T4, T9 (MCP Google), T10 a T12, T14. La sección "Bloqueos" de `estado/CONNECT.md` está desactualizada (CONTRATOS y migraciones ya existen).
+- **Datos:** `/workspace/lumi-data/lumi.db` todavía no existe.
+- **Orquestador:** los bots siguen activos (commits cada pocos minutos). Para destrabar dentro de los planes, recomendación: CONNECT decide el presupuesto de Xpoz por plataforma (Instagram ≥ 12) y propone a INTELLIGENCE la fuente de URLs de vídeo. Ninguno de los dos bloqueos necesita a Christian ahora.
+- **Siguen pendientes de Christian:** las 5 preguntas de `MUSE.md`, renovar `PFM_JWT_TOKEN`, créditos de Xpoz, las keys y dejar `lumi.db`.
