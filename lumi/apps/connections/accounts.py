@@ -18,9 +18,10 @@ from datetime import UTC, datetime, timedelta
 from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit, urlunsplit
 
 from asgiref.sync import async_to_sync
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, connection, transaction
 
 from apps.core.errors import ApiError
+from apps.core.fields import TokenDecryptError, decrypt_value
 from apps.core.permissions import get_owned_profile
 
 from .clients.pfm import PfmClient
@@ -341,8 +342,10 @@ def _lock_account(provider: str, external_id: str, user_id: int) -> ConnectedAcc
     the callback). The loser of the unique index hits ``IntegrityError`` in its own savepoint
     and reads the winner's row instead of failing with a 500.
     """
-    rows = ConnectedAccount.objects.select_for_update().filter(
-        provider=provider, external_account_id=external_id
+    rows = (
+        ConnectedAccount.objects.select_for_update()
+        .defer(*TOKEN_COLUMNS)
+        .filter(provider=provider, external_account_id=external_id)
     )
     row = rows.first()
     if row is None:
@@ -391,6 +394,51 @@ def _upsert(
     return row
 
 
+# --- unreadable tokens --------------------------------------------------------
+
+#: Loading a row decrypts these. After a key change they can fail, so any code that does not need
+#: a token reads the row without them, and one bad row never takes a whole request down.
+TOKEN_COLUMNS = ("access_token", "refresh_token")
+UNREADABLE = "TokenDecryptError"
+_LIVE_STATUSES = (AccountStatus.ACTIVE, AccountStatus.LIMITED)
+
+
+def quarantine_unreadable(
+    *, user_id: int | None = None, provider: str | None = None
+) -> int:
+    """Mark live accounts whose tokens no configured key opens as ``error``, so the user can
+    connect them again. Reads the ciphertext straight from the table: nothing is decrypted into
+    the model, and no value is logged. Returns how many rows were marked."""
+    table = ConnectedAccount._meta.db_table
+    sql = f"SELECT id, access_token, refresh_token FROM {table} WHERE status = ANY(%s)"
+    params: list = [[str(s) for s in _LIVE_STATUSES]]
+    if user_id is not None:
+        sql += " AND user_id = %s"
+        params.append(user_id)
+    if provider is not None:
+        sql += " AND provider = %s"
+        params.append(provider)
+    with connection.cursor() as cursor:
+        cursor.execute(sql, params)
+        rows = cursor.fetchall()
+    bad: list[int] = []
+    for pk, access, refresh in rows:
+        try:
+            for value in (access, refresh):
+                if value:
+                    decrypt_value(value)
+        except TokenDecryptError:
+            bad.append(pk)
+    if not bad:
+        return 0
+    logger.warning("%d connected account(s) hold tokens no key opens", len(bad))
+    return ConnectedAccount.objects.filter(
+        pk__in=bad, status__in=_LIVE_STATUSES
+    ).update(
+        status=AccountStatus.ERROR, last_error=UNREADABLE, updated_at=datetime.now(UTC)
+    )
+
+
 # --- status ------------------------------------------------------------------
 
 
@@ -406,7 +454,13 @@ class ProviderStatus:
 
 
 def _google_status(user, configured: bool) -> ProviderStatus:
-    row = McpAuthAccount.objects.filter(user=user, account="google").first()
+    try:
+        row = McpAuthAccount.objects.filter(user=user, account="google").first()
+    except TokenDecryptError:
+        logger.warning("google grant of a user is unreadable")
+        return ProviderStatus(
+            "google", configured, False, False, [], {"unreadable": True}
+        )
     if row is None or not row.access_token:
         return ProviderStatus("google", configured, False, False, [], {})
     expired = row.expires_at is not None and row.expires_at <= datetime.now(UTC)
@@ -439,8 +493,10 @@ def provider_status(user, provider: str) -> ProviderStatus:
             sync_pfm_accounts(user)
         except SocialDataError:
             stale = True
+    quarantine_unreadable(user_id=user.pk, provider=provider)
     accounts = list(
         ConnectedAccount.objects.filter(user=user, provider=provider)
+        .defer(*TOKEN_COLUMNS)
         .select_related("social_profile")
         .order_by("id")
     )
@@ -527,7 +583,7 @@ def disconnect(user, provider: str, *, account_id: str | None = None) -> dict:
             raise ApiError("not_found", "Cuenta no encontrada.", status_code=404)
     revoked = 0
     deleted = 0
-    for row in list(rows):
+    for row in list(rows.defer(*TOKEN_COLUMNS)):
         if _revoke_remote(provider, row):
             revoked += 1
         row.delete()
@@ -562,6 +618,10 @@ def _revoke_remote(provider: str, row: ConnectedAccount) -> bool:
             return True
         outcome = async_to_sync(make_provider(provider).revoke)(token_set(row))
         return bool(outcome.remote_revoked)
+    except TokenDecryptError:
+        # Nothing to revoke with. The user still gets out: the rows are deleted by the caller.
+        logger.warning("tokens unreadable, remote revoke skipped for %s", provider)
+        return False
     except SocialDataError:
         # The user wants out. A remote failure must not keep the tokens here.
         logger.warning("remote revoke failed for %s", provider, exc_info=False)
@@ -583,6 +643,7 @@ def refresh_account(
     with transaction.atomic():
         row = (
             ConnectedAccount.objects.select_for_update(skip_locked=True)
+            .defer(*TOKEN_COLUMNS)
             .filter(pk=account_id)
             .first()
         )
@@ -594,7 +655,14 @@ def refresh_account(
         ):
             return "skipped"
         adapter = factory(row.provider)
-        tokens = token_set(row)
+        try:
+            tokens = token_set(row)
+        except TokenDecryptError:
+            # One unreadable row must not stop the others. The user connects it again.
+            row.status = AccountStatus.ERROR
+            row.last_error = UNREADABLE
+            row.save(update_fields=["status", "last_error", "updated_at"])
+            return "unreadable"
         try:
             fresh = async_to_sync(adapter.refresh)(tokens)
         except LiveDisabled:

@@ -550,7 +550,7 @@ def expiring(user, provider="meta", *, days=2, **extra):
     return ConnectedAccount.objects.create(
         user=user,
         provider=provider,
-        external_account_id=f"{provider}-1",
+        external_account_id=extra.pop("external_account_id", f"{provider}-1"),
         access_token="old-access",
         refresh_token=extra.pop("refresh_token", ""),
         expires_at=timezone.now() + timedelta(days=days),
@@ -611,3 +611,83 @@ def test_refresh_skips_pfm_and_revoked_rows(env, providers, user) -> None:
     expiring(user, "pfm")
     expiring(user, "meta", status=AccountStatus.REVOKED)
     assert accounts.refresh_due() == {}
+
+
+# --- tokens no key opens -------------------------------------------------------
+
+
+def lost_row(settings, user, provider="meta", **kwargs) -> ConnectedAccount:
+    """An account whose tokens were written under a key that is no longer configured."""
+    from cryptography.fernet import Fernet
+
+    current = settings.TOKEN_ENCRYPTION_KEY
+    settings.TOKEN_ENCRYPTION_KEY = Fernet.generate_key().decode()
+    try:
+        return expiring(user, provider, **kwargs)
+    finally:
+        settings.TOKEN_ENCRYPTION_KEY = current
+
+
+def test_one_unreadable_account_does_not_stop_the_refresh_of_the_others(
+    env, providers, user, other_user, settings
+) -> None:
+    env(META_ENV)
+    providers.on("meta", META_TABLE)
+    bad = lost_row(settings, user)
+    good = expiring(other_user, external_account_id="meta-2")
+    assert accounts.refresh_due() == {"refreshed": 1, "unreadable": 1}
+    good.refresh_from_db()
+    assert good.access_token == "meta-long-FAKE"
+    bad = ConnectedAccount.objects.defer(*accounts.TOKEN_COLUMNS).get(pk=bad.pk)
+    assert bad.status == AccountStatus.ERROR and bad.last_error == "TokenDecryptError"
+    # Next run skips it: it is not live any more, and the provider is not asked again.
+    before = len(providers.requests("meta"))
+    assert accounts.refresh_due() == {}
+    assert len(providers.requests("meta")) == before
+
+
+def test_status_answers_when_a_token_is_unreadable_and_asks_to_connect_again(
+    api, env, user, settings
+) -> None:
+    env(META_ENV)
+    lost_row(settings, user)
+    body = api.get("/api/v1/connections/meta/status")
+    assert body.status_code == 200
+    data = body.json()
+    assert data["connected"] is False
+    assert [a["status"] for a in data["accounts"]] == ["error"]
+    assert data["accounts"][0]["last_error"] == "TokenDecryptError"
+    assert "token" not in str(data).lower().replace("tokendecrypterror", "")
+
+
+def test_connecting_again_replaces_an_unreadable_account(
+    env, providers, user, settings
+) -> None:
+    env(META_ENV)
+    lost_row(settings, user, external_account_id="meta-1")
+    accounts.quarantine_unreadable(user_id=user.pk)
+    row = accounts._lock_account("meta", "meta-1", user.pk)
+    row.access_token = "fresh-FAKE"
+    row.status = AccountStatus.ACTIVE
+    row.last_error = ""
+    row.save()
+    again = ConnectedAccount.objects.get(pk=row.pk)
+    assert again.access_token == "fresh-FAKE" and again.status == AccountStatus.ACTIVE
+
+
+def test_an_unreadable_account_can_still_be_disconnected(
+    api, env, providers, user, settings
+) -> None:
+    env(META_ENV)
+    providers.on("meta", META_TABLE)
+    lost_row(settings, user)
+    out = api.delete("/api/v1/connections/meta")
+    assert out.status_code == 200 and out.json()["disconnected"] == 1
+    assert ConnectedAccount.objects.count() == 0
+
+
+def test_a_healthy_account_is_left_alone_by_the_quarantine(user) -> None:
+    row = expiring(user)
+    assert accounts.quarantine_unreadable() == 0
+    row.refresh_from_db()
+    assert row.status == AccountStatus.ACTIVE

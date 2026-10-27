@@ -455,3 +455,27 @@ def test_publishing_is_throttled_per_user(api, fb_profile, page) -> None:
     payload = body(fb_profile, dry_run=True)
     codes = [api.post(URL, payload, format="json").status_code for _ in range(11)]
     assert codes[:10] == [200] * 10 and codes[10] == 429
+
+
+def test_publishing_with_an_unreadable_token_asks_to_reconnect(
+    api, fb_profile, user, settings
+) -> None:
+    from cryptography.fernet import Fernet
+
+    current = settings.TOKEN_ENCRYPTION_KEY
+    settings.TOKEN_ENCRYPTION_KEY = Fernet.generate_key().decode()
+    try:
+        ConnectedAccount.objects.create(
+            user=user,
+            provider="meta",
+            external_account_id="1001",
+            access_token="page-token-FAKE",
+            social_profile=fb_profile,
+        )
+    finally:
+        settings.TOKEN_ENCRYPTION_KEY = current
+    out = post(api, body(fb_profile), **KEY)
+    assert out.status_code == 409
+    assert out.json()["error"]["code"] == "publish.reconnect_required"
+    row = ConnectedAccount.objects.defer("access_token", "refresh_token").get()
+    assert row.status == AccountStatus.ERROR

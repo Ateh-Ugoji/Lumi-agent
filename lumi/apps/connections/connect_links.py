@@ -54,6 +54,7 @@ def _start(profile_id: int, platform: str, handle: str | None) -> ConnectLink:
         ConnectedAccount.objects.filter(
             user_id=profile.user_id, platform=platform, status__in=_LIVE
         )
+        .defer(*accounts.TOKEN_COLUMNS)
         .order_by("id")
         .first()
     )

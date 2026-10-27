@@ -16,6 +16,7 @@ from typing import Any
 from asgiref.sync import async_to_sync
 
 from apps.core.errors import ApiError
+from apps.core.fields import TokenDecryptError
 from apps.core.permissions import get_owned_profile
 from apps.intelligence.models import RepurposeAttempt
 
@@ -65,9 +66,13 @@ def resolve_text(profile, *, text: str | None, attempt_id: int | None, platform:
 
 
 def pick_account(user, profile, provider: str) -> ConnectedAccount:
-    row = ConnectedAccount.objects.filter(
-        user=user, provider=provider, social_profile=profile
-    ).first()
+    try:
+        row = ConnectedAccount.objects.filter(
+            user=user, provider=provider, social_profile=profile
+        ).first()
+    except TokenDecryptError:
+        accounts.quarantine_unreadable(user_id=user.pk, provider=provider)
+        raise _reconnect(provider) from None
     if row is None:
         raise ApiError(
             "publish.not_connected",

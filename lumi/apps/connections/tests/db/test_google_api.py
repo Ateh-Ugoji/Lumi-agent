@@ -321,3 +321,31 @@ def test_a_stranger_cannot_resolve_nothing_for_a_profile_without_a_write(
 ) -> None:
     core = _core(FakeTransport())
     assert async_to_sync(core.resolve_pending)(profile.pk, "yes") is None
+
+
+def _lost_google_grant(settings, user) -> None:
+    from cryptography.fernet import Fernet
+
+    current = settings.TOKEN_ENCRYPTION_KEY
+    settings.TOKEN_ENCRYPTION_KEY = Fernet.generate_key().decode()
+    try:
+        McpAuthAccount.objects.create(
+            user=user, account="google", access_token="a", refresh_token="r"
+        )
+    finally:
+        settings.TOKEN_ENCRYPTION_KEY = current
+
+
+def test_an_unreadable_google_grant_reads_as_not_connected(api, user, settings) -> None:
+    _lost_google_grant(settings, user)
+    out = api.get("/api/v1/connections/google/status")
+    assert out.status_code == 200
+    assert out.json()["connected"] is False
+    assert async_to_sync(DjangoMcpStore().load_tokens)(user.pk) is None
+
+
+def test_connecting_google_again_replaces_an_unreadable_grant(user, settings) -> None:
+    _lost_google_grant(settings, user)
+    save_google_tokens(user.pk, TokenSet(access_token="new", refresh_token="new-r"))
+    row = McpAuthAccount.objects.get(user=user, account="google")
+    assert (row.access_token, row.refresh_token) == ("new", "new-r")

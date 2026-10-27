@@ -24,6 +24,7 @@ from django.db.models import F, Q, Sum
 from django.db.models.functions import Now
 from django.utils import timezone
 
+from apps.core.fields import TokenDecryptError
 from apps.profiles.models import HandleOrigin, SocialHandle, SocialProfile
 
 from .clients.credits import CreditEntry
@@ -564,9 +565,12 @@ class DjangoMcpStore:
         )
 
     def _load(self, user_id: int) -> TokenSet | None:
-        row = McpAuthAccount.objects.filter(
-            user_id=user_id, account=self.ACCOUNT
-        ).first()
+        try:
+            row = McpAuthAccount.objects.filter(
+                user_id=user_id, account=self.ACCOUNT
+            ).first()
+        except TokenDecryptError:
+            return None  # reads as "not connected"; connecting again replaces it
         if row is None or not row.access_token:
             return None
         return TokenSet(
@@ -616,9 +620,16 @@ class DjangoMcpStore:
 
 def save_google_tokens(user_id: int, tokens: TokenSet) -> None:
     """Upsert the user's Google grant. A refresh response without a refresh token keeps the old."""
-    existing = McpAuthAccount.objects.filter(
-        user_id=user_id, account=DjangoMcpStore.ACCOUNT
-    ).first()
+    try:
+        existing = McpAuthAccount.objects.filter(
+            user_id=user_id, account=DjangoMcpStore.ACCOUNT
+        ).first()
+    except TokenDecryptError:
+        # Nothing in it can be kept. Drop the unreadable grant and write the new one.
+        McpAuthAccount.objects.filter(
+            user_id=user_id, account=DjangoMcpStore.ACCOUNT
+        ).delete()
+        existing = None
     refresh = tokens.refresh_token or (existing.refresh_token if existing else "")
     McpAuthAccount.objects.update_or_create(
         user_id=user_id,

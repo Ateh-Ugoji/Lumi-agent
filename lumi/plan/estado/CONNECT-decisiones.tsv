@@ -37,3 +37,4 @@ ts	phase	decision	why	evidence	result
 2026-10-27T07:39:34Z	T8-media	Media de X con kind=None	profiles.0002 ya admite NULL (e016ec0); MediaKind 1.9	ingest.xpoz_media; test de persistencia con upsert_posts real: kind NULL guardado	Hecho en commit aparte
 2026-10-27T08:09:19Z	medio4	external_id PFM aleatorio por usuario (PfmLink), verificacion local y paginacion	el sync confiaba en PFM y el id era adivinable	1636 passed, 1 flaky de ARCHITECT (claim_due_polls)	commit 157dc0b
 2026-10-27T08:34:24Z	MEDIO7	quitar el efecto ?say= de App.tsx	un enlace ?say= enviaba un turno de chat solo (o llevaba a Settings)	e2e 'a ?say= link never sends...' falla con el código viejo y pasa sin él; tsc limpio	listo
+2026-10-27T08:41:52Z	MEDIO 5	token ilegible: defer + cuarentena por fila + rotate_tokens	una clave perdida bloqueaba refresh_due y status con TokenDecryptError	pytest apps lumi_ai 1658 passed; mutantes m5 13/13 muertos (uno reforzado con test de carrera CAS)	ok
