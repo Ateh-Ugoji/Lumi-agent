@@ -1,3 +1,4 @@
+# ruff: noqa: F811
 """``ConnectionLinks`` over the real database, with mocked providers and no network."""
 
 from __future__ import annotations

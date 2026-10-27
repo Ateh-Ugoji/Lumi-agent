@@ -30,9 +30,9 @@ def choose_provider(platform: str) -> str | None:
     """The provider that can connect ``platform`` in this environment, or None."""
     config = accounts.get_config()
     native = NATIVE_PROVIDER.get(platform)
-    if native and not accounts.missing_env(native, config):
-        if native != "x" or config.x_live_enabled:
-            return native
+    native_ready = native and not accounts.missing_env(native, config)
+    if native_ready and (native != "x" or config.x_live_enabled):
+        return native
     if platform in PFM_PLATFORMS and not accounts.missing_env("pfm", config):
         return "pfm"
     return None
