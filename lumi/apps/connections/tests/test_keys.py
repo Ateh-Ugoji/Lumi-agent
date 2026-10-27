@@ -79,3 +79,72 @@ def test_meta_probe_reports_a_rejected_secret_without_the_secret(monkeypatch) ->
     connection_keys.register_all()
     result = keys.run_probe(keys.get_spec("meta"))
     assert result.status == "error" and "s3cr3t" not in result.detail
+
+
+def test_pfm_and_xpoz_are_registered_and_optional() -> None:
+    connection_keys.register_all()
+    specs = {s.name: s for s in keys.all_specs()}
+    assert {"pfm", "xpoz"} <= set(specs)
+    assert not specs["pfm"].required and not specs["xpoz"].required
+    assert specs["pfm"].env_vars == ("PFM_JWT_TOKEN",)
+    assert specs["xpoz"].env_vars == ("XPOZ_API_KEY",)
+
+
+def test_pfm_without_a_token_does_not_probe(monkeypatch) -> None:
+    monkeypatch.delenv("PFM_JWT_TOKEN", raising=False)
+
+    async def boom(self, **kw):
+        raise AssertionError("must not call PFM")
+
+    monkeypatch.setattr(
+        "apps.connections.clients.pfm.PfmClient.list_social_accounts", boom
+    )
+    connection_keys.register_all()
+    result = keys.run_probe(keys.get_spec("pfm"))
+    assert result.status in {"skipped", "error"} and "PFM_JWT_TOKEN" in result.detail
+
+
+def test_pfm_probe_reports_a_rejected_token_without_the_token(monkeypatch) -> None:
+    from apps.connections.errors import ProviderAuthError
+
+    async def reject(self, **kw):
+        raise ProviderAuthError("bad token pfm-s3cr3t-token", provider="pfm")
+
+    monkeypatch.setattr(
+        "apps.connections.clients.pfm.PfmClient.list_social_accounts", reject
+    )
+    monkeypatch.setenv("PFM_JWT_TOKEN", "pfm-s3cr3t-token")
+    connection_keys.register_all()
+    result = keys.run_probe(keys.get_spec("pfm"))
+    assert result.status == "error" and "s3cr3t" not in result.detail
+
+
+def test_pfm_probe_ok_uses_one_read_through_the_mock(monkeypatch) -> None:
+    calls: list[dict] = []
+
+    async def fine(self, **kw):
+        calls.append(kw)
+        return []
+
+    monkeypatch.setattr(
+        "apps.connections.clients.pfm.PfmClient.list_social_accounts", fine
+    )
+    monkeypatch.setenv("PFM_JWT_TOKEN", "t")
+    connection_keys.register_all()
+    assert keys.run_probe(keys.get_spec("pfm")).status == "ok" and calls == [
+        {"limit": 1}
+    ]
+
+
+def test_xpoz_probe_never_touches_the_network_or_spends_credits(monkeypatch) -> None:
+    async def boom(*a, **kw):
+        raise AssertionError("check_keys must not spend Xpoz credits")
+
+    monkeypatch.setattr("apps.connections.clients.xpoz.XpozClient._get", boom)
+    monkeypatch.setattr("httpx.AsyncClient.send", boom)
+    monkeypatch.setenv("XPOZ_API_KEY", "xp-s3cr3t")
+    monkeypatch.setenv("XPOZ_LIVE_ENABLED", "true")
+    connection_keys.register_all()
+    result = keys.run_probe(keys.get_spec("xpoz"))
+    assert result.status == "skipped" and "s3cr3t" not in result.detail
+    assert "1 key" in result.detail and "créditos" in result.detail
