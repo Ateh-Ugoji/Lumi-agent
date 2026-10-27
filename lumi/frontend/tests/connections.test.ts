@@ -69,3 +69,8 @@ test("googleScopeLabels translates known scopes and keeps unknown ones", () => {
   );
   assert.deepEqual(googleScopeLabels(null), []);
 });
+
+test("connectErrorMessage reads a bare contract code the same as the prefixed one", () => {
+  assert.equal(connectErrorMessage("access_denied"), connectErrorMessage("connections.access_denied"));
+  assert.notEqual(connectErrorMessage("access_denied"), connectErrorMessage("whatever"));
+});

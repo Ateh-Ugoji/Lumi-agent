@@ -195,7 +195,8 @@ export async function request<T>(path: string, opts: RequestOptions = {}): Promi
 
 /** Open a response stream (server-sent events). The caller reads `response.body`. */
 export async function openStream(path: string, opts: RequestOptions = {}): Promise<Response> {
-  const res = await send(path, opts, "text/event-stream");
+  // DRF answers 406 to a lone `text/event-stream`, so JSON stays acceptable as a second choice.
+  const res = await send(path, opts, "text/event-stream, application/json;q=0.5");
   if (!res.body) throw new ApiError(res.status, "stream_error", "El servidor no envió datos.");
   return res;
 }

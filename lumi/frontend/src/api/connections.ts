@@ -103,7 +103,8 @@ const RETURN_ERRORS: Record<string, string> = {
 };
 
 export function connectErrorMessage(code: string): string {
-  return RETURN_ERRORS[code] ?? "No se pudo conectar la cuenta.";
+  // CONTRATOS lists the codes bare; the callback sends most of them as `connections.<code>`.
+  return RETURN_ERRORS[code] ?? RETURN_ERRORS[`connections.${code}`] ?? "No se pudo conectar la cuenta.";
 }
 
 /** A message for a failed `startConnect`, naming the missing variables when there are any. */

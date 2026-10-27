@@ -17,7 +17,7 @@ from datetime import UTC, datetime, timedelta
 from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit, urlunsplit
 
 from asgiref.sync import async_to_sync
-from django.db import transaction
+from django.db import IntegrityError, transaction
 
 from apps.core.errors import ApiError
 from apps.core.permissions import get_owned_profile
@@ -310,6 +310,29 @@ def store_accounts(
     return len(infos)
 
 
+def _lock_account(provider: str, external_id: str, user_id: int) -> ConnectedAccount:
+    """The row for (provider, external id), locked, created first when it is missing.
+
+    Two requests can race to create the same account (React renders twice, a double click on
+    the callback). The loser of the unique index hits ``IntegrityError`` in its own savepoint
+    and reads the winner's row instead of failing with a 500.
+    """
+    rows = ConnectedAccount.objects.select_for_update().filter(
+        provider=provider, external_account_id=external_id
+    )
+    row = rows.first()
+    if row is None:
+        try:
+            with transaction.atomic():
+                ConnectedAccount.objects.create(
+                    user_id=user_id, provider=provider, external_account_id=external_id
+                )
+        except IntegrityError:
+            pass
+        row = rows.get()
+    return row
+
+
 def _upsert(
     provider: str,
     adapter: SocialProvider,
@@ -321,17 +344,9 @@ def _upsert(
     own_token = (
         info.access_token is not None and info.access_token != tokens.access_token
     )
-    row = (
-        ConnectedAccount.objects.select_for_update()
-        .filter(provider=provider, external_account_id=info.external_id)
-        .first()
-    )
-    if row is not None and row.user_id != user_id:
+    row = _lock_account(provider, info.external_id, user_id)
+    if row.user_id != user_id:
         raise AccountTaken
-    if row is None:
-        row = ConnectedAccount(
-            user_id=user_id, provider=provider, external_account_id=info.external_id
-        )
     row.platform = getattr(adapter, "platform", provider)
     row.display_name = info.display_name[:200]
     row.handle = (info.handle or "")[:100]
@@ -420,17 +435,9 @@ def sync_pfm_accounts(user) -> int:
     with transaction.atomic():
         for acc in remote:
             seen.add(acc.id)
-            row = (
-                ConnectedAccount.objects.select_for_update()
-                .filter(provider="pfm", external_account_id=acc.id)
-                .first()
-            )
-            if row is not None and row.user_id != user.pk:
+            row = _lock_account("pfm", acc.id, user.pk)
+            if row.user_id != user.pk:
                 continue
-            if row is None:
-                row = ConnectedAccount(
-                    user=user, provider="pfm", external_account_id=acc.id
-                )
             row.platform = acc.platform[:20]
             row.display_name = (acc.username or acc.id)[:200]
             row.handle = (acc.username or "")[:100]
