@@ -68,7 +68,8 @@ PostgreSQL guarda todo texto; **Chroma solo guarda vectores y metadatos de filtr
 3. **Video** (solo con `VIDEO_PROVIDER`): un video por post a etiquetar, ganadores primero, tope `video_max_per_run=5` análisis nuevos; ver §7.
 4. **Etiquetado ciego** (`extract.py`): el modelo ve solo texto (sin métricas ni URL) en lotes de 6 y hasta `peer_max_posts_to_tag=80` posts; un fallo se guarda como etiquetado `failed`.
 5. **Lift** por atributo (`lift.py`) y **síntesis** de frameworks con evidencia que apunta a posts guardados (`synthesize.py`).
-6. **Guardar**: los posts de pares se guardan *antes* que el informe porque `framework_evidence` los referencia. Un informe sin sustento se guarda como `insufficient_data` o `failed`, sin frameworks y con un `detail` honesto; no hay payload enlatado. LinkedIn y Facebook (sin lectura de terceros) se informan como tales.
+6. **Fotos de autor** (`competitors/handles.py`, puerto `HandleBook`): el escaneo guarda en `social_handles` las cuentas leídas y cada autor visto, sin llamadas de pago. Gana la foto ya guardada; la que trae la fuente solo rellena un handle sin foto. Por eso `viral_posts[].avatar_url` prefiere la guardada y usa la de la fuente solo si no hay ninguna, y la respuesta coincide con la base. Si la tabla cae, el escaneo sigue igual.
+7. **Guardar**: los posts de pares se guardan *antes* que el informe porque `framework_evidence` los referencia. Un informe sin sustento se guarda como `insufficient_data` o `failed`, sin frameworks y con un `detail` honesto; no hay payload enlatado. LinkedIn y Facebook (sin lectura de terceros) se informan como tales.
 
 ## 5. Generación (`generation/flow.py`)
 

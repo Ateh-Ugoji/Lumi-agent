@@ -386,12 +386,15 @@ def build(services: CompetitorServices) -> list[ToolSpec]:
         # The accounts read, and every author the posts surfaced (viral or not).
         await remember_scanned(s.handles, plat, list(scanned))
         await remember_authors(s.handles, plat, authors)
-        missing = [f["author"] for f in found if not f["avatar_url"]]
-        if missing:
-            pictures = await known_pictures(s.handles, plat, missing)
+        if found:
+            # The stored photo wins (the table keeps the first one it gets), so the answer shows
+            # what the database holds. The source's photo only stands when nothing is stored.
+            stored = await known_pictures(
+                s.handles, plat, sorted({str(f["author"]) for f in found})
+            )
             for item in found:
-                item["avatar_url"] = item["avatar_url"] or pictures.get(
-                    str(item["author"]).lower(), ""
+                item["avatar_url"] = stored.get(
+                    str(item["author"]).lower(), item["avatar_url"]
                 )
         out: dict[str, Any] = {
             "platform": plat,

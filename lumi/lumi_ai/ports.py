@@ -486,7 +486,9 @@ class HandleBook(Protocol):
 
     A scan fills it and a render reads pictures from it. It is a help layered on the scan, never a
     dependency of it: implementations do not raise, and callers still guard every call. Saving is
-    add-if-absent (a stored picture is never replaced) and spends no paid lookup.
+    add-if-absent and spends no paid lookup: the stored picture wins, and the one a source brings
+    only fills a handle that has none. A render therefore prefers ``pictures`` and falls back to
+    the source's own picture only for a handle with nothing stored.
     """
 
     async def remember_scanned(

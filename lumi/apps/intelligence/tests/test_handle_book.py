@@ -2,14 +2,19 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
-from asgiref.sync import async_to_sync
+from asgiref.sync import async_to_sync, sync_to_async
 
 from apps.connections.handles.directory import HandleDirectory
 from apps.intelligence.repos import HandleBookRepo
+from apps.profiles import services
 from apps.profiles.models import HandleOrigin, SocialHandle
 from lumi_ai.competitors.handles import known_pictures, remember_authors
 from lumi_ai.ports import HandleBook, KnownHandle
+from lumi_ai.tests.competitors.support import make_posts
+from lumi_ai.tests.competitors.test_tools import _call, _services
 
 PHOTO = "https://cdn.example/sama.jpg"
 
@@ -72,3 +77,36 @@ def test_a_table_that_is_down_costs_the_scan_nothing() -> None:
     assert async_to_sync(book.pictures)("x", ["a"]) == {}
     async_to_sync(remember_authors)(book, "x", {"a": KnownHandle("a")})
     assert async_to_sync(known_pictures)(book, "x", ["a"]) == {}
+
+
+@pytest.mark.django_db(transaction=True)
+async def test_the_database_and_the_answer_keep_the_stored_photo_when_the_source_brings_another() -> (
+    None
+):
+    """The handle already has photo X; the scan's posts carry Y. Both the row and the viral post say X."""
+    stored, fresh = PHOTO, "https://cdn.example/fresh.jpg"
+    await sync_to_async(services.get_or_create_handle)(
+        "x", "sama", origin=HandleOrigin.LIVE, avatar_url=stored
+    )
+    posts = [
+        replace(p, author_avatar_url=fresh) for p in make_posts("sama", 3, winners=0)
+    ]
+    registry, *_ = _services({"sama": posts}, handles=HandleBookRepo())
+    out = await _call(registry, "check_niche_trends", handles=["sama"])
+    assert out["new_matches_found"] == 3
+    assert {p["avatar_url"] for p in out["viral_posts"]} == {stored}
+    row = await SocialHandle.objects.aget(platform="x", handle_normalized="sama")
+    assert row.avatar_url == stored
+
+
+@pytest.mark.django_db(transaction=True)
+async def test_a_handle_with_no_stored_photo_takes_the_one_the_source_brings() -> None:
+    fresh = "https://cdn.example/fresh.jpg"
+    posts = [
+        replace(p, author_avatar_url=fresh) for p in make_posts("sama", 2, winners=0)
+    ]
+    registry, *_ = _services({"sama": posts}, handles=HandleBookRepo())
+    out = await _call(registry, "check_niche_trends", handles=["sama"])
+    assert {p["avatar_url"] for p in out["viral_posts"]} == {fresh}
+    row = await SocialHandle.objects.aget(platform="x", handle_normalized="sama")
+    assert row.avatar_url == fresh

@@ -106,23 +106,32 @@ async def test_the_directory_photo_fills_a_viral_post_that_has_none() -> None:
     registry, *_ = _services({"sama": make_posts("sama", 2, winners=0)}, handles=book)
     out = await _call(registry, "check_niche_trends", handles=["sama"])
     assert {p["avatar_url"] for p in out["viral_posts"]} == {PHOTO}
-    assert book.asked == [["sama", "sama"]], "one free lookup, no provider call"
+    assert book.asked == [["sama"]], (
+        "one free lookup for the whole page, no provider call"
+    )
 
 
-async def test_the_photo_the_source_gave_wins_and_nothing_is_asked_when_all_have_one() -> (
-    None
-):
+async def test_the_stored_photo_wins_over_the_one_the_source_gave() -> None:
     posts = [
-        replace(p, author_avatar_url="https://cdn.example/own.jpg")
+        replace(p, author_avatar_url="https://cdn.example/fresh.jpg")
         for p in make_posts("sama", 2, winners=0)
     ]
     book = Book(pictures={"sama": PHOTO})
     registry, *_ = _services({"sama": posts}, handles=book)
     out = await _call(registry, "check_niche_trends", handles=["sama"])
+    assert {p["avatar_url"] for p in out["viral_posts"]} == {PHOTO}
+
+
+async def test_the_source_photo_stands_only_when_nothing_is_stored() -> None:
+    posts = [
+        replace(p, author_avatar_url="https://cdn.example/fresh.jpg")
+        for p in make_posts("sama", 2, winners=0)
+    ]
+    registry, *_ = _services({"sama": posts}, handles=Book(pictures={"other": PHOTO}))
+    out = await _call(registry, "check_niche_trends", handles=["sama"])
     assert {p["avatar_url"] for p in out["viral_posts"]} == {
-        "https://cdn.example/own.jpg"
+        "https://cdn.example/fresh.jpg"
     }
-    assert book.asked == []
 
 
 async def test_a_directory_that_knows_no_photo_leaves_it_empty() -> None:
