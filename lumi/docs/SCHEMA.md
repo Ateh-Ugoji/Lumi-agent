@@ -46,7 +46,7 @@ Reglas del proyecto que el esquema cumple:
 | Texto libre acotado | `varchar(n)` con `n` que sale del dominio (handle 100, plataforma 20). El texto largo es `text`. |
 | Borrado | Ver sección 3. |
 | Índices | Un índice por cada acceso nombrado en `CONTRATOS.md`. Los índices de ordenación usan el orden real (`-created_at`). Los parciales llevan `condition=`. |
-| Restricciones con nombre | `uq_<tabla>_<campos>`, `ck_<tabla>_<regla>`, `ix_<tabla>_<campos>`. Las apps ajenas siguen el mismo patrón. |
+| Restricciones con nombre | `uq_<tabla>_<campos>`, `ck_<tabla>_<regla>`, `ix_<tabla>_<campos>`. Las apps ajenas siguen el mismo patrón. Un índice no puede pasar de 30 caracteres (`models.E034`): se abrevia el nombre, no la regla. |
 | Django 5.2 | `CheckConstraint(condition=...)` (el argumento `check=` está obsoleto). `UniqueConstraint(condition=...)` para únicos parciales. |
 
 ### Plataformas, fuentes y estados compartidos
@@ -142,7 +142,7 @@ Notación: `PK` clave primaria, `FK` clave foránea, `NN` no nulo. "Defecto" es 
 | Columna | Tipo | Reglas |
 | --- | --- | --- |
 | `id` | bigint PK | |
-| `email` | varchar(254) NN | Único sin distinguir mayúsculas: `UniqueConstraint(Lower("email"), name="uq_users_email_lower")`. El servicio guarda el email en minúsculas. |
+| `email` | varchar(254) NN | Único (`unique=True`, que Django exige en `USERNAME_FIELD`) y siempre en minúsculas: `CheckConstraint(email = lower(email), name="ck_users_email_lowercase")`. El servicio guarda el email en minúsculas. |
 | `password` | varchar(128) NN | Hash de Django. Contraseña inutilizable (`!`) en el usuario "importado". |
 | `display_name` | varchar(120) NN | Defecto `''`. |
 | `is_active`, `is_staff`, `is_superuser` | boolean NN | Defectos `true`, `false`, `false`. |
@@ -425,13 +425,13 @@ Las tablas `niche_preferences` (con sus hijas), `generation_evaluations`, `video
 
 ## 8. Tablas de CONNECT (app `connections`)
 
-CONNECT implementa estos modelos. Fijos: nombres de tabla, FK, únicos, y que todo token y verificador PKCE se guarda cifrado con Fernet (`EncryptedTextField`). Dependen de `accounts.0001_initial` (por `AUTH_USER_MODEL`) y `profiles.0001_initial`.
+CONNECT implementa estos modelos. Fijos: nombres de tabla, FK, únicos, y que todo token y verificador PKCE se guarda cifrado con Fernet (`apps.core.fields.EncryptedTextField`, publicado). Dependen de `accounts.0001_initial` (por `AUTH_USER_MODEL`) y `profiles.0001_initial`.
 
 | Tabla (modelo) | Columnas fijas | Restricciones fijas |
 | --- | --- | --- |
 | `connected_accounts` (`ConnectedAccount`) | `user_id` FK `CASCADE`, `social_profile_id` FK `social_profiles` nulo `SET_NULL`, `provider` (`pfm`, `meta`, `linkedin`, `x`), `external_account_id`, `status` (`active`, `expired`, `revoked`, `limited`, `error`), `scopes` text[], `access_token` y `refresh_token` cifrados, `expires_at`, `last_refreshed_at`, `last_error` | Único (`provider`, `external_account_id`). Único parcial (`social_profile`, `provider`) donde `social_profile` no es nulo. Reemplaza a `profiles.pfm_account_id`. |
 | `oauth_states` (`OAuthState`) | `state` varchar(128), `user_id` FK `CASCADE`, `provider`, `code_verifier` cifrado, `redirect_after`, `expires_at`, `consumed_at` nulo | `state` único. El consumo es un `UPDATE ... SET consumed_at = now() WHERE state = %s AND consumed_at IS NULL AND expires_at > now() RETURNING ...`: un solo uso, atómico. |
-| `publish_jobs` (`PublishJob`) | `profile_id` FK `CASCADE`, `connected_account_id` FK `SET_NULL` nulo, `attempt_id` FK `repurpose_attempts` `SET_NULL` nulo, `platform`, `text`, `status`, `external_post_id`, `error`, `idempotency_key`, `dry_run`, `created_at` | Único (`profile`, `idempotency_key`). El plan de CONNECT dice "único"; se acota al perfil para que un usuario no pueda chocar con la clave de otro. |
+| `publish_jobs` (`PublishJob`) | `profile_id` FK `CASCADE`, `connected_account_id` FK `SET_NULL` nulo, `attempt_id` FK `repurpose_attempts` `SET_NULL` nulo, `platform`, `text`, `status` (`pending`, `done`, `failed`, `unknown`; `unknown` = no se sabe si el proveedor publicó), `fingerprint` char(64) (hash del contenido, para detectar un reintento duplicado), `external_post_id`, `error`, `idempotency_key`, `dry_run`, `created_at` | `CHECK` sobre `status` y sobre `char_length(fingerprint) = 64`. Único (`profile`, `idempotency_key`). El plan de CONNECT dice "único"; se acota al perfil para que un usuario no pueda chocar con la clave de otro. |
 | `mcp_auth_accounts` (`McpAuthAccount`) | `user_id` FK `CASCADE`, `account` varchar(40), tokens cifrados, `token_type`, `scopes` text[], `expires_at`, `updated_at` | Único (`user`, `account`). El legado era un único global por `account`. |
 | `handle_search_cache`, `handle_search_cache_entries` | Caché de búsquedas de handles: consulta normalizada, `platform`, `fetched_at`, y filas hijas que apuntan a `social_handles` | Único (`platform`, `query_normalized`) y único (`cache`, `handle`). Sustituye a la colección Chroma de caché con texto. |
 | `mcp_pending_writes`, `xpoz_credit_ledger` | Opcionales. CONNECT decide entre tabla o caché de Django con Redis. Nunca memoria del proceso. | Si son tablas, `user_id` FK `CASCADE`. |

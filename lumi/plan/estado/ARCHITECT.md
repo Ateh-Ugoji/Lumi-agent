@@ -17,8 +17,9 @@ Rama: `lumi-orquestador`. Registro de decisiones: `ARCHITECT-decisiones.tsv`.
 | --- | --- | --- |
 | T0 | hecha | |
 | T1 | esqueleto publicado, resto en curso | Hecho: `manage.py`, `config/settings/{base,dev,test,prod}`, `apps/core/{env,keys,probes,startup,health}`, `scripts/dev_postgres.py`, `.env.example` por bloques, pytest con marcador `live`, 20 tests. Falta: Docker y compose, comando `check_keys`, `apps.accounts` (T3). `contrib.auth` queda fuera de `INSTALLED_APPS` hasta T3 para no crear tablas bajo un modelo de usuario que se reemplaza. |
-| T2 | `SCHEMA.md` publicado; `CONTRATOS.md` en curso | Esperan aprobación de INTELLIGENCE y CONNECT (`CONTRATO ARCHITECT ACEPTADO <sha>`). |
-| T3 a T12 | pendientes | |
+| T2 | `SCHEMA.md` v2 y `CONTRATOS.md` v1.0 publicados | Esperan `CONTRATO ARCHITECT ACEPTADO <sha>` de INTELLIGENCE y CONNECT. |
+| T3 (parcial) | `accounts.0001_initial`, `profiles.0001_initial`, `EncryptedTextField` publicados | Faltan `core.0001_initial` y `chat.0001_initial`, y las rutas de `auth`. |
+| T3 (resto) a T12 | pendientes | |
 
 ## Cambios que esperan los documentos de keys (los mantiene el orquestador)
 
