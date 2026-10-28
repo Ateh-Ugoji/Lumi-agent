@@ -390,7 +390,7 @@ flowchart LR
 - **Tests:** `legacy/tests/test_mcp.py` + `legacy/tests/test_mcp_google_router.py` (32 tests, all seams faked — no sockets, no Google, no credits) + doc-claim gate regressions in `legacy/tests/test_agent_claim_gate.py`. Smoke verified: `/health` 200, `/mcp/google/status` `connected:false` + `configured` flag, `/mcp/google/connect` 503 (client config unset).
 
 
-## Publish from chat -> native providers (audited 2026-10-28 — plan; P4 built, P1-P3 + P5-P7 pending)
+## Publish from chat -> native providers (audited 2026-10-28 — plan; P1 + P4 built, P2-P3 + P5-P7 pending)
 
 The old spine ("Post for Me for everything") is retired: publishing already runs through the
 native provider adapters and PFM's posting call never existed (its local token is expired too).
@@ -405,7 +405,7 @@ flowchart TD
     end
     subgraph BE["Publish path - built today"]
         T -->|"confirm=true + Idempotency-Key"| PA["publish_api.publish_post"]
-        PA --> R["PROVIDER_FOR_PLATFORM - routes.py (P1)"]
+        PA --> R["providers/routes.py - single routes table (P1)"]
         R --> M["providers/meta.py"]
         R --> L["providers/linkedin.py"]
         R --> XE["providers/x.py - X_LIVE_ENABLED=true"]
@@ -426,8 +426,8 @@ flowchart TD
     end
 ```
 
-- **Built:** `POST /api/v1/publish` with `dry_run` + `confirm` + `Idempotency-Key` (`apps/connections/publish_api.py`), per-provider adapters with declared `Capabilities` (`apps/connections/providers/`), provider OAuth connect/callback (`connect_links.py`), Meta read wired for Facebook Pages since R3 (`a534dec`: posts + views of newest 20), CORS allowing `Idempotency-Key` from `:3011`.
-- **Planned P1-P3, P5-P7 (P4 done in `e7bf9d1`):** single routes table (replaces the three duplicated platform-to-provider maps) -> native own-posts/metrics ingestion for the non-Facebook networks (PFM leaves the hot path) -> agent `publish_post` tool (`cost="write"`, `side_effects="external_write"`, never cached; preview sends nothing, confirm calls the existing service) -> bounded auto-refresh of stale metrics -> TikTok provider behind `TIKTOK_LIVE_ENABLED` -> docs sweep.
+- **Built:** `POST /api/v1/publish` with `dry_run` + `confirm` + `Idempotency-Key` (`apps/connections/publish_api.py`), single routes table `providers/routes.py` (P1: platform -> ordered `Route(provider, publish, read)`; feeds publish, connect and PFM-feed validation), per-provider adapters with declared `Capabilities` (`apps/connections/providers/`), provider OAuth connect/callback (`connect_links.py`), Meta read wired for Facebook Pages since R3 (`a534dec`: posts + views of newest 20), CORS allowing `Idempotency-Key` from `:3011`.
+- **Planned P2-P3, P5-P7 (P1 done in this change, P4 in `e7bf9d1`):** native own-posts/metrics ingestion for the non-Facebook networks (PFM leaves the hot path) -> agent `publish_post` tool (`cost="write"`, `side_effects="external_write"`, never cached; preview sends nothing, confirm calls the existing service) -> bounded auto-refresh of stale metrics -> TikTok provider behind `TIKTOK_LIVE_ENABLED` -> docs sweep.
 - **P0 done (2026-10-28):** provider credentials + `X_LIVE_ENABLED=true` in `lumi/.env` (env-only, secrets rule); callbacks still to register per portal as `http://localhost:3011/connections/<provider>/callback`.
 - **Unchanged decisions:** text-only, publish-now-only; X reads stay on Xpoz (per-read pricing); every new tool keeps the anti-fabrication rules below (typed errors, honest no-data, confirm-before-write).
 

@@ -664,7 +664,9 @@ What the audit verified:
 
 **Before any real connect flow:** register the callback `http://localhost:3011/connections/<provider>/callback` (built by `config.redirect_uri`, `apps/connections/config.py:185`) in each developer portal (X, LinkedIn, Meta, Google) — correct keys still fail with a redirect_uri mismatch otherwise. With `X_LIVE_ENABLED=true` every real X publish costs API credits ($0.015/post, $0.20 with link).
 
-**Not built yet (P1-P3, P5-P7):** the single routes table (`providers/routes.py`), native own-posts/metrics ingestion for the non-Facebook networks, the `publish_post` agent tool (preview -> user confirms -> existing publish service), auto-refresh of stale metrics, a TikTok provider, and the docs sweep. **P4 landed the same day (`e7bf9d1`): the SQL `top_posts` tool** (`lumi_ai/tools/data.py`, ranks by latest non-null views/likes/comments/shares with platform, period and top-N filters, local DB only). **The agent still has no publish tool** — publishing today is the REST path only.
+**P1 built (2026-10-28):** the single routes table `apps/connections/providers/routes.py` now owns platform -> ordered `Route(provider, publish, read)`; `publish_api` calls `publish_provider()`, `connect_links` calls `native_provider()` + reads the derived `PFM_PLATFORMS`, and `ingest` imports `PFM_PLATFORMS` — the three duplicated maps (`PROVIDER_FOR_PLATFORM`, `NATIVE_PROVIDER`, both `PFM_PLATFORMS` frozensets) are gone. 7 tests in `apps/connections/tests/test_routes.py`, including a drift check that compares the table against each adapter's own `capabilities()`.
+
+**Not built yet (P2-P3, P5-P7):** native own-posts/metrics ingestion for the non-Facebook networks, the `publish_post` agent tool (preview -> user confirms -> existing publish service), auto-refresh of stale metrics, a TikTok provider, and the docs sweep. **P4 landed the same day (`e7bf9d1`): the SQL `top_posts` tool** (`lumi_ai/tools/data.py`, ranks by latest non-null views/likes/comments/shares with platform, period and top-N filters, local DB only). **The agent still has no publish tool** — publishing today is the REST path only.
 
 ## HTTP Endpoints & Agent Tools
 

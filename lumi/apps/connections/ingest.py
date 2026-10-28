@@ -28,10 +28,11 @@ from typing import Any, cast
 
 from lumi_ai.ports import MediaRef, Platform, PostIn, PostKind, PostMetrics
 
+from .providers.routes import PFM_PLATFORMS
+
 TRUNCATION_MIN_LEN = 270
 TRUNCATION_MAX_LEN = 280
 ACTIVITY_KINDS = frozenset({"reply", "retweet"})
-PFM_PLATFORMS = frozenset({"x", "linkedin", "facebook", "tiktok", "instagram"})
 
 
 def classify_post_kind(caption: str | None) -> str:

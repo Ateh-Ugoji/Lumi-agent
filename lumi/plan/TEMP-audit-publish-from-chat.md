@@ -66,11 +66,19 @@ in the same change as the code.
 - **Verify:** `manage.py check_keys` → `meta/linkedin/x/google` OK (or a typed reason), `pfm`
   failure becomes irrelevant.
 
-### P1. One routes table (`providers/routes.py`) — was R2 of PLAN_REDES-SOCIALES, pulled forward
+### P1. One routes table (`providers/routes.py`) — was R2 of PLAN_REDES-SOCIALES, pulled forward — **done 2026-10-28**
 - Single owner for platform → providers-in-order + capabilities. Replaces
   `PROVIDER_FOR_PLATFORM`, `NATIVE_PROVIDER`, both `PFM_PLATFORMS`.
 - **Verify:** `pytest apps/connections` green untouched; `rg "PROVIDER_FOR_PLATFORM|NATIVE_PROVIDER"`
   finds no duplicated definitions.
+- **Result:** `ROUTES` maps platform → ordered `Route(provider, publish, read)`;
+  `publish_api` calls `publish_provider()`, `connect_links` calls `native_provider()`
+  + the derived `PFM_PLATFORMS`, `ingest` imports `PFM_PLATFORMS`. Verify run:
+  `pytest apps/connections` → **877 passed, 2 skipped** (the single `test_keys`
+  failure is pre-existing and `.env`-driven — stash-verified against the base
+  commit, unrelated to routing); `grep` finds no duplicated definition left, only
+  prose mentions. 7 new tests in `tests/test_routes.py`, including a drift check
+  that compares the table against each adapter's own `capabilities()`.
 
 ### P2. Native own-posts + metrics ingestion (replaces "read from the feed")
 - Extend `OwnPostSync` to dispatch per routes table: `meta.fetch_posts/fetch_metrics` (already
