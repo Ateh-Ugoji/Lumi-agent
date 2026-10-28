@@ -1457,6 +1457,31 @@ Goal: check that **every table in the database is actually used**, list the ones
 
 **Done when:** the report is committed, every table has a line saying used or not used with evidence (file:line and row count), and each unused table has a proposed endpoint or a proposed decision. Known candidates to look at first: tables created for features that are only partly wired (Post for Me posts and metric snapshots beyond views, `chat_conversations` once Block C exists, listening and peer-framework tables, ingest passes, `UserAction` and request tables).
 
+## Project status: what is done and what comes next (snapshot 2026-10-27, branch `lumi-orquestador`)
+
+Same working mode as above: this is a snapshot, add new dated snapshots below it instead of editing old ones. Sources: `git log`, `plan/ContextoTareas.md`, `plan/PLAN_REDES-SOCIALES.md` section 8, `plan/decisions.tsv`. Note: the phase checkboxes in `plan/ContextoTareas.md` (lines ~135-160) are not ticked even though the code for those tasks exists in the branch; trust the code and the test run over those boxes, and tick them when the audit confirms each one.
+
+**Done (verified by running it):**
+- **Local run.** Django/DRF + PostgreSQL backend (uvicorn, port 8000) and React/Vite frontend (port 3010) start locally; `/health` is ok. Local Postgres via pgserver; a Docker `postgres:16` also works.
+- **Tests.** `apps/connections` and `apps/intelligence`: 1,020 passed, 2 skipped. Known failures that only happen on Windows (subprocess environment, cp1252 encoding, a timer in the SSE test) are left as they are.
+- **Handover phases 0-2** from the TRASPASO section: legacy FastAPI moved to `lumi/legacy`, paths repointed, docs and baseline recorded.
+- **Agent resilience (Block A of the memory plan).** Short 429s are waited out (`_rate_limit_wait`), the `remember` tool was removed (the background extractor writes memory), `recall_memory` is the only memory tool. Memory across chats works through the rolling summary (checked live with an empty history).
+- **Frontend.** Clear English errors in the chat when the agent does not answer (HTML replies, silent or cut stream); selects readable in dark mode.
+- **Connections.** Facebook connected through Meta (a Page, not a personal profile; the Page "Sean Labs" is active). CORS now allows the `Idempotency-Key` header so the publish screen can reach the server. The error for a Facebook login with no Pages explains the Page requirement.
+- **Credentials policy.** Social-network app credentials live only in `.env` / Railway, documented in `docs/API_KEYS.md` and `docs/CONEXIONES.md`. A database credentials table was built and then reverted on purpose.
+- **R3 (Facebook read through Meta).** Posts and views of the 20 newest posts are stored with `source=meta`; tested with a mocked Graph and checked live once (3 posts stored for the Page, views 1, 1 and 2). Likes, comments and shares stay `NULL`.
+- **Plans written.** `plan/PLAN_REDES-SOCIALES.md` (provider and capability split) and, in this file, the next steps for Post for Me and the database-table audit.
+
+**Not done / open:**
+- **Chat reliability on the Groq free tier.** The system prompt is about 11,700 tokens and the limit is 8,000 tokens per minute, so tool turns fail with 429 or 413 and the context trimmer drops older messages. Task A2 (slim prompt and tools) needs a golden evaluation first.
+- **Memory plan Blocks B and C.** B: semantic dedupe of notes (`dedupe_memory`). C: a separate history per chat (`chat_conversations`, `conversation_id`, API, frontend, contract updates).
+- **Social network plan.** R0 (decisions with Christian), R1 (revalidate the Meta API against official docs), R2 (single routes table), R4-R8 (publish media, comments, agent tools by action, LinkedIn and YouTube, docs and security review). The owner's decision of 2026-10-27 (Post for Me for everything, text only) changes the order: see the Post for Me section above.
+- **Real publish never exercised** by the owner; it needs a test account and explicit permission.
+- **Draft PR** `lumi-orquestador` -> `main` is not open; it needs Christian's OK. Nothing is merged to `main`.
+- **Blocks needing other people:** a Post for Me account and API key (nobody has created them yet), the App Review / Business Verification of Meta to publish for third parties, Christian's decisions in section 6 of the social plan.
+
+**Recommended order from here:** (1) Post for Me, step 1 `publish_post` tool with preview and confirmation, built against the mocked transport; (2) steps 2-5 of that section; (3) the database-table audit, which is read-only and can run in parallel; (4) A2 and Blocks B-C before any demo, because without them the chat fails under the token limit; (5) tick the stale boxes in `plan/ContextoTareas.md` and open the Draft PR when Christian agrees. One commit per step, tests with the HTTP transport mocked, nothing live without the owner's permission, no force-push, nothing to `main`.
+
 ## Entire code graph
 
 The repo has the entire-graph code graph installed (`.entire/graph-agent.md`). For locate/fix/change tasks, prefer:
