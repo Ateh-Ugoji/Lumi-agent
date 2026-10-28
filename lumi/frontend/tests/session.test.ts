@@ -29,8 +29,8 @@ test("clearLocalSession tolerates blocked storage", () => {
 });
 
 test("authErrorMessage explains the three common failures", () => {
-  assert.match(authErrorMessage(new ApiError(409, "conflict", "x"), "register"), /Ya existe/);
-  assert.match(authErrorMessage(new ApiError(401, "unauthenticated", "x"), "login"), /incorrectos/);
-  assert.match(authErrorMessage(new ApiError(429, "rate_limited", "x"), "login"), /Demasiados/);
+  assert.match(authErrorMessage(new ApiError(409, "conflict", "x"), "register"), /already exists/);
+  assert.match(authErrorMessage(new ApiError(401, "unauthenticated", "x"), "login"), /Incorrect email or password/);
+  assert.match(authErrorMessage(new ApiError(429, "rate_limited", "x"), "login"), /Too many attempts/);
   assert.match(authErrorMessage(new ApiError(0, "network_error", "sin red"), "login"), /sin red/);
 });
