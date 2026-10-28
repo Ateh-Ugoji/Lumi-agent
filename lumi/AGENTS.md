@@ -1443,6 +1443,20 @@ Goal set by the owner: in the Lumi chat, in plain language, the user can (1) **p
 
 **Known blockers that affect this work:** the Groq free-tier limit (8,000 tokens per minute) makes turns with tools fail with 429/413 (the prompt is about 11,700 tokens); slimming it (task A2, needs a golden evaluation) and the per-chat history split (Blocks B and C) are pending. A real publish is an outward-facing action: only with the owner's explicit permission, on a test account.
 
+## Next step: audit which database tables are in use (asked by the owner 2026-10-27)
+
+Goal: check that **every table in the database is actually used**, list the ones that are not, and prepare the endpoints so that the unused data can be worked on later from the interface. This is an audit first; it changes no table and deletes nothing.
+
+**How to do it (plan first, as the MANDATORY WORKING PROCESS says):**
+1. **List the tables.** From the Django models (`apps/*/models.py`, `lumi_ai`) and from the live schema (`\dt` on the dev database), so a table that exists in one and not the other also shows up. Keep the list in `docs/` (or `plan/`) as a table: name, app, what it holds.
+2. **For each table, find who writes it and who reads it.** Search the code for the model name and the table name: services, repositories (`apps/intelligence/repos`), agent tools (`lumi_ai/tools`), management commands, background jobs, serializers and views. Use `entire graph search` / `entire graph impact` first, as the Entire code graph section says. Record the file and line for each writer and reader.
+3. **Classify each table:** used end to end (written and read, reachable from an endpoint or the agent); written but never read (data is collected and nobody shows it); read but never written (nothing fills it); not touched at all (dead or planned).
+4. **Check the data too, not only the code.** Count rows per table on the dev database. A table with code but zero rows after normal use is suspect (for example a path that never runs).
+5. **Collect the result** in a short report: the list of tables that are not fully used, why, and a proposal per table (add an endpoint, wire it into the agent, fill it from an existing flow, or retire it by the team's decision). Do not drop or migrate anything in this task.
+6. **For each table that needs an endpoint,** add it to the backlog with the contract the interface will need (path, method, auth, request and response shape), following `docs/CONTRATOS.md` and the endpoint rules of this file (an agent tool is preferred when the chat can do the job). Implementation of those endpoints is a later task, each one with its own tests.
+
+**Done when:** the report is committed, every table has a line saying used or not used with evidence (file:line and row count), and each unused table has a proposed endpoint or a proposed decision. Known candidates to look at first: tables created for features that are only partly wired (Post for Me posts and metric snapshots beyond views, `chat_conversations` once Block C exists, listening and peer-framework tables, ingest passes, `UserAction` and request tables).
+
 ## Entire code graph
 
 The repo has the entire-graph code graph installed (`.entire/graph-agent.md`). For locate/fix/change tasks, prefer:
