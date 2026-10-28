@@ -1415,6 +1415,33 @@ The biggest finding: **the codebase has moved well past the docs, and nearly eve
 - **`alembic/README`** is the generic one-liner stub ("Generic single-database configuration with an async dbapi.") — no project-specific migration guidance beyond CLAUDE.md/CONTRIBUTING.
 - **Current git state**: branch `main` (the `ateh` branch this file once described is gone); 205 tracked files; recent history shows aggressive post-hackathon feature growth (trends router, SSE streaming, Xpoz client, analytics, monorepo merge) that none of the docs reflect.
 
+## Next steps: Post for Me from natural language (agreed 2026-10-27)
+
+Goal set by the owner: in the Lumi chat, in plain language, the user can (1) **publish** a post, (2) **read the views** of their posts, and (3) ask **which post is the most viewed**. The work is in the Django backend (`lumi/apps/connections` and `lumi/lumi_ai`); the Post for Me API is the provider for these three. Read `plan/PLAN_REDES-SOCIALES.md` (provider and capability split) and `docs/CONEXIONES.md` first; follow the MANDATORY WORKING PROCESS above (plan first, then code, then docs in the same change).
+
+**What already exists (verified 2026-10-27):**
+- Reading: `backfill_posts` runs `DjangoOwnPostSync`; Facebook goes through Meta (R3, stores views only), every other network through Post for Me (`collect_own_posts`, `GET /v1/social-account-feeds/{id}`).
+- Publishing: the REST publish flow with `dry_run`, `confirm` and `Idempotency-Key` (`apps/connections/publishing.py`, `publish_api.py`). **The agent has no tool to publish.**
+- Agent data tools: `get_posts`, `get_analytics`, `get_user_activity`. There is no tool that ranks posts by views.
+
+**What the Post for Me API offers (read from its OpenAPI spec, `https://api.postforme.dev/docs/json`, v1.0):** `POST /v1/social-posts` (caption, media, `scheduled_at`, `isDraft`, per-network settings), `PUT`/`DELETE /v1/social-posts/{id}`, `GET /v1/social-post-results` (per-network outcome and error), `POST /v1/social-post-previews`, `POST /v1/media/create-upload-url`, `GET /v1/social-account-feeds/{id}?expand=metrics` (posts with metrics), webhooks. Metrics per network: Facebook (reach, media_views, reactions, comments, shares, video metrics), Instagram (likes, comments, views, reach, saved, shares), X (impressions, likes, retweets, replies), LinkedIn (impressions, likes, comments, shares), YouTube (views, likes, minutes watched), TikTok (views, likes, comments, shares). It has **no** comments endpoint, no direct messages, no ads, and no account-level metrics (followers, page reach).
+
+**Steps, in order (one commit per step, tests with the HTTP transport mocked, no live call without the owner's permission):**
+1. **Agent tool `publish_post`** (cost `write`, side effects external). Two-step by design: first call runs the existing `dry_run` and returns the preview; the post goes out only after the user confirms in the chat and the tool is called again with `confirm=true` and an idempotency key. The model must never publish on the first message. Add the tool to the right tier in `turn_class.py` (`CLASS_ALLOWED`) and keep the prompt small (Groq free tier: 8,000 tokens per minute).
+2. **Route publishing through Post for Me** for the networks Meta/LinkedIn/X do not cover natively, and keep the native provider first where a native connection exists (as `connect_links` does). Create the post with `POST /v1/social-posts`, then read `GET /v1/social-post-results` to report the outcome per network; never report success from the create call alone.
+3. **Store more metrics from the feed.** `expand=metrics` already returns likes, comments, shares and views per network; map them into `metric_snapshots` (Facebook currently stores views only through Meta). Missing values stay `NULL`, never `0`.
+4. **Agent tool `top_posts`** (read-only): rank the user's stored posts by views (or likes/comments) for a platform and period, return the top N with caption, link and numbers. Answers "which is my most viewed post". The ranking is done in SQL, not by the model.
+5. **Natural-language wiring**: make `backfill_posts` refresh automatically when the stored data is older than a set time (or tell the user how old it is), so "how did my posts do?" works without asking to sync first. Add cases to `lumi_ai/tests` golden set for: publish with confirmation, "most viewed post", "views of my last posts", a network with no data yet.
+6. **Docs in the same change**: `docs/CONEXIONES.md`, `docs/AI.md` (new tools), `plan/ContextoTareas.md`, `plan/decisions.tsv`, this file's tool list.
+
+**Assumptions to confirm with the owner before step 2 (open questions):**
+- Which networks go through Post for Me first (the owner has Facebook connected through Meta, X through its own provider)? Default: Post for Me only where no native connection exists.
+- Is scheduling (`scheduled_at`) and editing/deleting a published post part of this round, or only publish now? Default: publish now only.
+- Photos and videos need the media upload endpoint; is text-only enough for the first version? Default: text first, media in a later step.
+- Post for Me is a paid service with the app-level `PFM_JWT_TOKEN` in `.env` only (SECRETS RULE); confirm the account and plan to use before any live publish.
+
+**Known blockers that affect this work:** the Groq free-tier limit (8,000 tokens per minute) makes turns with tools fail with 429/413 (the prompt is about 11,700 tokens); slimming it (task A2, needs a golden evaluation) and the per-chat history split (Blocks B and C) are pending. A real publish is an outward-facing action: only with the owner's explicit permission, on a test account.
+
 ## Entire code graph
 
 The repo has the entire-graph code graph installed (`.entire/graph-agent.md`). For locate/fix/change tasks, prefer:
