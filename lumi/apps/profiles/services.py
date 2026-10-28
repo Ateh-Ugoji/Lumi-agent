@@ -16,7 +16,7 @@ from urllib.parse import urlsplit
 
 from asgiref.sync import sync_to_async
 from django.db import connection, transaction
-from django.db.models import F, Q
+from django.db.models import BigIntegerField, F, OuterRef, Q, Subquery
 from django.utils import timezone
 
 from apps.core.choices import Platform, PostKind
@@ -48,6 +48,7 @@ from lumi_ai.ports import (
     PostMetrics,
     PostOut,
     ProfileInfo,
+    RankedPostOut,
 )
 
 __all__ = [
@@ -502,6 +503,49 @@ def list_posts(
         queryset = queryset.filter(published_at__gte=since)
     posts = list(queryset.order_by("-published_at", "-id")[: max(limit, 0)])
     return _post_outs(posts, {found[0]: profile_id})
+
+
+def rank_posts(
+    profile_id: int,
+    *,
+    metric: str = "views",
+    platform: str | None = None,
+    since: datetime | None = None,
+    limit: int = 5,
+) -> list[RankedPostOut]:
+    """Rank own original posts by their latest non-null stored metric in SQL."""
+    if metric not in {"views", "likes", "comments", "shares"}:
+        raise ValueError(f"Unsupported post metric: {metric}")
+    found = _handle_ids(profile_id)
+    if found is None or (platform is not None and platform != found[1]):
+        return []
+    metric_value = (
+        MetricSnapshot.objects.filter(
+            post_id=OuterRef("pk"), **{f"{metric}__isnull": False}
+        )
+        .order_by("-captured_at", "-pk")
+        .values(metric)[:1]
+    )
+    queryset = _posts_queryset().filter(
+        author_id=found[0],
+        kind=PostKind.ORIGINAL,
+        is_stub=False,
+        is_deleted_suspect=False,
+    )
+    if since is not None:
+        queryset = queryset.filter(published_at__gte=since)
+    ranked = list(
+        queryset.annotate(
+            _rank_value=Subquery(metric_value, output_field=BigIntegerField())
+        )
+        .filter(_rank_value__isnull=False)
+        .order_by("-_rank_value", "-published_at", "-pk")[: max(0, min(int(limit), 20))]
+    )
+    posts = _post_outs(ranked, {found[0]: profile_id})
+    return [
+        RankedPostOut(post=post, metric=metric, value=int(row._rank_value))  # type: ignore[arg-type]
+        for row, post in zip(ranked, posts, strict=True)
+    ]
 
 
 def get_posts(

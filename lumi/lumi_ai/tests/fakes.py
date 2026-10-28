@@ -21,6 +21,7 @@ from lumi_ai.ports import (
     PeerPostOut,
     PostMetrics,
     PostOut,
+    RankedPostOut,
     StyleAnswerIn,
     UserRequestOut,
     VoiceProfileOut,
@@ -87,6 +88,26 @@ class FakePosts:
 
     async def get_posts(self, post_ids):
         return [p for p in self.posts if p.id in set(post_ids)]
+
+    async def rank_posts(
+        self, profile_id, *, metric="views", platform=None, since=None, limit=5
+    ):
+        rows = []
+        for post in self.posts:
+            if post.profile_id != profile_id or post.kind not in (None, "original"):
+                continue
+            if platform is not None and post.platform != platform:
+                continue
+            if since is not None and post.published_at < since:
+                continue
+            value = getattr(post.metrics, metric, None) if post.metrics else None
+            if value is not None:
+                rows.append(RankedPostOut(post=post, metric=metric, value=value))
+        rows.sort(
+            key=lambda row: (row.value, row.post.published_at, row.post.id),
+            reverse=True,
+        )
+        return rows[:limit]
 
     async def list_activity(self, profile_id, *, kind=None, limit=50):
         self.calls.append(("list_activity", kind))

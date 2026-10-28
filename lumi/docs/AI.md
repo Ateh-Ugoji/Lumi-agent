@@ -1,8 +1,12 @@
 # Cómo funciona la IA de Lumi
 
 Paquete Python puro `lumi/lumi_ai/` (no importa Django; lo comprueba `lumi_ai/tests/test_boundaries.py`) más el pegamento Django en
-`lumi/apps/intelligence/`. Todo colaborador entra por un puerto (`lumi_ai/ports.py`, `PORTS_VERSION` 1.12); PostgreSQL vía ORM es el único
-almacén transaccional. Los valores de umbrales y modelos salen de `AIConfig` (`lumi_ai/config.py`), que se llena con `AIConfig.from_env()`.
+`lumi/apps/intelligence/`. Todo colaborador entra por un puerto (`lumi_ai/ports.py`, `PORTS_VERSION` 1.13); PostgreSQL vía ORM es el único
+ almacén transaccional. Los valores de umbrales y modelos salen de `AIConfig` (`lumi_ai/config.py`), que se llena con `AIConfig.from_env()`.
+
+## Herramientas de publicaciones propias
+
+`top_posts` responde qué publicaciones propias tuvieron más vistas, me gusta, comentarios o compartidos. Recibe red, periodo y límite; `PostRepo` delega en `apps.profiles.services.rank_posts`, que ordena en PostgreSQL usando la última métrica conocida no nula de cada publicación original. Los valores desconocidos se excluyen, nunca se convierten en cero. Solo consulta datos ya guardados: no llama a Meta, Post for Me ni otro proveedor y no actualiza publicaciones. `get_analytics` sigue atendiendo preguntas agregadas.
 
 ## 1. Un turno del agente (`agent/loop.py`)
 

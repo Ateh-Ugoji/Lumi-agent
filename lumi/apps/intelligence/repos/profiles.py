@@ -38,6 +38,7 @@ from lumi_ai.ports import (
     PostMetrics,
     PostOut,
     ProfileInfo,
+    RankedPostOut,
 )
 
 logger = logging.getLogger(__name__)
@@ -141,6 +142,20 @@ class PostRepo:
             since=since,
             limit=limit,
             include_deleted=include_deleted,
+        )
+
+    @aio
+    def rank_posts(
+        self,
+        profile_id: int,
+        *,
+        metric: str = "views",
+        platform: str | None = None,
+        since: datetime | None = None,
+        limit: int = 5,
+    ) -> list[RankedPostOut]:
+        return services.rank_posts(
+            profile_id, metric=metric, platform=platform, since=since, limit=limit
         )
 
     @aio

@@ -4,6 +4,8 @@ Autor LUMI-CONNECT. Datos revalidados el 2026-10-27 contra las páginas oficiale
 
 ## Reglas de diseño
 
+La herramienta conversacional `top_posts` lee publicaciones y métricas ya almacenadas para ordenarlas. No llama a proveedores ni refresca datos. Las métricas no registradas no se cuentan como cero.
+
 - Un solo contrato, `SocialProvider`, con cuatro proveedores: `meta`, `linkedin`, `x` y `pfm`.
 - OAuth 2.0 con código de autorización. PKCE siempre que el proveedor lo acepta, y obligatorio en X.
 - El `state` de OAuth vive en PostgreSQL (`OAuthState`), se usa una sola vez y caduca. Nunca en memoria del proceso.

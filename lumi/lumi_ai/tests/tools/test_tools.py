@@ -34,6 +34,7 @@ def test_a_tool_without_its_port_is_not_registered():
         "get_posts",
         "get_user_activity",
         "get_analytics",
+        "top_posts",
         "get_voice_profile",
         "answer_style_questions",
     ]
@@ -51,7 +52,7 @@ def test_full_wiring_registers_the_twelve_port_backed_tools():
     )
     assert sorted(build_registry(deps).names) == sorted(
         [
-            "get_posts", "get_user_activity", "get_analytics", "connect_account", "backfill_posts",
+            "get_posts", "get_user_activity", "get_analytics", "top_posts", "connect_account", "backfill_posts",
             "save_user_request", "get_voice_profile", "answer_style_questions",
             "start_listening", "stop_listening", "dismiss_alert", "submit_action",
         ]
@@ -114,6 +115,37 @@ async def test_get_analytics_uses_the_28_day_window_and_the_injected_clock():
     frozen = {s.name: s for s in build(posts, clock_now=lambda: NOW)}["get_analytics"]
     result = await frozen.handler(CTX)
     assert result["posts_in_window"] == 1 and result["profile_id"] == 1
+
+
+async def test_top_posts_ranks_stored_posts_and_filters_metric_platform_and_period():
+    posts = FakePosts(
+        [
+            make_post(1, "higher likes", views=5, likes=20, platform="facebook"),
+            make_post(2, "higher views", views=100, likes=3, platform="facebook"),
+            make_post(
+                3, "old", views=1000, likes=100, days_ago=90, platform="facebook"
+            ),
+            make_post(4, "other network", views=900, likes=90, platform="instagram"),
+            make_post(5, "unknown", views=None, likes=None, platform="facebook"),
+        ]
+    )
+    registry = build_registry(ToolDeps(posts=posts))
+    out = await run(
+        registry, "top_posts", metric="likes", platform="facebook", period_days=28
+    )
+    assert [p["post_id"] for p in out["posts"]] == [1, 2]
+    assert out["posts"][0]["value"] == 20
+    assert out["posts"][0]["metric"] == "likes"
+    assert out["source"] == "stored_metrics"
+
+
+async def test_top_posts_empty_result_explains_unknown_metrics_are_not_zero():
+    registry = build_registry(
+        ToolDeps(posts=FakePosts([make_post(1, views=None, likes=None)]))
+    )
+    out = await run(registry, "top_posts", metric="views")
+    assert out["posts"] == []
+    assert "never treated as zero" in out["note"]
 
 
 # --- account ------------------------------------------------------------------------

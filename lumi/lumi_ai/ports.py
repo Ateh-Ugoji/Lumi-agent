@@ -38,7 +38,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Literal, Protocol, get_args, runtime_checkable
 
-PORTS_VERSION = "1.12"  # 1.1: SemanticJudge, 1.2: OwnPostSync, 1.3: AttemptIn.is_fallback, EvaluationRecord.attempt_id required, 1.4: MemoryStore.touch_notes, save_voice model/prompt_version, 1.5: tool_call_id, report query/peers, repurpose mode/brief, user request platform, 1.6: MatchStore, 1.7: create_request_with_attempts(source_post_id=), 1.8: create_request_with_attempts(evaluations=) + EvaluationIn, 1.9: MediaRef.kind may be None (type unknown), 1.10: VideoAnalysisStore, 1.11: author_avatar_url on PostIn/PeerPostIn/PeerPostOut, 1.12: HandleBook + KnownHandle
+PORTS_VERSION = "1.13"  # 1.1: SemanticJudge, 1.2: OwnPostSync, 1.3: AttemptIn.is_fallback, EvaluationRecord.attempt_id required, 1.4: MemoryStore.touch_notes, save_voice model/prompt_version, 1.5: tool_call_id, report query/peers, repurpose mode/brief, user request platform, 1.6: MatchStore, 1.7: create_request_with_attempts(source_post_id=), 1.8: create_request_with_attempts(evaluations=) + EvaluationIn, 1.9: MediaRef.kind may be None (type unknown), 1.10: VideoAnalysisStore, 1.11: author_avatar_url on PostIn/PeerPostIn/PeerPostOut, 1.12: HandleBook + KnownHandle, 1.13: PostStore.rank_posts + RankedPostOut
 
 # ---------------------------------------------------------------------------
 # Shared vocabulary
@@ -122,6 +122,15 @@ class PostOut:
     media: tuple[MediaRef, ...] = ()
     is_deleted_suspect: bool = False
     text_truncated: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class RankedPostOut:
+    """A stored post ranked by one latest known metric."""
+
+    post: PostOut
+    metric: Literal["views", "likes", "comments", "shares"]
+    value: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -413,6 +422,18 @@ class PostStore(Protocol):
         include_deleted: bool = False,
     ) -> list[PostOut]:
         """Return posts newest first; ``kinds=None`` means originals only."""
+        ...
+
+    async def rank_posts(
+        self,
+        profile_id: int,
+        *,
+        metric: Literal["views", "likes", "comments", "shares"] = "views",
+        platform: Platform | None = None,
+        since: datetime | None = None,
+        limit: int = 5,
+    ) -> list[RankedPostOut]:
+        """Rank own posts by their latest reported metric, highest first."""
         ...
 
     async def get_posts(self, post_ids: Sequence[int]) -> list[PostOut]:

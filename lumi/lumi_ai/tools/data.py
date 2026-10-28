@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta
 from statistics import median
 from typing import Any
 
-from lumi_ai.ports import ActivityOut, PostOut, PostStore
+from lumi_ai.ports import ActivityOut, PostOut, PostStore, RankedPostOut
 from lumi_ai.tools.registry import ToolContext, ToolSpec
 
 ANALYTICS_WINDOW_DAYS = 28
@@ -32,6 +32,20 @@ def _activity_dict(item: ActivityOut) -> dict[str, Any]:
         "platform": item.platform,
         "caption": item.text,
         "published_at": item.published_at.isoformat(),
+    }
+
+
+def _ranked_post_dict(item: RankedPostOut, rank: int) -> dict[str, Any]:
+    post = item.post
+    return {
+        "rank": rank,
+        "post_id": post.id,
+        "platform": post.platform,
+        "caption": post.text[:CAPTION_CHARS],
+        "published_at": post.published_at.isoformat(),
+        "metric": item.metric,
+        "value": item.value,
+        "url": post.url,
     }
 
 
@@ -151,6 +165,45 @@ def build(posts: PostStore, *, clock_now: Any = None) -> list[ToolSpec]:
             )
         return result
 
+    async def top_posts(
+        ctx: ToolContext,
+        metric: str = "views",
+        platform: str | None = None,
+        period_days: int = ANALYTICS_WINDOW_DAYS,
+        limit: int = TOP_POSTS,
+    ) -> dict[str, Any]:
+        metric = (
+            metric if metric in {"views", "likes", "comments", "shares"} else "views"
+        )
+        period_days = max(1, min(int(period_days), 3650))
+        limit = max(1, min(int(limit), 20))
+        if platform not in {None, "x", "linkedin", "facebook", "instagram", "tiktok"}:
+            platform = None
+        rows = await posts.rank_posts(
+            ctx.profile_id,
+            metric=metric,  # type: ignore[arg-type]
+            platform=platform,  # type: ignore[arg-type]
+            since=now() - timedelta(days=period_days),
+            limit=limit,
+        )
+        result: dict[str, Any] = {
+            "profile_id": ctx.profile_id,
+            "metric": metric,
+            "period_days": period_days,
+            "platform": platform,
+            "posts": [
+                _ranked_post_dict(row, index) for index, row in enumerate(rows, 1)
+            ],
+            "count": len(rows),
+            "source": "stored_metrics",
+        }
+        if not rows:
+            result["note"] = (
+                f"No stored posts with a reported {metric} value in this period. "
+                "Missing metrics are unavailable, never treated as zero."
+            )
+        return result
+
     return [
         ToolSpec(
             name="get_posts",
@@ -208,5 +261,38 @@ def build(posts: PostStore, *, clock_now: Any = None) -> list[ToolSpec]:
                 },
             },
             handler=get_analytics,
+        ),
+        ToolSpec(
+            name="top_posts",
+            description=(
+                "Rank the profile's stored original posts by their latest reported views, likes, "
+                "comments or shares. Use for questions asking which post performed best or for a "
+                "top-post ranking. Supports platform and period filters. Reads the local database "
+                "only; it does not refresh or call social APIs. Unknown metrics are excluded, not zero."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "profile_id": {
+                        "type": "integer",
+                        "description": "Omit; uses the current profile.",
+                    },
+                    "metric": {
+                        "type": "string",
+                        "enum": ["views", "likes", "comments", "shares"],
+                        "default": "views",
+                    },
+                    "platform": {
+                        "type": "string",
+                        "enum": ["x", "linkedin", "facebook", "instagram", "tiktok"],
+                    },
+                    "period_days": {
+                        "type": "integer",
+                        "default": ANALYTICS_WINDOW_DAYS,
+                    },
+                    "limit": {"type": "integer", "default": TOP_POSTS},
+                },
+            },
+            handler=top_posts,
         ),
     ]

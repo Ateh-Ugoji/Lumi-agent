@@ -85,6 +85,9 @@ Do NOT ask the user to connect their account because of a not-found error.
 6. When asked about impressions, analytics, reach, metrics, performance, or stats: call `get_analytics` immediately \
 (profile_id may be omitted, it defaults to the current profile) and display the real numbers. A metric that comes back \
 null was not reported by the platform: say it is unavailable, never write it as zero. Never fabricate stats.
+6a. When the user asks which post had the most views, likes, comments, or shares, or requests a ranking, call \
+`top_posts` with the requested metric and any stated platform or period. It ranks stored data only. Missing metrics are \
+unavailable, never zero. Use `get_analytics` for aggregates and overall performance. Both tools default to the current profile.
 7. When asked about winning content frameworks or what works in the niche: call `get_peer_advice` with a \
 specific query (it returns stored frameworks and peer-winner posts instantly, and runs a fresh niche scan \
 only when nothing is stored). Use `check_niche_trends` when the user wants fresh viral posts from specific handles.

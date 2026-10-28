@@ -342,6 +342,10 @@ Se retoma desde TRASPASO en Windows 11 (Node 22.13, Python 3.12 vía uv). Reglas
 
 ## Plan de redes sociales: acciones de Meta y separación por proveedor (27 oct 2026)
 
+### Implementación local de `top_posts` (27 oct 2026)
+
+En `lumi-orquestador`, se añadió la herramienta conversacional `top_posts`: consulta las publicaciones originales guardadas y ordena en PostgreSQL por la última métrica conocida (vistas, me gusta, comentarios o compartidos). Acepta red, periodo y límite; omite métricas desconocidas en vez de tratarlas como cero. No hace llamadas a APIs ni refresca publicaciones. Pruebas enfocadas: 19 unitarias y 35 de integración pasaron. Cambios locales, sin push.
+
 Plan completo en `lumi/plan/PLAN_REDES-SOCIALES.md`. Idea central: se separa por **proveedor** (meta, linkedin, x, google/YouTube, pfm) y por **capacidad** (publicar, programar, editar y borrar, comentarios, métricas). Hoy "qué proveedor sirve a qué red" está escrito en tres sitios (`publish_api.py`, `connect_links.py`, `ingest.py`); R2 lo deja con un solo dueño. Las herramientas del agente reciben `platform` y no conocen a Meta, así YouTube y LinkedIn entran sin tocar el agente.
 
 - [ ] **R0** ARCHITECT: decisiones con Christian (qué primero, Instagram, Messenger/anuncios/Threads/WhatsApp, YouTube, banderas) y contrato en `CONTRATOS.md`. Verificación: `CONTRATO REDES ACEPTADO <sha>` de CONNECT e INTELLIGENCE.

@@ -731,6 +731,48 @@ def test_analytics_query_count_is_constant(profile_id, handle_id):
     assert len(big) == len(small)
 
 
+def test_rank_posts_orders_in_database_and_omits_missing_metrics(profile_id, handle_id):
+    services.upsert_posts(
+        handle_id,
+        [
+            post_in(
+                "rank-1", text="most likes", metrics=PostMetrics(views=20, likes=90)
+            ),
+            post_in(
+                "rank-2", text="most views", metrics=PostMetrics(views=200, likes=10)
+            ),
+            post_in(
+                "rank-old",
+                text="old",
+                published_at=T0 - timedelta(days=60),
+                metrics=PostMetrics(views=900, likes=900),
+            ),
+            post_in("rank-none", text="unknown", metrics=None),
+            post_in(
+                "rank-reply", kind="reply", metrics=PostMetrics(views=9999, likes=9999)
+            ),
+        ],
+    )
+    views = services.rank_posts(
+        profile_id, metric="views", since=T0 - timedelta(days=28)
+    )
+    assert [(row.post.text, row.value) for row in views] == [
+        ("most views", 200),
+        ("most likes", 20),
+    ]
+
+    likes = services.rank_posts(
+        profile_id, metric="likes", since=T0 - timedelta(days=28)
+    )
+    assert [(row.post.text, row.value) for row in likes] == [
+        ("most likes", 90),
+        ("most views", 10),
+    ]
+    assert services.rank_posts(profile_id, metric="views", platform="instagram") == []
+    with pytest.raises(ValueError, match="Unsupported post metric"):
+        services.rank_posts(profile_id, metric="bookmarks")
+
+
 # ------------------------------------------------------------------ threads
 
 
