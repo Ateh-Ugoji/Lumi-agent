@@ -389,6 +389,46 @@ flowchart LR
 - **Endpoints:** `GET /mcp/google/connect` · `GET /mcp/google/callback` · `GET /mcp/google/status` (`connected` + `configured` — documented in `.agents/api-endpoints.md`). Frontend: **Settings → Connectors** shows live Google status (configured gate, scope list, expiry, Connect/Reconnect); composer typing `#` opens the doc menu (`#doc` → "Create a new Google Doc about ", `#drive` → "List my 5 most recently modified Google Drive files") — prefills an editable prompt, never auto-sends.
 - **Tests:** `legacy/tests/test_mcp.py` + `legacy/tests/test_mcp_google_router.py` (32 tests, all seams faked — no sockets, no Google, no credits) + doc-claim gate regressions in `legacy/tests/test_agent_claim_gate.py`. Smoke verified: `/health` 200, `/mcp/google/status` `connected:false` + `configured` flag, `/mcp/google/connect` 503 (client config unset).
 
+
+## Publish from chat -> native providers (audited 2026-10-28 — plan; P1+ not built)
+
+The old spine ("Post for Me for everything") is retired: publishing already runs through the
+native provider adapters and PFM's posting call never existed (its local token is expired too).
+Audit + ordered plan P0-P7: `plan/TEMP-audit-publish-from-chat.md`.
+
+```mermaid
+flowchart TD
+    subgraph CHAT["Chat - P3 planned"]
+        U["User: post this to X"] --> T["publish_post tool - not built"]
+        T -->|"preview - dry_run - nothing sent"| U
+        U -->|"confirmed"| T
+    end
+    subgraph BE["Publish path - built today"]
+        T -->|"confirm=true + Idempotency-Key"| PA["publish_api.publish_post"]
+        PA --> R["PROVIDER_FOR_PLATFORM - routes.py (P1)"]
+        R --> M["providers/meta.py"]
+        R --> L["providers/linkedin.py"]
+        R --> XE["providers/x.py - X_LIVE_ENABLED=true"]
+        R -.-> TT["providers/tiktok.py (P6)"]
+        M --> FB[("Facebook")]
+        L --> LI[("LinkedIn")]
+        XE --> XX[("X")]
+        TT -.-> TT2[("TikTok")]
+    end
+    subgraph RD["Own-posts & metrics - P2 goes native"]
+        BF["backfill_posts / get_analytics"] --> OS["DjangoOwnPostSync"]
+        OS -->|"today"| PFMf["PfmClient feed - token expired"]
+        OS -->|"P2"| NAT["fetch_posts / fetch_metrics per provider<br/>Meta ready - LinkedIn scope-gated - X via Xpoz"]
+        NAT --> POSTS[("posts + metric_snapshots")]
+        POSTS --> TP["top_posts SQL ranking (P4)"]
+    end
+```
+
+- **Built:** `POST /api/v1/publish` with `dry_run` + `confirm` + `Idempotency-Key` (`apps/connections/publish_api.py`), per-provider adapters with declared `Capabilities` (`apps/connections/providers/`), provider OAuth connect/callback (`connect_links.py`), Meta read adapters (implemented, still no caller), CORS allowing `Idempotency-Key` from `:3011`.
+- **Planned P1-P7:** single routes table (replaces the three duplicated platform-to-provider maps) -> native own-posts/metrics ingestion (PFM leaves the hot path) -> agent `publish_post` tool (`cost="write"`, `side_effects="external_write"`, never cached; preview sends nothing, confirm calls the existing service) -> SQL `top_posts` (latest snapshot per post, NULL-safe) -> bounded auto-refresh of stale metrics -> TikTok provider behind `TIKTOK_LIVE_ENABLED` -> docs sweep.
+- **P0 done (2026-10-28):** provider credentials + `X_LIVE_ENABLED=true` in `lumi/.env` (env-only, secrets rule); callbacks still to register per portal as `http://localhost:3011/connections/<provider>/callback`.
+- **Unchanged decisions:** text-only, publish-now-only; X reads stay on Xpoz (per-read pricing); every new tool keeps the anti-fabrication rules below (typed errors, honest no-data, confirm-before-write).
+
 ## Anti-fabrication invariants
 
 1. System prompt forbids invented stats/URLs; profile context is injected per request.

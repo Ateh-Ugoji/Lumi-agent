@@ -648,6 +648,24 @@ Added `RetweetContext` (RT originals had no model); `ReplyContext.lang`; `Commen
 
 ---
 
+
+## Publish from chat -> direct providers (audited 2026-10-28)
+
+The handed-over plan was "Post for Me for everything (publish, read posts, metrics)". Audited against the code and against the direct LinkedIn/X/TikTok/Meta credentials we now hold, it is re-planned as **direct providers, Post for Me retired as the router**. Full audit + ordered plan (P0-P7, each with owner and verification): `plan/TEMP-audit-publish-from-chat.md`.
+
+What the audit verified:
+
+- Publishing was **already native**: `apps/connections/publish_api.py:43` routes `facebook->meta`, `linkedin->linkedin`, `x->x`; PFM's posting call was never built (`publish_api.py` docstring) and the local `PFM_JWT_TOKEN` is expired (`check_keys`: `FALLA pfm`).
+- Reading own posts is the one PFM-bound path: `backfill_posts` -> `apps/connections/own_post_sync.py` -> `clients/pfm.py` (task P2 replaces it with per-provider `fetch_posts`/`fetch_metrics`).
+- Meta's `fetch_posts`/`fetch_metrics` are implemented and tested but have **no production caller** (R3 landed the adapter, not the wiring).
+- X reads stay on Xpoz by decision (`providers/x.py` — per-read pricing); LinkedIn reads need the restricted `r_member_social` (an account without it is `limited` and the agent says so); TikTok has no native provider yet.
+
+**P0 done (2026-10-28).** `lumi/.env` now carries `META_APP_ID/SECRET`, `LINKEDIN_CLIENT_ID/SECRET`, `X_CLIENT_ID/SECRET`, `GOOGLE_OAUTH_CLIENT_ID/SECRET`, staged `TIKTOK_CLIENT_ID/SECRET/APP_ID` and `X_LIVE_ENABLED=true` (values live only in the environment, per the secrets rule; the previous file is kept as `.env.bak-20261028-033834`, untracked). `check_keys`: meta OK, google OK, LinkedIn/X unprobed by design. Local stack verified: Django `127.0.0.1:8001`, Vite `:3011`, CORS already allows `:3011` including the `Idempotency-Key` header.
+
+**Before any real connect flow:** register the callback `http://localhost:3011/connections/<provider>/callback` (built by `config.redirect_uri`, `apps/connections/config.py:185`) in each developer portal (X, LinkedIn, Meta, Google) — correct keys still fail with a redirect_uri mismatch otherwise. With `X_LIVE_ENABLED=true` every real X publish costs API credits ($0.015/post, $0.20 with link).
+
+**Not built yet (P1-P7):** the single routes table (`providers/routes.py`), native own-posts/metrics ingestion, the `publish_post` agent tool (preview -> user confirms -> existing publish service), SQL `top_posts` ranking, auto-refresh of stale metrics, a TikTok provider, and the docs sweep. **The agent still has no publish tool** — publishing today is the REST path only.
+
 ## HTTP Endpoints & Agent Tools
 
 Analysis covers `lumi/app/routers/*.py`, `lumi/app/tools/*.py`, `.agents/api-endpoints.md`, `docs/routers.md`, `docs/tools.md`
