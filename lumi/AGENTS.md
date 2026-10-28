@@ -1434,11 +1434,12 @@ Goal set by the owner: in the Lumi chat, in plain language, the user can (1) **p
 5. **Natural-language wiring**: make `backfill_posts` refresh automatically when the stored data is older than a set time (or tell the user how old it is), so "how did my posts do?" works without asking to sync first. Add cases to `lumi_ai/tests` golden set for: publish with confirmation, "most viewed post", "views of my last posts", a network with no data yet.
 6. **Docs in the same change**: `docs/CONEXIONES.md`, `docs/AI.md` (new tools), `plan/ContextoTareas.md`, `plan/decisions.tsv`, this file's tool list.
 
-**Assumptions to confirm with the owner before step 2 (open questions):**
-- Which networks go through Post for Me first (the owner has Facebook connected through Meta, X through its own provider)? Default: Post for Me only where no native connection exists.
-- Is scheduling (`scheduled_at`) and editing/deleting a published post part of this round, or only publish now? Default: publish now only.
-- Photos and videos need the media upload endpoint; is text-only enough for the first version? Default: text first, media in a later step.
-- Post for Me is a paid service with the app-level `PFM_JWT_TOKEN` in `.env` only (SECRETS RULE); confirm the account and plan to use before any live publish.
+**Decisions by the owner (2026-10-27) — these replace the earlier assumptions:**
+- **Post for Me is the provider for everything for now: publish, read posts and get metrics, on every network.** The native providers (Meta, LinkedIn, X) stay in the code but are not the route the agent uses in this round. This changes two things already built: R3 (Facebook read through Meta, `own_post_sync.py`) currently wins over Post for Me when a Page is connected, and `connect_links`/`publish_api` put the native provider first; in step 2 the route table must make Post for Me first for these actions, and the change must be logged in `plan/decisions.tsv` as a reversal of that order. Do not delete the native code.
+- **Text only** in this round. Photos and videos (media upload endpoint) come later.
+- **Publish now only (default; the owner did not ask for more, confirm if that changes).** Scheduling, editing and deleting a published post are not part of this round.
+- **There is no Post for Me account or API key yet.** Someone on the team has to create the account and generate the API key (the app-level `PFM_JWT_TOKEN`). Until then nothing can run live: build everything against the mocked HTTP transport (as the existing tests do) and do not ask the owner to paste the key in chat. When the key exists it goes only in `lumi/.env` and in the Railway variables (SECRETS RULE; see `docs/API_KEYS.md`). The owner and the team still have to decide which plan to pay for (Post for Me is a paid service); record that decision in `plan/decisions.tsv`.
+- **Blocker before any live test:** the account and key above, the social accounts connected through Post for Me (its `auth-url` flow, not the Meta login), and the owner's explicit permission for the first real publish, on a test account.
 
 **Known blockers that affect this work:** the Groq free-tier limit (8,000 tokens per minute) makes turns with tools fail with 429/413 (the prompt is about 11,700 tokens); slimming it (task A2, needs a golden evaluation) and the per-chat history split (Blocks B and C) are pending. A real publish is an outward-facing action: only with the owner's explicit permission, on a test account.
 
