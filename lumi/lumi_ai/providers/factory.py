@@ -12,7 +12,12 @@ from openai import AsyncOpenAI
 from lumi_ai import observability
 from lumi_ai.config import AIConfig
 from lumi_ai.providers.chain import LLMChain, ProviderSpec, UsageSink
-from lumi_ai.providers.urls import GROQ_BASE_URL, OPENLUX_BASE_URL, OPENROUTER_BASE_URL
+from lumi_ai.providers.urls import (
+    GEMINI_OPENAI_BASE_URL,
+    GROQ_BASE_URL,
+    OPENLUX_BASE_URL,
+    OPENROUTER_BASE_URL,
+)
 
 ClientFactory = Callable[[str, str, float], object]
 
@@ -64,7 +69,7 @@ def loop_local(factory: ClientFactory = _openai_client) -> ClientFactory:
 def build_provider_specs(
     config: AIConfig, client_factory: ClientFactory = _openai_client
 ) -> list[ProviderSpec]:
-    """Providers with a key, in order: OpenLux (optional), Groq, OpenRouter."""
+    """Providers with a key, in order: OpenLux (optional), Groq, Gemini, OpenRouter."""
     timeout = config.llm_timeout_seconds
     specs: list[ProviderSpec] = []
 
@@ -88,6 +93,13 @@ def build_provider_specs(
         config.groq_api_key,
         GROQ_BASE_URL,
         (config.groq_model_large, config.groq_model_fallback),
+    )
+    add(
+        "gemini",
+        config.gemini_api_key,
+        GEMINI_OPENAI_BASE_URL,
+        (config.gemini_model,),
+        tool_call_signature="skip_thought_signature_validator",
     )
     add(
         "openrouter",

@@ -35,7 +35,11 @@ def make_chain(specs, *, clock=None, sink=None, config=None, sleep=None):
         )
     extra = {"sleep": sleep} if sleep is not None else {}
     chain = LLMChain(
-        providers, config or AIConfig(), usage_sink=sink, clock=clock or Clock(), **extra
+        providers,
+        config or AIConfig(),
+        usage_sink=sink,
+        clock=clock or Clock(),
+        **extra,
     )
     return chain, creates
 
@@ -276,7 +280,13 @@ class _Sleeps:
 async def test_a_short_429_waits_and_retries_the_same_model():
     sleeps = _Sleeps()
     chain, c = make_chain(
-        [("groq", GROQ_MODELS, [api_error(429, {"x-ratelimit-reset-tokens": "1.5s"}), "ok"])],
+        [
+            (
+                "groq",
+                GROQ_MODELS,
+                [api_error(429, {"x-ratelimit-reset-tokens": "1.5s"}), "ok"],
+            )
+        ],
         sleep=sleeps,
     )
     result = await chain.complete(MSG, [])
@@ -293,7 +303,12 @@ async def test_retry_after_is_read_before_the_token_reset_header():
             (
                 "groq",
                 GROQ_MODELS,
-                [api_error(429, {"retry-after": "3", "x-ratelimit-reset-tokens": "9s"}), "ok"],
+                [
+                    api_error(
+                        429, {"retry-after": "3", "x-ratelimit-reset-tokens": "9s"}
+                    ),
+                    "ok",
+                ],
             )
         ],
         sleep=sleeps,
@@ -316,9 +331,7 @@ async def test_a_long_429_goes_to_the_next_model_without_waiting():
 
 async def test_a_429_without_a_wait_hint_does_not_wait():
     sleeps = _Sleeps()
-    chain, c = make_chain(
-        [("groq", GROQ_MODELS, [api_error(429), "ok"])], sleep=sleeps
-    )
+    chain, c = make_chain([("groq", GROQ_MODELS, [api_error(429), "ok"])], sleep=sleeps)
     await chain.complete(MSG, [])
     assert c["groq"].models == list(GROQ_MODELS)
     assert sleeps.waits == []
@@ -335,3 +348,56 @@ async def test_the_wait_is_tried_once_then_the_next_model_answers():
     assert result.model == GROQ_MODELS[1]
     assert c["groq"].models == [GROQ_MODELS[0], GROQ_MODELS[0], GROQ_MODELS[1]]
     assert sleeps.waits == [2.0]
+
+
+def test_tool_calls_get_a_thought_signature_only_where_they_have_none():
+    from lumi_ai.providers.chain import _with_tool_call_signature
+
+    own = {"id": "b", "extra_content": {"google": {"thought_signature": "REAL"}}}
+    foreign = {"id": "a", "type": "function"}
+    history = [
+        {"role": "user", "content": "hi"},
+        {"role": "assistant", "content": None, "tool_calls": [foreign, own]},
+        {"role": "tool", "tool_call_id": "a", "content": "{}"},
+    ]
+    out = _with_tool_call_signature(history, "PLACEHOLDER")
+    calls = out[1]["tool_calls"]
+    assert calls[0]["extra_content"]["google"]["thought_signature"] == "PLACEHOLDER"
+    assert calls[1]["extra_content"]["google"]["thought_signature"] == "REAL"
+    assert "extra_content" not in foreign  # the caller's messages are not mutated
+    assert out[0] is history[0] and out[2] is history[2]
+
+
+async def test_a_provider_with_a_signature_receives_the_patched_history():
+    seen = []
+
+    class Spy(FakeCreate):
+        async def __call__(self, *, model, messages, tools=None, reasoning_effort=None):
+            seen.append(messages)
+            return await super().__call__(
+                model=model,
+                messages=messages,
+                tools=tools,
+                reasoning_effort=reasoning_effort,
+            )
+
+    create = Spy([])
+    chain = LLMChain(
+        [
+            ProviderSpec(
+                name="gemini",
+                client=fake_client(create),
+                models=("g",),
+                tool_call_signature="PLACEHOLDER",
+            )
+        ],
+        AIConfig(),
+        clock=Clock(),
+    )
+    msgs = [{"role": "assistant", "content": None, "tool_calls": [{"id": "a"}]}]
+    await chain.complete(msgs, [])
+    assert (
+        seen[0][0]["tool_calls"][0]["extra_content"]["google"]["thought_signature"]
+        == "PLACEHOLDER"
+    )
+    assert "extra_content" not in msgs[0]["tool_calls"][0]

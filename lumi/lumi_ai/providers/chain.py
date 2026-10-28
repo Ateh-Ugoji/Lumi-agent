@@ -62,6 +62,30 @@ class ProviderSpec:
     models: tuple[str, ...]
     #: Whether a pinned model id (tier routing) means anything on this provider.
     accepts_pinned_model: bool = True
+    #: Gemini 3 rejects a past tool call that carries no ``thought_signature``, and a call made by
+    #: another provider earlier in the same turn has none. Google documents this placeholder for
+    #: history it did not produce; the provider then skips the check for those calls.
+    tool_call_signature: str | None = None
+
+
+def _with_tool_call_signature(
+    messages: Sequence[Mapping[str, Any]], signature: str
+) -> list[Mapping[str, Any]]:
+    """Copy of ``messages`` where every assistant tool call has a Gemini ``thought_signature``."""
+    out: list[Mapping[str, Any]] = []
+    for message in messages:
+        calls = message.get("tool_calls") if message.get("role") == "assistant" else None
+        if not calls:
+            out.append(message)
+            continue
+        patched = [
+            call
+            if call.get("extra_content")
+            else {**call, "extra_content": {"google": {"thought_signature": signature}}}
+            for call in calls
+        ]
+        out.append({**message, "tool_calls": patched})
+    return out
 
 
 @dataclass(frozen=True, slots=True)
@@ -259,6 +283,8 @@ class LLMChain:
         effort: str | None,
         tier: str | None,
     ) -> _Outcome:
+        if spec.tool_call_signature:
+            messages = _with_tool_call_signature(messages, spec.tool_call_signature)
         payload: dict[str, Any] = {
             "model": name,
             "messages": list(messages),

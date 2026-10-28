@@ -34,6 +34,13 @@ def test_chain_order_and_models_from_config():
     assert specs["openlux"].accepts_pinned_model is False
 
 
+def test_gemini_sits_between_groq_and_openrouter():
+    cfg = AIConfig(groq_api_key="g", gemini_api_key="m", openrouter_api_key="o")
+    specs = {s.name: s for s in build_provider_specs(cfg)}
+    assert list(specs) == ["groq", "gemini", "openrouter"]
+    assert specs["gemini"].models == ("gemini-3.5-flash-lite",)
+
+
 def test_providers_without_a_key_are_left_out():
     specs = build_provider_specs(AIConfig(groq_api_key="g"))
     assert [s.name for s in specs] == ["groq"]

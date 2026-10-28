@@ -22,7 +22,12 @@ import httpx
 
 from lumi_ai.config import AIConfig
 from lumi_ai.ports import KeyProbe, ProbeResult
-from lumi_ai.providers.urls import GROQ_BASE_URL, OPENLUX_BASE_URL, OPENROUTER_BASE_URL
+from lumi_ai.providers.urls import (
+    GEMINI_OPENAI_BASE_URL,
+    GROQ_BASE_URL,
+    OPENLUX_BASE_URL,
+    OPENROUTER_BASE_URL,
+)
 from lumi_ai.rag.vector_store import make_client
 from lumi_ai.video.factory import video_status
 from lumi_ai.video.gemini import GEMINI_BASE_URL
@@ -342,6 +347,17 @@ def build_probes(
                 config.whisper_model,
             ),
             ping_model=config.groq_model_small,
+            ping_completion=ping_completion,
+            transport=transport,
+        ),
+        _OpenAICompatProbe(
+            name="gemini",
+            required=False,
+            key_var="GEMINI_API_KEY",
+            base_url=GEMINI_OPENAI_BASE_URL,
+            api_key=config.gemini_api_key,
+            models=(config.gemini_model,),
+            ping_model=config.gemini_model,
             ping_completion=ping_completion,
             transport=transport,
         ),

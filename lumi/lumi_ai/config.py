@@ -20,10 +20,12 @@ ENV_FIELDS: tuple[str, ...] = (
     "groq_model_small",
     "groq_model_fallback",
     "openrouter_model",
+    "gemini_model",
     "openlux_model",
     "whisper_model",
     "groq_api_key",
     "openrouter_api_key",
+    "gemini_api_key",
     "openlux_api_key",
     "typesafe_api_key",
     "neatlogs_api_key",
@@ -73,12 +75,14 @@ class AIConfig:
     groq_model_small: str = "openai/gpt-oss-20b"
     groq_model_fallback: str = "qwen/qwen3.8-27b"
     openrouter_model: str = "meta-llama/llama-3.3-70b-instruct"
+    gemini_model: str = "gemini-3.5-flash-lite"  # free-tier chat fallback behind Groq
     openlux_model: str = "qwen3.8-27b"
     whisper_model: str = "whisper-large-v3-turbo"
 
     # --- keys (None = absent; the callers decide whether that is fatal) ---
     groq_api_key: str | None = None
     openrouter_api_key: str | None = None
+    gemini_api_key: str | None = None
     openlux_api_key: str | None = None
     typesafe_api_key: str | None = None
     neatlogs_api_key: str | None = None

@@ -34,6 +34,7 @@ Son opcionales: sin ellas Lumi funciona, con menos calidad de evaluación y sin 
 | --- | --- | --- | --- |
 | `TYPESAFE_API_KEY` | real | El juez Jev (clasificación de turnos, dificultad de reescritura, fidelidad). Cae a un modelo pequeño de Groq y, si tampoco hay, a reglas deterministas | TypeSafe AI |
 | `NEATLOGS_API_KEY` | real | Trazas de llamadas al modelo y del loop del agente | neatlogs |
+| `GEMINI_API_KEY` | real | Respaldo gratuito del chat (modelo `gemini-3.5-flash-lite`, cambiable con `GEMINI_MODEL`) por su endpoint compatible con OpenAI. Entra después de Groq y antes de OpenRouter, así que un 429 de Groq no tumba el turno. El plan gratis tiene sus propios límites | https://aistudio.google.com/apikey |
 | `OPENROUTER_API_KEY` | real | El respaldo cuando Groq falla o se agota (hoy `meta-llama/llama-3.3-70b-instruct`). Pide saldo: con saldo 0 responde 402 | https://openrouter.ai/keys |
 
 ## Datos y redes sociales (opcionales)
