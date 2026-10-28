@@ -21,9 +21,9 @@ as the router.
 | # | Finding | Evidence |
 |---|---|---|
 | 1 | **Publishing is already native — PFM was never the publisher.** The REST path routes `facebook→meta`, `linkedin→linkedin`, `x→x` directly. The docstring says Instagram/TikTok "would go through Post for Me, whose posting call is not built". | `apps/connections/publish_api.py:43`, `:1-7` |
-| 2 | **Reading own posts IS PFM-bound.** `backfill_posts` (agent tool) → `DjangoOwnPostSync.sync_own_posts` → `PfmClient.get_account_feed_page` → `map_pfm_item`. No other path fills `posts` for the chat. | `apps/intelligence/tasks.py:105`, `apps/connections/own_post_sync.py:55-99`, `apps/connections/own_posts.py` |
+| 2 | **Reading own posts is split (updated same day after `a534dec`/R3):** a Facebook profile with a connected Page goes `backfill_posts` → `DjangoOwnPostSync.sync_own_posts` → `collect_meta_posts` (native Meta); every other network goes → `PfmClient.get_account_feed_page` → `map_pfm_item` (PFM, token expired). | `apps/intelligence/tasks.py:105`, `apps/connections/own_post_sync.py:75-99`, `apps/connections/own_posts.py` |
 | 3 | **PFM is dead in this environment right now.** `check_keys`: `FALLA pfm — PFM rechazó el token (vencido o inválido)`. The plan's "read from the feed" cannot work today regardless of keys. | `manage.py check_keys`, run 2026-10-28 |
-| 4 | **Meta's read side exists but has no caller.** `fetch_posts`/`fetch_metrics` implemented and tested, yet **zero production call sites** — R3 landed the adapter, not the wiring. | `providers/meta.py:240,278`; `grep -rn "\.fetch_posts("` → only tests |
+| 4 | ~~Meta's read side has no caller~~ **Superseded the same day by `a534dec` (R3):** `collect_meta_posts` now calls `fetch_posts`/`fetch_metrics` in production for connected Facebook Pages (metrics bounded to the newest 20 per sync). | `own_post_sync.py:75`, `own_posts.py:98,109`; `providers/meta.py:240,278` |
 | 5 | **X reads were deliberately kept off the native API** (per-read pricing): "X charges per resource read, so Lumi reads X through Xpoz." | `providers/x.py:1-9`, `can_read_posts=False` (`:84`) |
 | 6 | **LinkedIn publish works; reading is scope-gated** (`r_member_social`, restricted) — account goes `limited` without it. | `providers/linkedin.py:92-95,201-211` |
 | 7 | **TikTok has no native provider at all** — only appears in `PFM_PLATFORMS`. | `providers/` (no tiktok.py), `connect_links.py:25` |
@@ -40,7 +40,7 @@ as the router.
 | `publish_post` agent tool (preview → confirm) | **KEEP — first value** | Nothing in the plan depends on PFM: the REST publish path is already native per provider. |
 | Route publishing through Post for Me | **DROP — obsolete & never built** | Publish is native since CONNECT delivered T6; PFM's posting call doesn't exist and its token is expired. Routing through PFM would be *new* work to replace something that already works. |
 | Store more metrics from the feed (PFM feed) | **REPLACE — native sources** | Meta: `fetch_metrics` exists, needs a caller. LinkedIn: `fetch_posts` + member posts API when scope present. X: keep **Xpoz** for reads (deliberate pricing decision, x.py:5) — native X reads only as an opt-in fallback. TikTok: new provider (P6). |
-| `top_posts` tool ranking in SQL | **KEEP** | Independent of PFM. Rank latest-snapshot-per-post in SQL. |
+| `top_posts` tool ranking in SQL | **KEEP — done (`e7bf9d1`)** | Independent of PFM; landed as the SQL tool in `lumi_ai/tools/data.py`. |
 | Auto-refresh of old data | **KEEP** | Driven by provider `fetch_metrics`, not the PFM feed, after P2. |
 
 **Core change: the plan's spine moves from "PFM does everything" to "each provider does its own
@@ -95,7 +95,11 @@ in the same change as the code.
   repeated confirm replays the same `PublishJob`; no-connect → typed 409 the agent explains;
   platform not served → typed unsupported, agent never invents a result.
 
-### P4. `top_posts` tool with SQL ranking
+### P4. `top_posts` tool with SQL ranking — done (`e7bf9d1`)
+
+Landed the same day by the team: ranks by the latest non-null metric (views/likes/comments/shares)
+with platform, period and top-N filters, local DB only — which supersedes the 28-day,
+views-only sketch below.
 - Rank by latest snapshot per post (`views DESC`, 28-day window), SQL-side, NULL-safe (a metric
   nobody reported stays null, never 0). `get_analytics` keeps its aggregates; the new tool
   answers "which of my posts is the most viewed" without shipping 500 rows to the LLM.
