@@ -90,8 +90,9 @@ class _OpenAICompatProbe:
                 listing = await http.get("/models")
                 if listing.status_code != 200:
                     return self._http_error("GET /models", listing)
+                # Gemini lists its ids as "models/<id>"; the chat call takes the bare id.
                 available = {
-                    m.get("id")
+                    str(m.get("id")).removeprefix("models/")
                     for m in listing.json().get("data", [])
                     if isinstance(m, dict)
                 }
