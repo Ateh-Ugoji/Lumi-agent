@@ -2,6 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Language
+
+Everything in this repo is written in English: code, comments, docs, commit messages, UI copy and agent replies.
+
 ## What Lumi is
 
 Chat-based social listening and caption repurpose agent for X (Twitter), built for neatHack (Oct 10–12 2026). A user connects an X account; the agent listens for trending posts and proposes caption rewrites in the user's own voice, delivered through a chat interface. MVP scope is X-only — three seeded demo profiles, no auth, no multi-platform support.
