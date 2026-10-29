@@ -15,6 +15,7 @@ from .clients.pfm import PfmClient
 from .errors import ProviderAuthError, SocialDataError
 from .ingest import map_pfm_item, parse_datetime
 from .providers.base import AccountInfo, SocialProvider, TokenSet
+from .socialdata import XpozSocialData
 
 DEFAULT_PAGE_SIZE = 50
 DEFAULT_MAX_PAGES = 10
@@ -78,7 +79,7 @@ async def collect_own_posts(
     return OwnPostsResult(tuple(posts), skipped, pages, stopped)
 
 
-async def collect_meta_posts(
+async def collect_native_posts(
     provider: SocialProvider,
     tokens: TokenSet,
     account: AccountInfo,
@@ -87,8 +88,10 @@ async def collect_meta_posts(
     limit: int,
     metrics_limit: int,
 ) -> OwnPostsResult:
-    """Read a Facebook Page's newest posts, then the metrics of the newest ``metrics_limit``.
+    """Read a native account's newest posts, then the metrics of the newest ``metrics_limit``.
 
+    Metrics are read only when the adapter declares ``can_read_metrics`` (Meta does, LinkedIn
+    does not): a provider that cannot report them leaves every counter ``None``, never ``0``.
     Graph answers metrics one post per request, so they are bounded: a Page with a long history
     would otherwise spend a request per post on every sync. A post whose metrics fail keeps its row
     and every counter stays ``None`` (never ``0``); a rejected token stops the metric reads, since
@@ -96,6 +99,8 @@ async def collect_meta_posts(
     fails, and the caller decides what that means.
     """
     posts = await provider.fetch_posts(tokens, account, limit=limit)
+    if not provider.capabilities().can_read_metrics:
+        metrics_limit = 0
     enriched: list[PostIn] = []
     read = failed = 0
     budget = metrics_limit
@@ -124,4 +129,21 @@ async def collect_meta_posts(
         stopped="limit" if len(posts) >= min(limit, 100) else "end",
         metrics_read=read,
         metrics_failed=failed,
+    )
+
+
+#: Kept under the name the Meta caller and its tests already use.
+collect_meta_posts = collect_native_posts
+
+
+async def collect_xpoz_posts(
+    data: XpozSocialData, handle: str, *, limit: int
+) -> OwnPostsResult:
+    """Read an X account's newest public posts through Xpoz (the metrics ride in the feed)."""
+    posts = await data.fetch_user_posts("x", handle, None, limit)
+    return OwnPostsResult(
+        posts=tuple(replace(p, author_handle=handle) for p in posts),
+        skipped=0,
+        pages=1,
+        stopped="limit" if len(posts) >= limit else "end",
     )
