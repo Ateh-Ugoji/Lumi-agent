@@ -259,6 +259,26 @@ function MorphLabel({
   );
 }
 
+/** Platform names ``SocialIcon`` can actually draw — an unknown name would
+ *  render an empty chip, so rows filter against this set first. */
+const ROW_LOGO_PLATFORMS = new Set([
+  "x",
+  "facebook",
+  "instagram",
+  "linkedin",
+  "tiktok",
+  "youtube",
+]);
+
+/** The logo chips that lead a row: steps that search a social network show that
+ *  network's mark (old Lumi c466c5d behaviour). Action/writing rows stay clean. */
+function rowLogos(step: SimStep): string[] {
+  if (step.kind !== "social" && step.kind !== "analysis") return [];
+  return (step.platforms ?? [])
+    .filter((name) => ROW_LOGO_PLATFORMS.has(name))
+    .slice(0, 3);
+}
+
 function StepRow({
   step,
   active,
@@ -292,6 +312,18 @@ function StepRow({
       )}
       <span className={styles.rowBody}>
         <span className={styles.rowLine}>
+          {rowLogos(step).map((name) => (
+            <span
+              key={name}
+              // Decorative — the row's label already names what is happening.
+              aria-hidden="true"
+              className={`${styles.iconSocial} ${
+                name === "x" ? styles.iconSocialLight : ""
+              }`}
+            >
+              <SocialIcon name={name} size={name === "x" ? 13 : 17} />
+            </span>
+          ))}
           {active ? (
             <MorphLabel label={step.label} small enabled={!reduced} />
           ) : (
