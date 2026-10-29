@@ -397,8 +397,16 @@ export default function AgentThinking({
   const reduced = usePrefersReducedMotion();
   const [manual, setManual] = useState<boolean | null>(null);
   const final = settled || status === "done";
-  const isShort = script.steps.length <= 4;
-  const expanded = manual ?? (!final || isShort);
+  // Once the answer is delivered the detailed steps collapse on their own;
+  // the reader only sees them if they open the panel themselves. A manual
+  // toggle is remembered while a run is in flight, then reset at each edge so
+  // the next delivered answer always starts closed.
+  const prevFinal = useRef(final);
+  if (final !== prevFinal.current) {
+    prevFinal.current = final;
+    setManual(null);
+  }
+  const expanded = manual ?? !final;
 
   const count = final
     ? script.steps.length

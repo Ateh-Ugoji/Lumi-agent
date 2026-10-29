@@ -52,6 +52,10 @@
 }
 
 .stream {
+  /* Anchors absolutely positioned descendants (e.g. .srOnly live regions) to
+     this scroll box so they are clipped by it instead of leaking past it and
+     making the whole document scrollable. */
+  position: relative;
   flex: 1;
   display: flex;
   flex-direction: column;
