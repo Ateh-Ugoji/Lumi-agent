@@ -748,15 +748,17 @@ export default function App() {
             } else if (toolName === "check_niche_trends") {
               label = `Searching high-impression peer posts (${args.query || "niche"})`;
               kind = "social";
-              platforms = ["x"];
+              // Both tools take a `platform` arg that defaults to the profile's
+              // own network — the logo must follow it, never a fixed guess.
+              platforms = [String(args.platform || activePlatform)];
             } else if (toolName === "save_user_request") {
               label = "Saving your requested handles (as user requests, not peers)";
               kind = "action";
               platforms = ["x"];
             } else if (toolName === "discover_and_extract_niche_frameworks") {
-              label = `Extracting winning content frameworks (${args.niche || "tech"})`;
+              label = `Extracting winning content frameworks (${args.query || args.niche || "niche"})`;
               kind = "analysis";
-              platforms = ["x", "linkedin"];
+              platforms = [String(args.platform || activePlatform)];
             } else if (toolName === "extract_voice_profile") {
               label = "Extracting your creator voice profile";
               kind = "social";
