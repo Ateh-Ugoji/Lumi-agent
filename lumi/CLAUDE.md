@@ -2,7 +2,11 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-> **Aviso:** este archivo describe el backend FastAPI anterior, que ahora vive en `legacy/`. Los comandos de abajo (`uvicorn app.main:app`, `alembic ...`) se corren desde `legacy/`, ver `legacy/README.md`. La app actual es Django/DRF + PostgreSQL: guía en `docs/how-to-setup.md`, contratos en `docs/CONTRATOS.md` y estado en `plan/ContextoTareas.md` (sección TRASPASO).
+> **Notice:** this file describes the previous FastAPI backend, which now lives in `legacy/`. The commands below (`uvicorn app.main:app`, `alembic ...`) are run from `legacy/`; see `legacy/README.md`. The current app is Django/DRF + PostgreSQL: setup guide in `docs/how-to-setup.md`, contracts in `docs/CONTRATOS.md`, status in `plan/ContextoTareas.md` (HANDOFF section).
+
+## Language
+
+Everything in this repo is written in English: code, comments, docs, commit messages, UI copy and agent replies.
 
 ## What Lumi is
 
