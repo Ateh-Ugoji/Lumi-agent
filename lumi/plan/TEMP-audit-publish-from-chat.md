@@ -59,7 +59,7 @@ in the same change as the code.
   `X_CLIENT_ID/SECRET` (from `TWITTER_*`), `GOOGLE_OAUTH_CLIENT_ID/SECRET`, `X_LIVE_ENABLED=true`.
   TikTok: no consumer exists yet — the values (`TIKTOK_CLIENT_ID/SECRET/APP_ID`) are staged in
   `.env` under their own names until P6.
-- **External step (human):** add the redirect URI `http://localhost:3011/connections/<provider>/callback`
+- **External step (human):** add the redirect URI `http://localhost:3010/connections/<provider>/callback`
   (built by `config.redirect_uri`, `apps/connections/config.py:185-188`, over `FRONTEND_URL`) to
   each developer portal: X app, LinkedIn app, Meta app, Google console. Without this, connect
   fails with redirect_uri mismatch regardless of correct keys.
