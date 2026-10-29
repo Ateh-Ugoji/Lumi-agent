@@ -17,6 +17,7 @@ import {
   type User,
 } from "../api";
 import { clearLocalSession } from "../session";
+import { t } from "../i18n/index.ts";
 import AuthScreen from "./AuthScreen";
 
 type AuthValue = {
@@ -43,7 +44,7 @@ export default function AuthGate({ children }: { children: ReactNode }) {
   useEffect(() => {
     return onUnauthorized(() => {
       clearLocalSession();
-      setState({ status: "anonymous", notice: "Tu sesión terminó. Entra otra vez." });
+      setState({ status: "anonymous", notice: t("auth.session_expired") });
     });
   }, []);
 

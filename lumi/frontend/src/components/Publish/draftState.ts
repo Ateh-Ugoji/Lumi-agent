@@ -7,6 +7,7 @@ import {
   type Network,
   type PublishResult,
 } from "../../api/publish.ts";
+import { t } from "../../i18n/index.ts";
 
 /** One post being prepared for one network. `key` identifies the card in the list. */
 export type DraftCard = {
@@ -60,7 +61,7 @@ export function cardsFromDrafts(drafts: Draft[]): {
         warnings: draft.warnings ?? [],
       });
     } else {
-      failures.push({ platform: draft.platform, message: draft.error?.message ?? "Falló." });
+      failures.push({ platform: draft.platform, message: draft.error?.message ?? t("draft.failed") });
     }
   }
   return { cards, failures };
@@ -88,11 +89,11 @@ export function isPublishable(platform: Network): boolean {
 
 /** Why the card cannot be sent right now, or null when it can. */
 export function blockedReason(card: DraftCard): string | null {
-  if (!isPublishable(card.platform)) return "Publicar en esta red aún no está disponible.";
-  if (!card.text.trim()) return "Escribe el texto.";
+  if (!isPublishable(card.platform)) return t("draft.unavailable");
+  if (!card.text.trim()) return t("draft.write_text");
   if (remainingChars(card.platform, card.text) < 0) {
-    return `Supera el límite de ${NETWORK_LIMITS[card.platform]} caracteres.`;
+    return t("draft.over_limit", { limit: NETWORK_LIMITS[card.platform] });
   }
-  if (card.published) return "Ya se publicó.";
+  if (card.published) return t("draft.already_published");
   return null;
 }

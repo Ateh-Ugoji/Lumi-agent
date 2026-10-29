@@ -5,6 +5,8 @@
  * token and tell the app to go back to the login screen.
  */
 
+import { t } from "../i18n/index.ts";
+
 type Env = { VITE_API_BASE?: string };
 
 const env: Env = (import.meta as unknown as { env?: Env }).env ?? {};
@@ -88,10 +90,10 @@ export class ApiError extends Error {
 /** What the user reads when a failed response carries no usable message (an HTML error page, say). */
 export function statusMessage(status: number): string {
   if (status === 502 || status === 503 || status === 504) {
-    return "El servidor de Lumi no está respondiendo. Inténtalo de nuevo en un momento.";
+    return t("http.unavailable");
   }
   if (status >= 500) {
-    return "El servidor de Lumi tuvo un problema. Inténtalo de nuevo en un momento.";
+    return t("http.server_problem");
   }
   return `Error ${status}`;
 }
@@ -185,7 +187,7 @@ async function send(path: string, opts: RequestOptions, accept: string): Promise
     throw new ApiError(
       0,
       "network_error",
-      "No se pudo contactar con el servidor de Lumi. Revisa que esté en marcha.",
+      t("http.unreachable"),
     );
   }
   if (!res.ok) {
@@ -209,11 +211,11 @@ export async function openStream(path: string, opts: RequestOptions = {}): Promi
   // The chat view accepts a lone `text/event-stream` (`EventStreamRenderer`) and still sends its
   // errors as JSON, so the header asks for nothing else.
   const res = await send(path, opts, "text/event-stream");
-  if (!res.body) throw new ApiError(res.status, "stream_error", "El servidor no envió datos.");
+  if (!res.body) throw new ApiError(res.status, "stream_error", t("http.no_data"));
   return res;
 }
 
-export function errorMessage(err: unknown, fallback = "Algo salió mal."): string {
+export function errorMessage(err: unknown, fallback = t("http.something_wrong")): string {
   if (err instanceof ApiError) return err.message;
   if (err instanceof Error && err.message) return err.message;
   return fallback;

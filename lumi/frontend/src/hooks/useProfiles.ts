@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { createProfile, getProfiles, type ProfileSummary } from "../api";
 import { ACTIVE_PROFILE_KEY } from "../session.ts";
 import { pickActiveId } from "./activeProfile.ts";
+import { t } from "../i18n/index.ts";
 
 function readStored(): number | null {
   try {
@@ -25,7 +26,7 @@ export function useProfiles() {
       setProfiles(await getProfiles());
       setLoadError(null);
     } catch (err) {
-      setLoadError(err instanceof Error ? err.message : "No se pudieron cargar los perfiles.");
+      setLoadError(err instanceof Error ? err.message : t("profiles.load_failed"));
     } finally {
       setLoaded(true);
     }

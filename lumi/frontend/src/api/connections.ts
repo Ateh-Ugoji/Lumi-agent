@@ -1,4 +1,5 @@
 import { ApiError, request } from "./http.ts";
+import { t } from "../i18n/index.ts";
 
 export type Provider = "meta" | "linkedin" | "x" | "pfm" | "google";
 
@@ -62,7 +63,7 @@ export async function startConnect(
     },
   });
   if (!res.authorize_url) {
-    throw new ApiError(502, "upstream_error", "El servidor no devolvió un enlace de conexión.");
+    throw new ApiError(502, "upstream_error", t("conn.no_link"));
   }
   return res.authorize_url;
 }
@@ -105,15 +106,19 @@ export function linkChoice(
   return "available";
 }
 
-const LINK_ERRORS: Record<string, string> = {
-  "connections.account_unusable": "Esa cuenta necesita reconectarse antes de usarla.",
-  "connections.platform_mismatch": "Esa cuenta es de otra red social que este perfil.",
-  not_found: "La cuenta o el perfil ya no existen. Actualiza la lista.",
+const LINK_ERROR_KEYS: Record<string, string> = {
+  "connections.account_unusable": "conn.need_reconnect",
+  "connections.platform_mismatch": "conn.wrong_network",
+  not_found: "conn.gone",
 };
 
 export function linkErrorMessage(err: unknown): string {
-  if (err instanceof ApiError) return LINK_ERRORS[err.code] ?? err.message;
-  return "No se pudo enlazar la cuenta.";
+  if (err instanceof ApiError) {
+    const key = LINK_ERROR_KEYS[err.code];
+    if (key) return t(key);
+    return err.message;
+  }
+  return t("conn.link_failed");
 }
 
 export function disconnect(
@@ -187,49 +192,46 @@ export type ConnectReturn =
   | { kind: "connected"; provider: string }
   | { kind: "error"; code: string; provider?: string };
 
-const RETURN_ERRORS: Record<string, string> = {
-  "connections.state_invalid": "El enlace de conexión no es válido. Empieza de nuevo.",
-  "connections.state_expired": "El enlace de conexión caducó. Empieza de nuevo.",
-  "connections.state_mismatch":
-    "Este enlace de conexión lo inició otra cuenta de Lumi. No se conectó nada.",
-  "connections.access_denied": "Cancelaste la autorización. No se conectó nada.",
-  "connections.account_taken": "Esa cuenta ya está conectada a otro usuario de Lumi.",
-  "connections.no_accounts": "La autorización no incluyó ninguna cuenta.",
-  "connections.pfm_failed": "Post for Me no confirmó la cuenta. Inténtalo otra vez.",
-  "connections.provider_rejected": "El proveedor rechazó la conexión.",
-  "connections.unknown_provider": "Proveedor desconocido.",
-  upstream_error: "El proveedor no respondió. Inténtalo en unos minutos.",
-  internal_error: "Algo falló en el servidor. Inténtalo otra vez.",
+/** Codes whose message is looked up in the dictionary; two map to a `conn.*` key. */
+const RETURN_ERROR_KEYS: Record<string, string> = {
+  "connections.state_invalid": "connections.state_invalid",
+  "connections.state_expired": "connections.state_expired",
+  "connections.state_mismatch": "connections.state_mismatch",
+  "connections.access_denied": "connections.access_denied",
+  "connections.account_taken": "connections.account_taken",
+  "connections.no_accounts": "connections.no_accounts",
+  "connections.pfm_failed": "connections.pfm_failed",
+  "connections.provider_rejected": "connections.provider_rejected",
+  "connections.unknown_provider": "connections.unknown_provider",
+  upstream_error: "conn.upstream_no_response",
+  internal_error: "conn.server_error",
 };
 
 /** Facebook lists Pages only, so a personal profile finishes the login and then has nothing to store. */
 const NO_ACCOUNTS_BY_PROVIDER: Record<string, string> = {
-  meta:
-    "Facebook no devolvió ninguna Página. Lumi conecta Páginas de Facebook, no perfiles personales: " +
-    "necesitas ser administrador de una Página y elegirla al autorizar.",
+  meta: "conn.meta_no_pages",
 };
 
 export function connectErrorMessage(code: string, provider?: string): string {
   if (provider && (code === "connections.no_accounts" || code === "no_accounts")) {
     const specific = NO_ACCOUNTS_BY_PROVIDER[provider];
-    if (specific) return specific;
+    if (specific) return t(specific);
   }
   // CONTRATOS lists the codes bare; the callback sends most of them as `connections.<code>`.
-  return RETURN_ERRORS[code] ?? RETURN_ERRORS[`connections.${code}`] ?? "No se pudo conectar la cuenta.";
+  const key = RETURN_ERROR_KEYS[code] ?? RETURN_ERROR_KEYS[`connections.${code}`];
+  return key ? t(key) : t("conn.connect_failed");
 }
 
 /** A message for a failed `startConnect`, naming the missing variables when there are any. */
 export function startConnectMessage(err: unknown): string {
-  if (!(err instanceof ApiError)) return "No se pudo iniciar la conexión.";
+  if (!(err instanceof ApiError)) return t("conn.start_failed");
   if (err.code === "not_configured") {
     const vars = err.details.env_vars;
     const list = Array.isArray(vars) ? vars.filter((v) => typeof v === "string").join(", ") : "";
-    return list
-      ? `Falta configurar el servidor: ${list}.`
-      : "Este proveedor no está configurado en el servidor.";
+    return list ? t("conn.server_missing", { vars: list }) : t("conn.not_configured");
   }
   if (err.code === "connections.live_disabled") {
-    return "X está apagado: no se hacen llamadas hasta que se active X_LIVE_ENABLED.";
+    return t("conn.x_off_setup");
   }
   return err.message;
 }

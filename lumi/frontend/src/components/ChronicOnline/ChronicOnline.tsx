@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { errorMessage, getTrendMatches, scanNicheTrends, type TrendMatch } from "../../api";
+import { useT } from "../../i18n/index.ts";
 import styles from "./ChronicOnline.module.css";
 
 type ChronicOnlineProps = {
@@ -75,6 +76,7 @@ export default function ChronicOnline({
   const [topicFilter, setTopicFilter] = useState<"all" | "indie" | "ai" | "viral">("all");
   const [avatarErrors, setAvatarErrors] = useState<Record<string, boolean>>({});
   const [scanError, setScanError] = useState<string | null>(null);
+  const t = useT();
 
   const loadMatches = async () => {
     if (profileId === null) {
@@ -86,7 +88,7 @@ export default function ChronicOnline({
       const data = await getTrendMatches(profileId, 80);
       setMatches(data);
     } catch (err) {
-      setScanError(errorMessage(err, "No se pudieron cargar las tendencias."));
+      setScanError(errorMessage(err, t("chronic.trends_failed")));
     } finally {
       setLoading(false);
     }
@@ -104,7 +106,7 @@ export default function ChronicOnline({
       await scanNicheTrends(profileId);
       await loadMatches();
     } catch (err) {
-      setScanError(errorMessage(err, "El escaneo falló. Inténtalo otra vez."));
+      setScanError(errorMessage(err, t("chronic.scan_failed")));
     } finally {
       setScanning(false);
     }

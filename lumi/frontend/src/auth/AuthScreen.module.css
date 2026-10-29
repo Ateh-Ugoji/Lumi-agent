@@ -25,6 +25,12 @@
   font-weight: 600;
 }
 
+/* EN | ES switch, top-right of the login card */
+.lang {
+  align-self: flex-end;
+  margin-bottom: -2px;
+}
+
 .field {
   display: flex;
   flex-direction: column;

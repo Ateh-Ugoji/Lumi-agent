@@ -1,5 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { authErrorMessage } from "./errors";
+import { useT } from "../i18n/index.ts";
+import LangToggle from "../i18n/LangToggle";
 import styles from "./AuthScreen.module.css";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -19,16 +21,17 @@ export default function AuthScreen({
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const t = useT();
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     if (busy) return;
     if (!EMAIL_RE.test(email.trim())) {
-      setError("Escribe un correo válido.");
+      setError(t("auth.invalid_email"));
       return;
     }
     if (mode === "register" && password.length < 8) {
-      setError("La contraseña necesita al menos 8 caracteres.");
+      setError(t("auth.password_short"));
       return;
     }
     setBusy(true);
@@ -50,11 +53,14 @@ export default function AuthScreen({
   return (
     <main className={styles.page}>
       <form className={styles.card} onSubmit={submit} noValidate>
-        <h1 className={styles.title}>{mode === "login" ? "Entra a Lumi" : "Crea tu cuenta"}</h1>
+        <LangToggle className={styles.lang} />
+        <h1 className={styles.title}>
+          {mode === "login" ? t("auth.title_signin") : t("auth.title_signup")}
+        </h1>
         {notice && !error && <p className={styles.notice}>{notice}</p>}
         {mode === "register" && (
           <label className={styles.field}>
-            <span>Nombre</span>
+            <span>{t("auth.name")}</span>
             <input
               className={styles.input}
               value={name}
@@ -64,7 +70,7 @@ export default function AuthScreen({
           </label>
         )}
         <label className={styles.field}>
-          <span>Correo</span>
+          <span>{t("auth.email")}</span>
           <input
             className={styles.input}
             type="email"
@@ -74,7 +80,7 @@ export default function AuthScreen({
           />
         </label>
         <label className={styles.field}>
-          <span>Contraseña</span>
+          <span>{t("auth.password")}</span>
           <input
             className={styles.input}
             type="password"
@@ -89,10 +95,10 @@ export default function AuthScreen({
           </p>
         )}
         <button type="submit" className={styles.submit} disabled={busy}>
-          {busy ? "Un momento…" : mode === "login" ? "Entrar" : "Crear cuenta"}
+          {busy ? t("auth.one_moment") : mode === "login" ? t("auth.signin") : t("auth.signup")}
         </button>
         <button type="button" className={styles.switch} onClick={switchMode}>
-          {mode === "login" ? "No tengo cuenta" : "Ya tengo cuenta"}
+          {mode === "login" ? t("auth.no_account") : t("auth.have_account")}
         </button>
       </form>
     </main>

@@ -20,14 +20,16 @@ import {
   type Provider,
   type ProfileSummary,
 } from "../../api";
+import { useT } from "../../i18n/index.ts";
 import styles from "./Settings.module.css";
 
+/** Message keys, resolved with `t` at render so the language switch applies. */
 const HINTS: Record<Provider, string> = {
-  meta: "Páginas de Facebook. Se usan para publicar.",
-  linkedin: "Perfil de LinkedIn. Se usa para publicar.",
-  x: "Lectura y publicación en X.",
-  pfm: "Cuentas de redes sociales enlazadas con Post for Me.",
-  google: "Un solo permiso de Google cubre leer Drive, los archivos que crea Lumi y Docs.",
+  meta: "panel.hint.meta",
+  linkedin: "panel.hint.linkedin",
+  x: "panel.hint.x",
+  pfm: "panel.hint.pfm",
+  google: "panel.hint.google",
 };
 
 type Card = {
@@ -61,6 +63,7 @@ export default function ConnectionsPanel({
   onDismissReturn: () => void;
   onChanged?: () => void;
 }) {
+  const t = useT();
   const [cards, setCards] = useState<Partial<Record<Provider, Card>>>({});
   const [pfmPlatform, setPfmPlatform] = useState<string>("x");
 
@@ -74,7 +77,7 @@ export default function ConnectionsPanel({
       try {
         patch(provider, { status: await getConnectionStatus(provider), loading: false });
       } catch (err) {
-        patch(provider, { loading: false, error: errorMessage(err, "No se pudo leer el estado.") });
+        patch(provider, { loading: false, error: errorMessage(err, t("panel.state_failed")) });
       }
     },
     [patch],
@@ -107,7 +110,7 @@ export default function ConnectionsPanel({
       patch(provider, { status: await syncPfm(), loading: false });
       onChanged?.();
     } catch (err) {
-      patch(provider, { loading: false, error: errorMessage(err, "No se pudo actualizar.") });
+      patch(provider, { loading: false, error: errorMessage(err, t("panel.refresh_failed")) });
     }
   };
 
@@ -138,8 +141,8 @@ export default function ConnectionsPanel({
       patch(provider, {
         busy: false,
         note: done.replaced_account_id
-          ? `Ahora publica esta cuenta para @${profile.handle}. La anterior sigue conectada.`
-          : `Esta cuenta publicará para @${profile.handle}.`,
+          ? t("panel.linked_now", { handle: profile.handle })
+          : t("panel.will_publish", { handle: profile.handle }),
       });
       await load(provider);
       onChanged?.();
@@ -156,7 +159,7 @@ export default function ConnectionsPanel({
       await load(provider);
       onChanged?.();
     } catch (err) {
-      patch(provider, { busy: false, error: errorMessage(err, "No se pudo desconectar.") });
+      patch(provider, { busy: false, error: errorMessage(err, t("panel.disconnect_failed")) });
     }
   };
 
@@ -171,10 +174,13 @@ export default function ConnectionsPanel({
           <span>
             {returned.kind === "error"
               ? connectErrorMessage(returned.code, returned.provider)
-              : `${PROVIDER_LABELS[returned.provider as Provider] ?? returned.provider} conectado.`}
+              : t("panel.connected_msg", {
+                  provider:
+                    PROVIDER_LABELS[returned.provider as Provider] ?? returned.provider,
+                })}
           </span>
           <button type="button" className={styles.textBtn} onClick={onDismissReturn}>
-            Cerrar
+            {t("panel.close")}
           </button>
         </div>
       )}
@@ -192,27 +198,24 @@ export default function ConnectionsPanel({
             <div className={styles.cardHead}>
               <div>
                 <div className={styles.cardTitle}>{PROVIDER_LABELS[provider]}</div>
-                <p className={styles.cardHint}>{HINTS[provider]}</p>
+                <p className={styles.cardHint}>{t(HINTS[provider])}</p>
               </div>
               <span
                 className={status?.connected ? styles.chipOn : styles.chipOff}
                 data-testid={`status-${provider}`}
               >
                 {card.loading
-                  ? "Comprobando…"
+                  ? t("panel.checking")
                   : status?.connected
                     ? status.stale
-                      ? "Reconectar"
-                      : "Conectado"
-                    : "Sin conectar"}
+                      ? t("panel.reconnect")
+                      : t("panel.connected")
+                    : t("panel.not_connected")}
               </span>
             </div>
 
             {status && !status.configured && (
-              <p className={styles.noteText}>
-                Este proveedor aún no tiene claves en el servidor. Se activa al pegar sus
-                credenciales en <code>lumi/.env</code>.
-              </p>
+              <p className={styles.noteText}>{t("panel.no_keys")}</p>
             )}
             {card.note && (
               <p className={styles.noteText} data-testid={`note-${provider}`}>
@@ -232,7 +235,7 @@ export default function ConnectionsPanel({
                 ))}
                 {status.details?.expires_at && (
                   <div className={styles.mutedText}>
-                    El acceso caduca {formatExpiry(status.details.expires_at)}. Se renueva solo.
+                    {t("panel.expires", { date: formatExpiry(status.details.expires_at) })}
                   </div>
                 )}
               </div>
@@ -264,7 +267,7 @@ export default function ConnectionsPanel({
                         disabled={card.busy}
                         onClick={() => void remove(provider, account.id)}
                       >
-                        Desconectar
+                        {t("panel.disconnect")}
                       </button>
                     </span>
                   </li>
@@ -276,7 +279,7 @@ export default function ConnectionsPanel({
               {provider === "pfm" && (
                 <select
                   className={styles.select}
-                  aria-label="Red social a conectar"
+                  aria-label={t("panel.select_network")}
                   value={pfmPlatform}
                   onChange={(e) => setPfmPlatform(e.target.value)}
                 >
@@ -294,7 +297,7 @@ export default function ConnectionsPanel({
                 disabled={card.busy || card.loading || status?.configured === false}
                 onClick={() => void connect(provider)}
               >
-                {status?.connected ? "Conectar otra cuenta" : "Conectar"}
+                {status?.connected ? t("panel.connect_another") : t("panel.connect")}
               </button>
               {provider === "google" && status?.connected && (
                 <button
@@ -303,7 +306,7 @@ export default function ConnectionsPanel({
                   disabled={card.busy}
                   onClick={() => void remove("google")}
                 >
-                  Desconectar
+                  {t("panel.disconnect")}
                 </button>
               )}
               <button
@@ -313,7 +316,7 @@ export default function ConnectionsPanel({
                 disabled={card.busy || card.loading}
                 onClick={() => void refresh(provider)}
               >
-                Actualizar
+                {t("panel.refresh")}
               </button>
             </div>
           </section>
@@ -336,10 +339,11 @@ function LinkControl({
   testId: string;
   onLink: () => void;
 }) {
+  const t = useT();
   if (choice === "linked") {
     return (
       <span className={styles.chipOn} data-testid={`${testId}-linked`}>
-        Publica para @{handle}
+        {t("panel.publishes_for", { handle })}
       </span>
     );
   }
@@ -352,13 +356,13 @@ function LinkControl({
         disabled={busy}
         onClick={onLink}
       >
-        Usar para @{handle}
+        {t("panel.use_for", { handle })}
       </button>
     );
   }
   return (
     <span className={styles.mutedText} data-testid={`${testId}-unavailable`}>
-      {choice === "other_network" ? "Es de otra red" : "Reconecta esta cuenta"}
+      {choice === "other_network" ? t("panel.wrong_network") : t("panel.reconnect_account")}
     </span>
   );
 }

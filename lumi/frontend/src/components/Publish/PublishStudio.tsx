@@ -19,6 +19,7 @@ import {
   type DraftCard,
 } from "./draftState";
 import { publishErrorMessage } from "./errors";
+import { useT } from "../../i18n/index.ts";
 import styles from "./PublishStudio.module.css";
 
 const ALL: Network[] = ["x", "linkedin", "facebook", "instagram", "tiktok"];
@@ -40,6 +41,7 @@ export default function PublishStudio({
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [confirmKey, setConfirmKey] = useState<string | null>(null);
+  const t = useT();
 
   const toggle = (n: Network) =>
     setNetworks((cur) => (cur.includes(n) ? cur.filter((x) => x !== n) : [...cur, n]));
@@ -60,7 +62,7 @@ export default function PublishStudio({
       <div className={styles.root}>
         <div className={styles.wrap}>
           <h1 className={styles.title}>Publish</h1>
-          <p className={styles.hint}>Añade un perfil en Settings para preparar publicaciones.</p>
+          <p className={styles.hint}>{t("publish.add_profile_hint")}</p>
         </div>
       </div>
     );
@@ -81,8 +83,8 @@ export default function PublishStudio({
       const unavailable = err instanceof ApiError && (err.status === 404 || err.status === 405);
       setNotes([
         unavailable
-          ? "La generación de borradores no está disponible en este servidor. Puedes escribir el texto a mano."
-          : errorMessage(err, "No se pudieron generar los borradores."),
+          ? t("publish.drafts_unavailable")
+          : errorMessage(err, t("publish.generate_failed")),
       ]);
     } finally {
       setGenerating(false);
@@ -138,13 +140,13 @@ export default function PublishStudio({
       <div className={styles.wrap}>
         <h1 className={styles.title}>Publish</h1>
         <p className={styles.hint}>
-          Genera un borrador por red a partir de una idea, edítalo, revísalo y publícalo.
-          {handle ? ` Perfil activo: @${handle}.` : ""}
+          {t("publish.blurb")}
+          {handle ? t("publish.active_profile", { handle }) : ""}
         </p>
 
         <section className={styles.card}>
           <label className={styles.field}>
-            <span>Idea o texto base</span>
+            <span>{t("publish.idea_label")}</span>
             <textarea
               className={styles.textarea}
               rows={4}
@@ -153,7 +155,7 @@ export default function PublishStudio({
               data-testid="publish-source"
             />
           </label>
-          <div className={styles.networks} role="group" aria-label="Redes">
+          <div className={styles.networks} role="group" aria-label={t("publish.networks_label")}>
             {ALL.map((n) => (
               <label key={n} className={styles.check}>
                 <input type="checkbox" checked={networks.includes(n)} onChange={() => toggle(n)} />
@@ -169,7 +171,7 @@ export default function PublishStudio({
               onClick={() => void generate()}
               data-testid="publish-generate"
             >
-              {generating ? "Generando…" : "Generar borradores"}
+              {generating ? t("publish.generating") : t("publish.generate")}
             </button>
             <button
               type="button"
@@ -178,7 +180,7 @@ export default function PublishStudio({
               onClick={writeByHand}
               data-testid="publish-manual"
             >
-              Escribir a mano
+              {t("publish.write_by_hand")}
             </button>
           </div>
           {notes.map((note) => (
@@ -198,7 +200,7 @@ export default function PublishStudio({
               key={card.key}
               className={styles.card}
               data-testid={`draft-${card.platform}`}
-              aria-label={`Borrador de ${NETWORK_LABELS[card.platform]}`}
+              aria-label={t("publish.draft_aria", { network: NETWORK_LABELS[card.platform] })}
             >
               <div className={styles.cardHead}>
                 <h2 className={styles.cardTitle}>{NETWORK_LABELS[card.platform]}</h2>
@@ -210,8 +212,10 @@ export default function PublishStudio({
               {ev && (
                 <div className={styles.eval} data-testid="evaluation">
                   <strong>{ev.decision}</strong>
-                  {ev.mean_score !== null && ` · nota ${ev.mean_score.toFixed(1)}`}
-                  {ev.style_similarity !== null && ` · parecido a tu voz ${Math.round(ev.style_similarity * 100)}%`}
+                  {ev.mean_score !== null &&
+                    t("publish.score", { score: ev.mean_score.toFixed(1) })}
+                  {ev.style_similarity !== null &&
+                    t("publish.voice_match", { pct: Math.round(ev.style_similarity * 100) })}
                   {ev.critique && <p className={styles.critique}>{ev.critique}</p>}
                   {ev.deterministic_failures.length > 0 && (
                     <ul>
@@ -220,7 +224,7 @@ export default function PublishStudio({
                       ))}
                     </ul>
                   )}
-                  {card.edited && <p className={styles.critique}>Editaste el texto después de evaluarlo.</p>}
+                  {card.edited && <p className={styles.critique}>{t("publish.edited_after_eval")}</p>}
                 </div>
               )}
               {card.warnings.map((w) => (
@@ -233,15 +237,17 @@ export default function PublishStudio({
                 className={styles.textarea}
                 rows={card.platform === "x" ? 4 : 8}
                 value={card.text}
-                aria-label={`Texto para ${NETWORK_LABELS[card.platform]}`}
+                aria-label={t("publish.text_for", { network: NETWORK_LABELS[card.platform] })}
                 onChange={(e) => setCard(card.key, (c) => editCard(c, e.target.value))}
               />
 
               <div className={styles.previewBox} data-testid="post-preview">
                 <div className={styles.previewHead}>
-                  {handle ? `@${handle}` : "Tu perfil"} · {NETWORK_LABELS[card.platform]}
+                  {handle ? `@${handle}` : t("publish.your_profile")} · {NETWORK_LABELS[card.platform]}
                 </div>
-                <div className={styles.previewBody}>{card.text || "Vista previa vacía"}</div>
+                <div className={styles.previewBody}>
+                  {card.text || t("publish.empty_preview")}
+                </div>
               </div>
 
               {reason && !card.published && <p className={styles.note}>{reason}</p>}
@@ -250,7 +256,7 @@ export default function PublishStudio({
                   {errors[card.key]}{" "}
                   {errors[card.key].includes("Settings") && (
                     <button type="button" className={styles.link} onClick={onOpenConnections}>
-                      Abrir Settings
+                      {t("publish.open_settings")}
                     </button>
                   )}
                 </p>
@@ -258,27 +264,30 @@ export default function PublishStudio({
 
               {card.preview && !card.published && (
                 <p className={styles.ok} data-testid="preview-result">
-                  Revisión sin publicar: el texto es válido
-                  {card.preview.estimated_cost_usd !== null && ` · costo estimado US$ ${card.preview.estimated_cost_usd}`}.
+                  {t("publish.preview_ok")}
+                  {card.preview.estimated_cost_usd !== null &&
+                    t("publish.est_cost", { cost: card.preview.estimated_cost_usd })}.
                   {card.preview.warnings.map((w) => ` ${w}`)}
                 </p>
               )}
               {card.published && (
                 <p className={styles.ok} data-testid="publish-result">
-                  Publicado{card.published.replayed ? " (ya estaba enviado, no se repitió)" : ""}.{" "}
+                  {t("publish.published")}
+                  {card.published.replayed ? t("publish.published_replayed") : ""}.{" "}
                   {card.published.url && (
                     <a href={card.published.url} target="_blank" rel="noopener noreferrer">
-                      Ver publicación
+                      {t("publish.view_post")}
                     </a>
                   )}
                 </p>
               )}
 
               {confirmKey === card.key ? (
-                <div className={styles.confirm} role="alertdialog" aria-label="Confirmar publicación">
+                <div className={styles.confirm} role="alertdialog" aria-label={t("publish.confirm_aria")}>
                   <span>
-                    Esto se publica ahora en {NETWORK_LABELS[card.platform]}
-                    {handle ? ` como @${handle}` : ""} y es público.
+                    {t("publish.confirm_now", { network: NETWORK_LABELS[card.platform] })}
+                    {handle ? t("publish.confirm_as", { handle }) : ""}
+                    {t("publish.confirm_public")}
                   </span>
                   <button
                     type="button"
@@ -287,10 +296,10 @@ export default function PublishStudio({
                     onClick={() => void publish(card)}
                     data-testid="publish-confirm"
                   >
-                    Sí, publicar
+                    {t("publish.yes_publish")}
                   </button>
                   <button type="button" className={styles.ghost} onClick={() => setConfirmKey(null)}>
-                    Cancelar
+                    {t("publish.cancel")}
                   </button>
                 </div>
               ) : (

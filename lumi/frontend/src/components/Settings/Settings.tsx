@@ -2,16 +2,18 @@ import { useState } from "react";
 import { useLightMode } from "../../hooks/useLightMode";
 import { IconArrowBoxLeft, IconMoon, IconSun } from "../Sidebar/Icons";
 import { errorMessage, type ConnectReturn, type ProfileSummary, type User } from "../../api";
+import { useT } from "../../i18n/index.ts";
+import LangToggle from "../../i18n/LangToggle";
 import ConnectionsPanel from "./ConnectionsPanel";
 import styles from "./Settings.module.css";
 
 export type SettingsSection = "profile" | "appearance" | "social" | "connectors";
 
 const SECTIONS: { key: SettingsSection; label: string }[] = [
-  { key: "profile", label: "Profile" },
-  { key: "appearance", label: "Appearance" },
-  { key: "social", label: "Connected Accounts" },
-  { key: "connectors", label: "Connectors" },
+  { key: "profile", label: "settings.section_profile" },
+  { key: "appearance", label: "settings.section_appearance" },
+  { key: "social", label: "settings.section_social" },
+  { key: "connectors", label: "settings.section_connectors" },
 ];
 
 const NETWORKS = ["x", "linkedin", "facebook", "instagram", "tiktok"] as const;
@@ -54,6 +56,7 @@ export default function Settings({
   onConnectionsChanged: () => void;
 }) {
   const { light, set: setLight } = useLightMode();
+  const t = useT();
   const [newPlatform, setNewPlatform] = useState<string>("x");
   const [newHandle, setNewHandle] = useState("");
   const [profileError, setProfileError] = useState<string | null>(null);
@@ -71,7 +74,7 @@ export default function Settings({
       await onCreateProfile(newPlatform, newHandle);
       setNewHandle("");
     } catch (err) {
-      setProfileError(errorMessage(err, "No se pudo crear el perfil."));
+      setProfileError(errorMessage(err, t("settings.profile_error")));
     } finally {
       setProfileBusy(false);
     }
@@ -79,12 +82,12 @@ export default function Settings({
 
   const clearHistory = async () => {
     if (!active) return;
-    if (!window.confirm(`¿Borrar del servidor el historial de chat de @${active.handle}?`)) return;
+    if (!window.confirm(t("settings.delete_confirm", { handle: active.handle }))) return;
     try {
       await onClearHistory(active.id);
-      setHistoryNote("Historial borrado.");
+      setHistoryNote(t("settings.history_cleared"));
     } catch (err) {
-      setHistoryNote(errorMessage(err, "No se pudo borrar el historial."));
+      setHistoryNote(errorMessage(err, t("settings.history_error")));
     }
   };
 
@@ -101,7 +104,7 @@ export default function Settings({
             <IconArrowBoxLeft size={16} />
           </button>
           <div className={styles.headMeta}>
-            <h1 className={styles.title}>Settings</h1>
+            <h1 className={styles.title}>{t("settings.title")}</h1>
             <p className={styles.subtitle}>Lumi by Onscript</p>
           </div>
         </div>
@@ -115,7 +118,7 @@ export default function Settings({
                 onClick={() => onSectionChange(item.key)}
                 className={`${styles.navBtn} ${section === item.key ? styles.navBtnActive : ""}`}
               >
-                <span>{item.label}</span>
+                <span>{t(item.label)}</span>
               </button>
             ))}
           </nav>
@@ -124,7 +127,7 @@ export default function Settings({
             {section === "profile" && (
               <>
                 <section className={styles.card}>
-                  <div className={styles.cardTitle}>Account</div>
+                  <div className={styles.cardTitle}>{t("settings.account")}</div>
                   <div className={styles.profileRow}>
                     <span className={styles.avatar}>{initialsOf(shownName)}</span>
                     <span className={styles.profileMeta}>
@@ -134,36 +137,33 @@ export default function Settings({
                   </div>
                   <div className={styles.cardActions}>
                     <button type="button" className={styles.btn} onClick={onLogout}>
-                      Log out
+                      {t("settings.logout")}
                     </button>
                   </div>
                 </section>
 
                 <section className={styles.card}>
-                  <div className={styles.cardTitle}>Profiles</div>
-                  <p className={styles.cardHint}>
-                    Cada perfil es una cuenta social que Lumi analiza. El perfil activo guía el chat, las
-                    tendencias y la publicación.
-                  </p>
+                  <div className={styles.cardTitle}>{t("settings.profiles")}</div>
+                  <p className={styles.cardHint}>{t("settings.profiles_blurb")}</p>
                   {profiles.length === 0 && (
-                    <p className={styles.mutedText}>Aún no tienes perfiles. Añade el primero abajo.</p>
+                    <p className={styles.mutedText}>{t("settings.no_profiles")}</p>
                   )}
                   <ul className={styles.accountList} aria-label="Profiles">
                     {profiles.map((p) => (
                       <li key={p.id} className={styles.accountRow}>
                         <span>
                           <strong>@{p.handle}</strong> · {p.platform}
-                          {p.has_voice_profile ? " · voz lista" : ""}
+                          {p.has_voice_profile ? t("settings.voice_ready") : ""}
                         </span>
                         {p.id === activeProfileId ? (
-                          <span className={styles.chipOn}>Activo</span>
+                          <span className={styles.chipOn}>{t("settings.active")}</span>
                         ) : (
                           <button
                             type="button"
                             className={styles.textBtn}
                             onClick={() => onSelectProfile(p.id)}
                           >
-                            Usar este
+                            {t("settings.use_this")}
                           </button>
                         )}
                       </li>
@@ -172,7 +172,7 @@ export default function Settings({
                   <div className={styles.cardActions}>
                     <select
                       className={styles.select}
-                      aria-label="Red del nuevo perfil"
+                      aria-label={t("settings.new_network")}
                       value={newPlatform}
                       onChange={(e) => setNewPlatform(e.target.value)}
                     >
@@ -184,8 +184,8 @@ export default function Settings({
                     </select>
                     <input
                       className={styles.input}
-                      aria-label="Usuario del nuevo perfil"
-                      placeholder="@usuario"
+                      aria-label={t("settings.new_handle")}
+                      placeholder={t("settings.handle_placeholder")}
                       value={newHandle}
                       onChange={(e) => setNewHandle(e.target.value)}
                     />
@@ -195,7 +195,7 @@ export default function Settings({
                       disabled={!newHandle.trim() || profileBusy}
                       onClick={() => void addProfile()}
                     >
-                      Añadir perfil
+                      {t("settings.add_profile")}
                     </button>
                   </div>
                   {profileError && (
@@ -206,7 +206,7 @@ export default function Settings({
                   {active && (
                     <div className={styles.cardActions}>
                       <button type="button" className={styles.textBtn} onClick={() => void clearHistory()}>
-                        Borrar historial de chat de @{active.handle}
+                        {t("settings.clear_history", { handle: active.handle })}
                       </button>
                       {historyNote && <span className={styles.savedNote}>{historyNote}</span>}
                     </div>
@@ -215,11 +215,11 @@ export default function Settings({
               </>
             )}
 
-            {section === "appearance" && (
-              <section className={styles.card}>
-                <div className={styles.cardTitle}>Appearance</div>
-                <p className={styles.cardHint}>The theme applies everywhere, including the chat.</p>
-                <div className={styles.themeSeg} role="group" aria-label="Theme">
+            {section === "appearance" && (              <>
+                <section className={styles.card}>
+                  <div className={styles.cardTitle}>{t("settings.appearance")}</div>
+                  <p className={styles.cardHint}>{t("settings.theme_hint")}</p>
+                  <div className={styles.themeSeg} role="group" aria-label={t("settings.theme")}>
                   <button
                     type="button"
                     aria-pressed={!light}
@@ -227,7 +227,7 @@ export default function Settings({
                     onClick={() => setLight(false)}
                   >
                     <IconMoon size={15} />
-                    Dark
+                    {t("settings.dark")}
                   </button>
                   <button
                     type="button"
@@ -236,10 +236,17 @@ export default function Settings({
                     onClick={() => setLight(true)}
                   >
                     <IconSun size={15} />
-                    Light
+                    {t("settings.light")}
                   </button>
                 </div>
-              </section>
+                </section>
+
+                <section className={styles.card}>
+                  <div className={styles.cardTitle}>{t("settings.language")}</div>
+                  <p className={styles.cardHint}>{t("settings.language_hint")}</p>
+                  <LangToggle />
+                </section>
+              </>
             )}
 
             {section === "social" && (
