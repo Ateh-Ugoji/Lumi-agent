@@ -40,7 +40,15 @@ pytestmark = pytest.mark.django_db
 @pytest.fixture(autouse=True)
 def wiring(settings, monkeypatch):
     settings.ROOT_URLCONF = "apps.connections.tests.db.urls"
-    for name in (*ALL_ENV, "X_LIVE_ENABLED", "FRONTEND_URL"):
+    # Clear every app-credential variable so these tests assert the unconfigured
+    # paths on any machine — the local .env now carries Google keys too (P0).
+    for name in (
+        *ALL_ENV,
+        "X_LIVE_ENABLED",
+        "FRONTEND_URL",
+        "GOOGLE_OAUTH_CLIENT_ID",
+        "GOOGLE_OAUTH_CLIENT_SECRET",
+    ):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("FRONTEND_URL", FRONT)
 

@@ -30,6 +30,7 @@ from .errors import (
 )
 from .models import AccountStatus, ConnectedAccount, PublishJob
 from .providers.base import AccountInfo, PublishDraft
+from .providers.routes import publish_provider
 from .publishing import (
     ConfirmationRequired,
     IdempotencyConflict,
@@ -39,8 +40,6 @@ from .publishing import (
 )
 from .stores import DjangoPublishLedger
 
-# Platform of the post -> provider that holds the credentials.
-PROVIDER_FOR_PLATFORM = {"facebook": "meta", "linkedin": "linkedin", "x": "x"}
 EXPIRY_MARGIN_SECONDS = 60
 
 
@@ -130,7 +129,7 @@ def publish_post(
     idempotency_key: str | None,
 ) -> dict[str, Any]:
     profile = get_owned_profile(user, profile_id)
-    provider_name = PROVIDER_FOR_PLATFORM.get(platform)
+    provider_name = publish_provider(platform)
     if provider_name is None:
         raise ApiError(
             "publish.unsupported_platform",

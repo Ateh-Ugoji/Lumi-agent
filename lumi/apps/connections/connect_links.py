@@ -19,17 +19,17 @@ from lumi_ai.ports import (
 
 from . import accounts
 from .models import AccountStatus, ConnectedAccount
+from .providers.routes import PFM_PLATFORMS, native_provider
 
-#: Native provider first, Post for Me as fallback. Instagram and TikTok only exist in Post for Me.
-NATIVE_PROVIDER: dict[str, str] = {"facebook": "meta", "linkedin": "linkedin", "x": "x"}
-PFM_PLATFORMS = frozenset({"x", "linkedin", "facebook", "instagram", "tiktok"})
+# Routing (native first, Post for Me as fallback; Instagram and TikTok only exist in
+# Post for Me) comes from providers/routes.py — the single owner of those decisions.
 _LIVE = (AccountStatus.ACTIVE, AccountStatus.LIMITED)
 
 
 def choose_provider(platform: str) -> str | None:
     """The provider that can connect ``platform`` in this environment, or None."""
     config = accounts.get_config()
-    native = NATIVE_PROVIDER.get(platform)
+    native = native_provider(platform)
     native_ready = native and not accounts.missing_env(native, config)
     if native_ready and (native != "x" or config.x_live_enabled):
         return native

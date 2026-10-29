@@ -100,6 +100,7 @@
     <button data-v="userreq">6 · User-requested handles</button>
     <button data-v="mcp">7 · MCP connectors</button>
     <button data-v="recaption">8 · AI recaption</button>
+    <button data-v="publish">9 · Publish from chat</button>
   </div>
 </header>
 
@@ -410,6 +411,37 @@
   </div>
 
   <footer>Endpoint spec: <code>.agents/api-endpoints.md</code> → "AI recaption" · tests: <code>legacy/tests/test_repurpose_endpoint.py</code> (17 — endpoint, aliases, validation, dedupe, partial failure, fallback flag, core retry, tool return-shape lock) · tool tiers: <code>cost="llm"</code> + <code>side_effects="writes_db"</code> locked by <code>legacy/tests/test_tool_tiers.py</code> · frontend: <code>webappv2</code> repo (<code>useAiRecaption</code>, <code>Composer.tsx</code>, <code>PlatformPreviewModal.tsx</code>).</footer>
+</section>
+
+<!-- ════════════════════ VIEW 9 · PUBLISH FROM CHAT ═══════════════════ -->
+<section class="view" id="v-publish">
+  <div class="vhead">
+    <h2>9 · Publish from chat — direct providers (audited 2026-10-28 · plan)</h2>
+    <p>Post for Me retired as the router: publishing already runs through the native adapters (<code>publish_api.py</code> → meta/linkedin/x), PFM's posting call never existed and its local token is expired. Ordered plan P0–P7: <code>plan/TEMP-audit-publish-from-chat.md</code>.</p>
+  </div>
+
+  <table>
+    <thead><tr><th>Step</th><th>State</th><th>What</th></tr></thead>
+    <tbody>
+      <tr><td>P0 · Credentials</td><td><b>done 2026-10-28</b></td><td><code>lumi/.env</code> now holds <code>META_/LINKEDIN_/X_/GOOGLE_OAUTH_</code> client credentials, staged <code>TIKTOK_*</code> and <code>X_LIVE_ENABLED=true</code> (env-only, per the secrets rule). <code>check_keys</code>: meta OK · google OK · LinkedIn/X unprobed by design. Callbacks still to register per portal: <code>http://localhost:3011/connections/&lt;provider&gt;/callback</code>.</td></tr>
+      <tr><td>Existing publish path</td><td><b>built</b></td><td><code>POST /api/v1/publish</code> → <code>publish_api.publish_post</code>: <code>dry_run</code> + <code>confirm=true</code> + <code>Idempotency-Key</code> → <code>PROVIDER_FOR_PLATFORM</code> (meta/linkedin/x) → <code>PublishJob</code> ledger. Instagram/TikTok not published from here — PFM's posting call was never built.</td></tr>
+      <tr><td>P1 · Routes table</td><td><b>done</b> · 2026-10-28</td><td><code>providers/routes.py</code> — one owner for platform → ordered <code>Route(provider, publish, read)</code>; <code>publish_api</code> uses <code>publish_provider()</code>, <code>connect_links</code> uses <code>()native_provider</code> + the derived <code>PFM_PLATFORMS</code>, <code>ingest</code> imports <code>PFM_PLATFORMS</code>. The three duplicated maps (<code>PROVIDER_FOR_PLATFORM</code>, <code>NATIVE_PROVIDER</code>, both <code>PFM_PLATFORMS</code>) are gone; 7 tests incl. a drift check against each adapter's <code>capabilities()</code>.</td></tr>
+      <tr><td>P2 · Native ingestion</td><td>partly done</td><td>Facebook Pages already read natively through Meta (R3 <code>a534dec</code>: <code>own_post_sync.py:75</code> → <code>collect_meta_posts</code>, posts + views of newest 20); every other network still reads the PFM feed (token expired) → P2 switches them to per-provider <code>fetch_posts</code>/<code>fetch_metrics</code> — LinkedIn scope-gated, X stays on Xpoz. PFM leaves the hot path.</td></tr>
+      <tr><td>P3 · publish_post tool</td><td>planned</td><td>Agent tool: preview (<code>dry_run</code>, sends nothing) → user confirms → existing publish service. <code>cost="write"</code>, <code>side_effects="external_write"</code>, never cached.</td></tr>
+      <tr><td>P4 · top_posts SQL</td><td><b>done</b> · <code>e7bf9d1</code></td><td>Latest non-null metric per post ranked in SQL — views/likes/comments/shares, platform + period + top-N filters, local DB only, never zero (<code>lumi_ai/tools/data.py</code>).</td></tr>
+      <tr><td>P5 · Auto-refresh</td><td>planned</td><td>Bounded refresh of posts with stale <code>last_checked_at</code> via provider <code>fetch_metrics</code>, respecting the snapshot policy.</td></tr>
+      <tr><td>P6 · TikTok provider</td><td>planned</td><td><code>providers/tiktok.py</code> behind <code>TIKTOK_LIVE_ENABLED</code>; revalidate the Content Posting API requirements against official docs first.</td></tr>
+      <tr><td>P7 · Docs</td><td>planned</td><td><code>AGENTS.md</code>, <code>flow-map.*</code>, <code>API_KEYS.md</code>, <code>.env.example</code>, <code>how-to-setup.md</code> (callback-registration step).</td></tr>
+    </tbody>
+  </table>
+
+  <div class="notes">
+    <div class="note ok"><b>Why PFM is not the router anymore</b>It never had a posting call (publish has been native since CONNECT's T6), its local token is expired (<code>check_keys</code>: FALLA), and direct keys now exist for LinkedIn, X and TikTok (+ Meta already native).</div>
+    <div class="note warn"><b>Costs &amp; permissions</b>With <code>X_LIVE_ENABLED=true</code> every real X publish costs API credits ($0.015/post, $0.20 with link). LinkedIn reads need the restricted <code>r_member_social</code> — without it the account is <code>limited</code> and the agent says so instead of faking data.</div>
+    <div class="note"><b>Unchanged decisions</b>Text-only, publish-now-only; X reads stay on Xpoz (per-read pricing); every new tool keeps the anti-fabrication rules — typed errors, honest no-data, confirm-before-write.</div>
+  </div>
+
+  <footer>Audit + plan: <code>plan/TEMP-audit-publish-from-chat.md</code> · publish service: <code>apps/connections/publish_api.py</code> · providers: <code>apps/connections/providers/</code> · agent registry: <code>lumi_ai/tools/</code> + <code>apps/intelligence/wiring.py</code></footer>
 </section>
 
 </main>

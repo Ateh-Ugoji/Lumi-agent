@@ -648,6 +648,26 @@ Added `RetweetContext` (RT originals had no model); `ReplyContext.lang`; `Commen
 
 ---
 
+
+## Publish from chat -> direct providers (audited 2026-10-28)
+
+The handed-over plan was "Post for Me for everything (publish, read posts, metrics)". Audited against the code and against the direct LinkedIn/X/TikTok/Meta credentials we now hold, it is re-planned as **direct providers, Post for Me retired as the router**. Full audit + ordered plan (P0-P7, each with owner and verification): `plan/TEMP-audit-publish-from-chat.md`.
+
+What the audit verified:
+
+- Publishing was **already native**: `apps/connections/publish_api.py:43` routes `facebook->meta`, `linkedin->linkedin`, `x->x`; PFM's posting call was never built (`publish_api.py` docstring) and the local `PFM_JWT_TOKEN` is expired (`check_keys`: `FALLA pfm`).
+- Reading own posts is **split since R3 (`a534dec`)**: a Facebook profile with a connected Page is read natively through Meta (`own_post_sync.py:75` -> `collect_meta_posts` -> `providers/meta.py` `fetch_posts`/`fetch_metrics`, newest 20 posts get metrics per sync); every other network still goes through `clients/pfm.py` (local token expired). Task P2 moves the rest native.
+- Meta's `fetch_posts`/`fetch_metrics` **have a production caller since `a534dec`** (R3): `collect_meta_posts` stores posts and views (`own_posts.py:98,109`); likes/comments/shares stay `NULL` per the R3 snapshot.
+- X reads stay on Xpoz by decision (`providers/x.py` — per-read pricing); LinkedIn reads need the restricted `r_member_social` (an account without it is `limited` and the agent says so); TikTok has no native provider yet.
+
+**P0 done (2026-10-28).** `lumi/.env` now carries `META_APP_ID/SECRET`, `LINKEDIN_CLIENT_ID/SECRET`, `X_CLIENT_ID/SECRET`, `GOOGLE_OAUTH_CLIENT_ID/SECRET`, staged `TIKTOK_CLIENT_ID/SECRET/APP_ID` and `X_LIVE_ENABLED=true` (values live only in the environment, per the secrets rule; the previous file is kept as `.env.bak-20261028-033834`, untracked). `check_keys`: meta OK, google OK, LinkedIn/X unprobed by design. Local stack verified: Django `127.0.0.1:8001`, Vite `:3011`, CORS already allows `:3011` including the `Idempotency-Key` header.
+
+**Before any real connect flow:** register the callback `http://localhost:3011/connections/<provider>/callback` (built by `config.redirect_uri`, `apps/connections/config.py:185`) in each developer portal (X, LinkedIn, Meta, Google) — correct keys still fail with a redirect_uri mismatch otherwise. With `X_LIVE_ENABLED=true` every real X publish costs API credits ($0.015/post, $0.20 with link).
+
+**P1 built (2026-10-28):** the single routes table `apps/connections/providers/routes.py` now owns platform -> ordered `Route(provider, publish, read)`; `publish_api` calls `publish_provider()`, `connect_links` calls `native_provider()` + reads the derived `PFM_PLATFORMS`, and `ingest` imports `PFM_PLATFORMS` — the three duplicated maps (`PROVIDER_FOR_PLATFORM`, `NATIVE_PROVIDER`, both `PFM_PLATFORMS` frozensets) are gone. 7 tests in `apps/connections/tests/test_routes.py`, including a drift check that compares the table against each adapter's own `capabilities()`.
+
+**Not built yet (P2-P3, P5-P7):** native own-posts/metrics ingestion for the non-Facebook networks, the `publish_post` agent tool (preview -> user confirms -> existing publish service), auto-refresh of stale metrics, a TikTok provider, and the docs sweep. **P4 landed the same day (`e7bf9d1`): the SQL `top_posts` tool** (`lumi_ai/tools/data.py`, ranks by latest non-null views/likes/comments/shares with platform, period and top-N filters, local DB only). **The agent still has no publish tool** — publishing today is the REST path only.
+
 ## HTTP Endpoints & Agent Tools
 
 Analysis covers `lumi/app/routers/*.py`, `lumi/app/tools/*.py`, `.agents/api-endpoints.md`, `docs/routers.md`, `docs/tools.md`
