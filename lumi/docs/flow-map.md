@@ -390,7 +390,7 @@ flowchart LR
 - **Tests:** `legacy/tests/test_mcp.py` + `legacy/tests/test_mcp_google_router.py` (32 tests, all seams faked — no sockets, no Google, no credits) + doc-claim gate regressions in `legacy/tests/test_agent_claim_gate.py`. Smoke verified: `/health` 200, `/mcp/google/status` `connected:false` + `configured` flag, `/mcp/google/connect` 503 (client config unset).
 
 
-## Publish from chat -> native providers (audited 2026-10-28 — plan; P1 + P4 built, P2-P3 + P5-P7 pending)
+## Publish from chat -> native providers (audited 2026-10-28 — plan; P1 + P2 + P4 built, P3 + P5-P7 pending)
 
 The old spine ("Post for Me for everything") is retired: publishing already runs through the
 native provider adapters and PFM's posting call never existed (its local token is expired too).
@@ -427,7 +427,8 @@ flowchart TD
 ```
 
 - **Built:** `POST /api/v1/publish` with `dry_run` + `confirm` + `Idempotency-Key` (`apps/connections/publish_api.py`), single routes table `providers/routes.py` (P1: platform -> ordered `Route(provider, publish, read)`; feeds publish, connect and PFM-feed validation), per-provider adapters with declared `Capabilities` (`apps/connections/providers/`), provider OAuth connect/callback (`connect_links.py`), Meta read wired for Facebook Pages since R3 (`a534dec`: posts + views of newest 20), CORS allowing `Idempotency-Key` from `:3010`/`:3011`.
-- **Planned P2-P3, P5-P7 (P1 done in this change, P4 in `e7bf9d1`):** native own-posts/metrics ingestion for the non-Facebook networks (PFM leaves the hot path) -> agent `publish_post` tool (`cost="write"`, `side_effects="external_write"`, never cached; preview sends nothing, confirm calls the existing service) -> bounded auto-refresh of stale metrics -> TikTok provider behind `TIKTOK_LIVE_ENABLED` -> docs sweep.
+- **P2 built:** `OwnPostSync` walks the routes table (Meta, LinkedIn when `active`, X via Xpoz when live) before PFM; Instagram/TikTok still read through PFM (Q1).
+- **Planned P3, P5-P7 (P1, P2 done, P4 in `e7bf9d1`):** agent `publish_post` tool (`cost="write"`, `side_effects="external_write"`, never cached; preview sends nothing, confirm calls the existing service) -> bounded auto-refresh of stale metrics -> TikTok provider behind `TIKTOK_LIVE_ENABLED` -> docs sweep.
 - **P0 done (2026-10-28):** provider credentials + `X_LIVE_ENABLED=true` in `lumi/.env` (env-only, secrets rule); callbacks still to register per portal as `http://localhost:3010/connections/<provider>/callback` (`FRONTEND_URL` = the port Vite serves; CORS allows 3010 and 3011).
 - **Unchanged decisions:** text-only, publish-now-only; X reads stay on Xpoz (per-read pricing); every new tool keeps the anti-fabrication rules below (typed errors, honest no-data, confirm-before-write).
 

@@ -16,6 +16,7 @@ import pytest
 from asgiref.sync import async_to_sync
 
 from apps.connections import own_post_sync
+from apps.connections.config import ConnectionsConfig
 from apps.connections.models import ConnectedAccount
 from apps.connections.own_post_sync import DjangoOwnPostSync
 from apps.connections.own_posts import OwnPostsResult
@@ -122,7 +123,10 @@ class TestToolTimeout:
             platform="x",
             handle="ateh",
         )
-        monkeypatch.setattr(own_post_sync.accounts, "get_config", lambda: None)
+        # An empty config: Xpoz is off, so an X profile falls through to the Post for Me feed.
+        monkeypatch.setattr(
+            own_post_sync.accounts, "get_config", lambda: ConnectionsConfig.from_env({})
+        )
         monkeypatch.setattr(own_post_sync.accounts, "missing_env", lambda *_: [])
         monkeypatch.setattr(own_post_sync.accounts, "make_pfm", lambda: None)
 

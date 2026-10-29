@@ -6,9 +6,13 @@ the posts the account stopped returning. The ingest rules (a missing metric stay
 thread fields) belong to ``apps.profiles.services`` and ``ingest.py``; nothing here fabricates a
 value.
 
-A Facebook profile with a connected Page is read through Meta (posts, then the metrics of the
-newest ones); anything else goes through Post for Me, as before. The native provider wins when
-both are linked, as in ``connect_links``.
+Each platform is read by the first route in ``providers.routes.ROUTES`` that can serve this
+profile right now: a Facebook profile with a connected Page through Meta (posts, then the metrics
+of the newest ones), a LinkedIn profile whose account holds ``r_member_social`` through LinkedIn
+(posts only, it reports no metrics), an X profile through Xpoz when it is live (public read, the
+metrics ride in the feed), and anything else through Post for Me as before. A native route that
+cannot serve the profile (no connected account, a ``limited`` LinkedIn account, Xpoz off) falls
+through to the next one, so the answer never depends on a route that cannot work.
 
 Writes go through ``@aio``: when the ``backfill_posts`` tool times out, nothing it was still
 writing commits afterwards. The feed read is an external call and stays outside the guard.
@@ -16,6 +20,7 @@ writing commits afterwards. The feed read is an external call and stays outside 
 
 from __future__ import annotations
 
+import uuid
 from dataclasses import dataclass
 from typing import Any
 
@@ -34,11 +39,14 @@ from lumi_ai.ports import (
 )
 
 from . import accounts
+from .clients.xpoz import XpozClient
 from .models import AccountStatus, ConnectedAccount, IngestSource, Provider
-from .own_posts import collect_meta_posts, collect_own_posts
+from .own_posts import collect_native_posts, collect_own_posts, collect_xpoz_posts
 from .passes import finalize_pass, pass_reached_window
 from .providers.base import AccountInfo, TokenSet
-from .stores import DjangoPassStore
+from .providers.routes import PFM, routes_for
+from .socialdata import XpozSocialData
+from .stores import DjangoCreditLedger, DjangoPassStore
 
 #: Newest posts read per sync, and pages of 50 at most.
 OWN_POST_LIMIT = 100
@@ -57,6 +65,17 @@ class _Target:
     provider: str = Provider.PFM
     tokens: TokenSet | None = None
     info: AccountInfo | None = None
+    user_id: int | None = None
+
+
+#: The ``provider`` of a target read through Xpoz (not a ``ConnectedAccount`` provider).
+XPOZ = "xpoz"
+_SOURCE = {
+    Provider.META: IngestSource.META,
+    Provider.LINKEDIN: IngestSource.LINKEDIN,
+    XPOZ: IngestSource.XPOZ,
+    Provider.PFM: IngestSource.PFM,
+}
 
 
 class DjangoOwnPostSync:
@@ -69,16 +88,21 @@ class DjangoOwnPostSync:
         target = await sync_to_async(_target, thread_sensitive=True)(
             profile_id, platform
         )
-        native = target.provider == Provider.META
+        native = target.provider in (Provider.META, Provider.LINKEDIN)
         if native:
             started = timezone.now()
-            result = await collect_meta_posts(
-                accounts.make_provider(Provider.META),
+            result = await collect_native_posts(
+                accounts.make_provider(target.provider),
                 target.tokens,
                 target.info,
                 handle=target.handle,
                 limit=OWN_POST_LIMIT,
                 metrics_limit=META_METRICS_PER_SYNC,
+            )
+        elif target.provider == XPOZ:
+            started = timezone.now()
+            result = await collect_xpoz_posts(
+                _xpoz_data(target.user_id), target.handle, limit=OWN_POST_LIMIT
             )
         else:
             config = accounts.get_config()
@@ -105,7 +129,7 @@ class DjangoOwnPostSync:
             self._passes,
             target.handle_id,
             fetched_ids={p.external_id for p in result.posts},
-            source=IngestSource.META if native else IngestSource.PFM,
+            source=_SOURCE[target.provider],
             pass_started=started,
             pass_complete=complete,
             fetched_window=window,
@@ -119,8 +143,9 @@ class DjangoOwnPostSync:
             "complete": outcome.complete,
             "flagged_deleted": outcome.flagged_deleted,
         }
+        if target.provider != Provider.PFM:
+            summary["source"] = target.provider
         if native:
-            summary["source"] = "meta"
             summary["metrics_read"] = result.metrics_read
             summary["metrics_failed"] = result.metrics_failed
         return summary
@@ -139,10 +164,17 @@ def _target(profile_id: int, platform: str | None) -> _Target:
         raise UnsupportedPlatform(
             f"this profile is on {own_platform}, not {platform}", provider="connections"
         )
-    if own_platform == "facebook":
-        native = _meta_target(profile_id, handle_id, own_platform, handle)
+    # ``read`` in the table is the adapter's static capability; LinkedIn (per-account scope) and X
+    # (Xpoz) are decided in ``_native_target``, so every native route is asked, in order.
+    for route in routes_for(own_platform):
+        if route.provider == PFM:
+            continue
+        native = _native_target(
+            profile_id, handle_id, own_platform, handle, route.provider
+        )
         if native is not None:
             return native
+
     account = (
         ConnectedAccount.objects.filter(
             social_profile_id=profile_id, provider=Provider.PFM, status__in=_LIVE
@@ -159,14 +191,20 @@ def _target(profile_id: int, platform: str | None) -> _Target:
     return _Target(handle_id, own_platform, handle, account.external_account_id)
 
 
-def _meta_target(
-    profile_id: int, handle_id: int, platform: str, handle: str
+def _native_target(
+    profile_id: int, handle_id: int, platform: str, handle: str, provider: str
 ) -> _Target | None:
-    """The profile's connected Facebook Page, or None when there is none to read through."""
+    """The native route that can read this profile now, or None to try the next route."""
+    if provider == Provider.X:
+        return _xpoz_target(profile_id, handle_id, platform, handle)
+    if provider not in (Provider.META, Provider.LINKEDIN):
+        return None
+    # A LINKEDIN account without r_member_social is ``limited``: it publishes but cannot read.
+    statuses = (AccountStatus.ACTIVE,) if provider == Provider.LINKEDIN else _LIVE
     try:
         row = (
             ConnectedAccount.objects.filter(
-                social_profile_id=profile_id, provider=Provider.META, status__in=_LIVE
+                social_profile_id=profile_id, provider=provider, status__in=statuses
             )
             .order_by("id")
             .first()
@@ -176,7 +214,7 @@ def _meta_target(
         tokens = accounts.token_set(row)
     except TokenDecryptError:
         raise ProviderUnavailable(
-            "the stored Facebook connection cannot be read: connect the Page again",
+            f"the stored {provider} connection cannot be read: connect the account again",
             provider="connections",
         ) from None
     info = AccountInfo(
@@ -186,8 +224,30 @@ def _meta_target(
         status=row.status,
     )
     return _Target(
-        handle_id, platform, handle, row.external_account_id, Provider.META, tokens, info
+        handle_id, platform, handle, row.external_account_id, provider, tokens, info
     )
+
+
+def _xpoz_data(user_id: int | None) -> XpozSocialData:
+    """The paid Xpoz reader. Tests replace this to inject a mock transport."""
+    return XpozSocialData(
+        XpozClient(
+            accounts.get_config(),
+            ledger=DjangoCreditLedger(user_id),
+            run_id=f"own-posts-{uuid.uuid4().hex[:12]}",
+        )
+    )
+
+
+def _xpoz_target(
+    profile_id: int, handle_id: int, platform: str, handle: str
+) -> _Target | None:
+    """X is read by handle through Xpoz (native X reads are priced per resource, ``x.py``)."""
+    config = accounts.get_config()
+    if not (config.xpoz_live_enabled and config.xpoz_api_keys):
+        return None
+    user_id = SocialProfile.objects.values_list("user_id", flat=True).get(pk=profile_id)
+    return _Target(handle_id, platform, handle, "", XPOZ, user_id=user_id)
 
 
 def _store(handle_id: int, posts: list[PostIn]) -> int:

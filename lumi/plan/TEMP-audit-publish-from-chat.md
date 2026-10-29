@@ -80,7 +80,8 @@ in the same change as the code.
   prose mentions. 7 new tests in `tests/test_routes.py`, including a drift check
   that compares the table against each adapter's own `capabilities()`.
 
-### P2. Native own-posts + metrics ingestion (replaces "read from the feed")
+### P2. Native own-posts + metrics ingestion (replaces "read from the feed") — **done 2026-10-28**
+- **Result:** `own_post_sync._target` walks `routes_for(platform)`: Meta (facebook), LinkedIn (`active` account only), X via Xpoz when live; otherwise PFM as before. Deviation from the text below: instagram/tiktok are *not* made `UnsupportedOperation` yet — they keep the PFM read (Q1 still open), so nothing that works today is removed. `collect_meta_posts` is now `collect_native_posts` (metrics only if the adapter declares `can_read_metrics`) plus `collect_xpoz_posts`. 5 new DB tests in `test_own_post_sync_routes.py`.
 - Extend `OwnPostSync` to dispatch per routes table: `meta.fetch_posts/fetch_metrics` (already
   implemented), `linkedin.fetch_posts` when `r_member_social` present, `x` → keep the Xpoz path
   (`_ingest_xpoz_user_posts` semantics), `instagram/tiktok` → typed `UnsupportedOperation`

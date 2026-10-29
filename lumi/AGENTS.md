@@ -660,7 +660,7 @@ The handed-over plan was "Post for Me for everything (publish, read posts, metri
 What the audit verified:
 
 - Publishing was **already native**: `apps/connections/publish_api.py:43` routes `facebook->meta`, `linkedin->linkedin`, `x->x`; PFM's posting call was never built (`publish_api.py` docstring) and the local `PFM_JWT_TOKEN` is expired (`check_keys`: `FALLA pfm`).
-- Reading own posts is **split since R3 (`a534dec`)**: a Facebook profile with a connected Page is read natively through Meta (`own_post_sync.py:75` -> `collect_meta_posts` -> `providers/meta.py` `fetch_posts`/`fetch_metrics`, newest 20 posts get metrics per sync); every other network still goes through `clients/pfm.py` (local token expired). Task P2 moves the rest native.
+- Reading own posts is **split since R3 (`a534dec`)**: a Facebook profile with a connected Page is read natively through Meta (`own_post_sync.py:75` -> `collect_meta_posts` -> `providers/meta.py` `fetch_posts`/`fetch_metrics`, newest 20 posts get metrics per sync); every other network still goes through `clients/pfm.py` (local token expired). P2 (below) moves LinkedIn and X native.
 - Meta's `fetch_posts`/`fetch_metrics` **have a production caller since `a534dec`** (R3): `collect_meta_posts` stores posts and views (`own_posts.py:98,109`); likes/comments/shares stay `NULL` per the R3 snapshot.
 - X reads stay on Xpoz by decision (`providers/x.py` — per-read pricing); LinkedIn reads need the restricted `r_member_social` (an account without it is `limited` and the agent says so); TikTok has no native provider yet.
 
@@ -670,7 +670,9 @@ What the audit verified:
 
 **P1 built (2026-10-28):** the single routes table `apps/connections/providers/routes.py` now owns platform -> ordered `Route(provider, publish, read)`; `publish_api` calls `publish_provider()`, `connect_links` calls `native_provider()` + reads the derived `PFM_PLATFORMS`, and `ingest` imports `PFM_PLATFORMS` — the three duplicated maps (`PROVIDER_FOR_PLATFORM`, `NATIVE_PROVIDER`, both `PFM_PLATFORMS` frozensets) are gone. 7 tests in `apps/connections/tests/test_routes.py`, including a drift check that compares the table against each adapter's own `capabilities()`.
 
-**Not built yet (P2-P3, P5-P7):** native own-posts/metrics ingestion for the non-Facebook networks, the `publish_post` agent tool (preview -> user confirms -> existing publish service), auto-refresh of stale metrics, a TikTok provider, and the docs sweep. **P4 landed the same day (`e7bf9d1`): the SQL `top_posts` tool** (`lumi_ai/tools/data.py`, ranks by latest non-null views/likes/comments/shares with platform, period and top-N filters, local DB only). **The agent still has no publish tool** — publishing today is the REST path only.
+**P2 built (2026-10-28):** `DjangoOwnPostSync` now asks each native route in `providers/routes.py` order before falling back to Post for Me: Facebook -> Meta (unchanged), LinkedIn -> `fetch_posts` when the account is `active` (holds `r_member_social`; a `limited` account falls through, posts only, no metrics ever invented), X -> Xpoz by handle when `XPOZ_LIVE_ENABLED` and a key are set (metrics ride in the feed, billed to the user's credit ledger). Instagram and TikTok keep reading through Post for Me (open question Q1: not removed until a replacement exists). Pass source is recorded as `meta`/`linkedin`/`xpoz`/`pfm`. Tests: `apps/connections/tests/db/test_own_post_sync_routes.py`.
+
+**Not built yet (P3, P5-P7):** the `publish_post` agent tool (preview -> user confirms -> existing publish service), auto-refresh of stale metrics, a TikTok provider, and the docs sweep. **P4 landed the same day (`e7bf9d1`): the SQL `top_posts` tool** (`lumi_ai/tools/data.py`, ranks by latest non-null views/likes/comments/shares with platform, period and top-N filters, local DB only). **The agent still has no publish tool** — publishing today is the REST path only.
 
 ## HTTP Endpoints & Agent Tools
 
