@@ -62,13 +62,13 @@ test("editing a card drops its preview and its key; retries keep the key", () =>
 });
 
 test("blockedReason covers network, empty text, length and already published", () => {
-  assert.match(blockedReason({ ...manualCard("instagram"), text: "a" }) ?? "", /no está disponible/);
-  assert.match(blockedReason(manualCard("x")) ?? "", /Escribe/);
+  assert.match(blockedReason({ ...manualCard("instagram"), text: "a" }) ?? "", /isn.t available/);
+  assert.match(blockedReason(manualCard("x")) ?? "", /Write the text/);
   assert.match(blockedReason({ ...manualCard("x"), text: "a".repeat(281) }) ?? "", /280/);
   assert.equal(blockedReason({ ...manualCard("x"), text: "ok" }), null);
   assert.match(
     blockedReason({ ...manualCard("x"), text: "ok", published: { status: "published" } as never }) ?? "",
-    /publicó/,
+    /Already published/,
   );
 });
 
@@ -84,5 +84,5 @@ test("cardsFromDrafts splits good drafts from failures", () => {
 
 test("publishErrorMessage sends an unconnected account to Settings", () => {
   assert.match(publishErrorMessage(new ApiError(409, "publish.not_connected", "x")), /Settings/);
-  assert.match(publishErrorMessage(new ApiError(409, "conflict", "x")), /clave/);
+  assert.match(publishErrorMessage(new ApiError(409, "conflict", "x")), /key/);
 });

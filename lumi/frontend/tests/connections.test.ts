@@ -36,7 +36,7 @@ test("every documented ?error= code has its own sentence", () => {
 test("startConnectMessage names the missing variables", () => {
   const err = new ApiError(503, "not_configured", "x", { env_vars: ["META_APP_ID", "META_APP_SECRET"] });
   assert.match(startConnectMessage(err), /META_APP_ID, META_APP_SECRET/);
-  assert.match(startConnectMessage(new ApiError(503, "not_configured", "x")), /no está configurado/);
+  assert.match(startConnectMessage(new ApiError(503, "not_configured", "x")), /isn.t configured/);
 });
 
 test("X off is recognised and explained", () => {
@@ -180,15 +180,15 @@ test("linkAccount posts the account and the profile and nothing else", async () 
 });
 
 test("a refused link says why", () => {
-  assert.match(linkErrorMessage(new ApiError(409, "connections.platform_mismatch", "x")), /otra red/);
-  assert.match(linkErrorMessage(new ApiError(409, "connections.account_unusable", "x")), /reconect/);
-  assert.match(linkErrorMessage(new Error("boom")), /No se pudo enlazar/);
+  assert.match(linkErrorMessage(new ApiError(409, "connections.platform_mismatch", "x")), /different network/);
+  assert.match(linkErrorMessage(new ApiError(409, "connections.account_unusable", "x")), /reconnected/);
+  assert.match(linkErrorMessage(new Error("boom")), /Couldn.t link the account/);
 });
 
 test("a Facebook login with no Pages explains that Lumi connects Pages, not personal profiles", () => {
   const meta = connectErrorMessage("connections.no_accounts", "meta");
-  assert.match(meta, /Página/);
-  assert.match(meta, /perfiles personales/);
+  assert.match(meta, /Pages/);
+  assert.match(meta, /personal profiles/);
   assert.equal(connectErrorMessage("connections.no_accounts", "linkedin"), connectErrorMessage("connections.no_accounts"));
   assert.equal(connectErrorMessage("connections.access_denied", "meta"), connectErrorMessage("connections.access_denied"));
 });
