@@ -1,5 +1,7 @@
 ﻿# Lumi — Agent Guide
 
+> **Nota de rutas:** el backend FastAPI que describe este archivo (`app/`, `alembic/`, `alembic.ini`, sus 5 scripts y `tests/`) se movió a `lumi/legacy/` como referencia: no se despliega ni se mantiene (ver `legacy/README.md`). El backend actual es Django (`apps/`, `config/`, `manage.py`, `lumi_ai/`). Donde este archivo diga `app/`, `alembic/` o `tests/` sin más, léelo como `legacy/app/`, `legacy/alembic/` y `legacy/tests/`.
+
 > This file is the working map of the codebase **and** the mandatory working process.
 > Deep map generated 2026-10-12 from a full read of `lumi/` (backend, frontend, data layer, services, docs).
 > If anything here conflicts with the actual code, **the code wins** — then fix this file.
@@ -26,6 +28,7 @@ Unless the user explicitly says "don't plan" for a given task:
 
 - **Never write real values of environment variables into any markdown/doc/code file.** Not in this file, not in `.agents/`, not in `docs/`, not in tests.
 - Real keys live **only** in `.env` locally (gitignored) and the Railway dashboard for prod.
+- **App-level credentials of the social networks (Meta, LinkedIn, X, Post for Me, Google, Xpoz) live ONLY in the environment** (`.env` locally, the Railway dashboard in prod). There is no database table for them: one was built and reverted on 2026-10-27 by team decision. Do not add one without an explicit OK from the team. Per-user OAuth tokens are a different thing and stay encrypted in `connected_accounts` and `mcp_auth_accounts`. Details: `docs/CONEXIONES.md`, section "Dónde viven las credenciales de la app".
 - Docs may reference env var **names** only (`DATABASE_URL`, `PFM_JWT_TOKEN`, `GROQ_API_KEY`, `OPENROUTER_API_KEY`, `TYPESAFE_API_KEY`, `NEATLOGS_API_KEY`, `SECRET_KEY`, `XPOZ_API_KEY`).
 - Do not paste tokens, JWTs, connection strings, or account credentials into chat output either — reference the var name instead.
 
@@ -648,6 +651,26 @@ Added `RetweetContext` (RT originals had no model); `ReplyContext.lang`; `Commen
 - Language detector choice (Pidgin handling — if unsupported, mark `pcm` unknown, never mislabel); background corpus choice for n-gram distinctiveness; gazetteer list for our user countries.
 
 ---
+
+
+## Publish from chat -> direct providers (audited 2026-10-28)
+
+The handed-over plan was "Post for Me for everything (publish, read posts, metrics)". Audited against the code and against the direct LinkedIn/X/TikTok/Meta credentials we now hold, it is re-planned as **direct providers, Post for Me retired as the router**. Full audit + ordered plan (P0-P7, each with owner and verification): `plan/TEMP-audit-publish-from-chat.md`.
+
+What the audit verified:
+
+- Publishing was **already native**: `apps/connections/publish_api.py:43` routes `facebook->meta`, `linkedin->linkedin`, `x->x`; PFM's posting call was never built (`publish_api.py` docstring) and the local `PFM_JWT_TOKEN` is expired (`check_keys`: `FALLA pfm`).
+- Reading own posts is **split since R3 (`a534dec`)**: a Facebook profile with a connected Page is read natively through Meta (`own_post_sync.py:75` -> `collect_meta_posts` -> `providers/meta.py` `fetch_posts`/`fetch_metrics`, newest 20 posts get metrics per sync); every other network still goes through `clients/pfm.py` (local token expired). Task P2 moves the rest native.
+- Meta's `fetch_posts`/`fetch_metrics` **have a production caller since `a534dec`** (R3): `collect_meta_posts` stores posts and views (`own_posts.py:98,109`); likes/comments/shares stay `NULL` per the R3 snapshot.
+- X reads stay on Xpoz by decision (`providers/x.py` — per-read pricing); LinkedIn reads need the restricted `r_member_social` (an account without it is `limited` and the agent says so); TikTok has no native provider yet.
+
+**P0 done (2026-10-28).** `lumi/.env` now carries `META_APP_ID/SECRET`, `LINKEDIN_CLIENT_ID/SECRET`, `X_CLIENT_ID/SECRET`, `GOOGLE_OAUTH_CLIENT_ID/SECRET`, staged `TIKTOK_CLIENT_ID/SECRET/APP_ID` and `X_LIVE_ENABLED=true` (values live only in the environment, per the secrets rule; the previous file is kept as `.env.bak-20261028-033834`, untracked). `check_keys`: meta OK, google OK, LinkedIn/X unprobed by design. Local stack verified: Django `127.0.0.1:8001`, Vite `:3010` (`npm run dev` default; `FRONTEND_URL` aligned to it on 2026-10-28 — CORS allows 3010 **and** 3011, so serving on 3011 only needs `FRONTEND_URL` flipped), CORS including the `Idempotency-Key` header.
+
+**Before any real connect flow:** register the callback `http://localhost:3010/connections/<provider>/callback` (built by `config.redirect_uri`, `apps/connections/config.py:185`, over `FRONTEND_URL`) in each developer portal (X, LinkedIn, Meta, Google) — correct keys still fail with a redirect_uri mismatch otherwise; `FRONTEND_URL` must match the port Vite actually serves. With `X_LIVE_ENABLED=true` every real X publish costs API credits ($0.015/post, $0.20 with link).
+
+**P1 built (2026-10-28):** the single routes table `apps/connections/providers/routes.py` now owns platform -> ordered `Route(provider, publish, read)`; `publish_api` calls `publish_provider()`, `connect_links` calls `native_provider()` + reads the derived `PFM_PLATFORMS`, and `ingest` imports `PFM_PLATFORMS` — the three duplicated maps (`PROVIDER_FOR_PLATFORM`, `NATIVE_PROVIDER`, both `PFM_PLATFORMS` frozensets) are gone. 7 tests in `apps/connections/tests/test_routes.py`, including a drift check that compares the table against each adapter's own `capabilities()`.
+
+**Not built yet (P2-P3, P5-P7):** native own-posts/metrics ingestion for the non-Facebook networks, the `publish_post` agent tool (preview -> user confirms -> existing publish service), auto-refresh of stale metrics, a TikTok provider, and the docs sweep. **P4 landed the same day (`e7bf9d1`): the SQL `top_posts` tool** (`lumi_ai/tools/data.py`, ranks by latest non-null views/likes/comments/shares with platform, period and top-N filters, local DB only). **The agent still has no publish tool** — publishing today is the REST path only.
 
 ## HTTP Endpoints & Agent Tools
 
@@ -1415,6 +1438,73 @@ The biggest finding: **the codebase has moved well past the docs, and nearly eve
 - **`.gitignore`** ignores `.venv/`, `.env`, `*.db` (so the local `lumi.db` stays untracked), caches, and frontend build artifacts — but **not** `.entire/` or `.claude/` (both are tracked; `.entire/logs/` is excluded only via the nested `.entire/.gitignore`).
 - **`alembic/README`** is the generic one-liner stub ("Generic single-database configuration with an async dbapi.") — no project-specific migration guidance beyond CLAUDE.md/CONTRIBUTING.
 - **Current git state**: branch `main` (the `ateh` branch this file once described is gone); 205 tracked files; recent history shows aggressive post-hackathon feature growth (trends router, SSE streaming, Xpoz client, analytics, monorepo merge) that none of the docs reflect.
+
+## Next steps: Post for Me from natural language (agreed 2026-10-27)
+
+Goal set by the owner: in the Lumi chat, in plain language, the user can (1) **publish** a post, (2) **read the views** of their posts, and (3) ask **which post is the most viewed**. The work is in the Django backend (`lumi/apps/connections` and `lumi/lumi_ai`); the Post for Me API is the provider for these three. Read `plan/PLAN_REDES-SOCIALES.md` (provider and capability split) and `docs/CONEXIONES.md` first; follow the MANDATORY WORKING PROCESS above (plan first, then code, then docs in the same change).
+
+**What already exists (verified 2026-10-27):**
+- Reading: `backfill_posts` runs `DjangoOwnPostSync`; Facebook goes through Meta (R3, stores views only), every other network through Post for Me (`collect_own_posts`, `GET /v1/social-account-feeds/{id}`).
+- Publishing: the REST publish flow with `dry_run`, `confirm` and `Idempotency-Key` (`apps/connections/publishing.py`, `publish_api.py`). **Publishing works today from the app's Publish screen (`PublishStudio`, which calls this REST flow). Correction 2026-10-27, after the owner's remark: it is the chat agent that has no publish tool (no `publish_post` in `lumi_ai/tools`).**
+- Agent data tools: `get_posts`, `get_analytics`, `get_user_activity`, and `top_posts`. The dedicated `top_posts` tool ranks stored original posts in SQL by their latest known non-null views, likes, comments, or shares, with platform, period, and top-N filters. It reads the local database only; it does not refresh data or call social APIs. `get_analytics` remains for aggregate statistics.
+
+**What the Post for Me API offers (read from its OpenAPI spec, `https://api.postforme.dev/docs/json`, v1.0):** `POST /v1/social-posts` (caption, media, `scheduled_at`, `isDraft`, per-network settings), `PUT`/`DELETE /v1/social-posts/{id}`, `GET /v1/social-post-results` (per-network outcome and error), `POST /v1/social-post-previews`, `POST /v1/media/create-upload-url`, `GET /v1/social-account-feeds/{id}?expand=metrics` (posts with metrics), webhooks. Metrics per network: Facebook (reach, media_views, reactions, comments, shares, video metrics), Instagram (likes, comments, views, reach, saved, shares), X (impressions, likes, retweets, replies), LinkedIn (impressions, likes, comments, shares), YouTube (views, likes, minutes watched), TikTok (views, likes, comments, shares). It has **no** comments endpoint, no direct messages, no ads, and no account-level metrics (followers, page reach).
+
+**Steps, in order (one commit per step, tests with the HTTP transport mocked, no live call without the owner's permission):**
+1. **Agent tool `publish_post`** (cost `write`, side effects external). Two-step by design: first call runs the existing `dry_run` and returns the preview; the post goes out only after the user confirms in the chat and the tool is called again with `confirm=true` and an idempotency key. The model must never publish on the first message. Add the tool to the right tier in `turn_class.py` (`CLASS_ALLOWED`) and keep the prompt small (Groq free tier: 8,000 tokens per minute).
+2. **Route publishing through Post for Me** for the networks Meta/LinkedIn/X do not cover natively, and keep the native provider first where a native connection exists (as `connect_links` does). Create the post with `POST /v1/social-posts`, then read `GET /v1/social-post-results` to report the outcome per network; never report success from the create call alone.
+3. **Store more metrics from the feed.** `expand=metrics` already returns likes, comments, shares and views per network; map them into `metric_snapshots` (Facebook currently stores views only through Meta). Missing values stay `NULL`, never `0`.
+4. **Agent tool `top_posts`** (read-only, implemented locally on `lumi-orquestador`): ranks stored original posts by views, likes, comments, or shares in SQL, with platform, period, and top-N filters. It returns caption, link, metric, and value. Missing metrics stay unavailable; no provider calls or automatic refresh.
+5. **Natural-language wiring**: make `backfill_posts` refresh automatically when the stored data is older than a set time (or tell the user how old it is), so "how did my posts do?" works without asking to sync first. Add cases to `lumi_ai/tests` golden set for: publish with confirmation, "most viewed post", "views of my last posts", a network with no data yet.
+6. **Docs in the same change**: `docs/CONEXIONES.md`, `docs/AI.md` (new tools), `plan/ContextoTareas.md`, `plan/decisions.tsv`, this file's tool list.
+
+**Decisions by the owner (2026-10-27) — these replace the earlier assumptions:**
+- **Post for Me is the provider for everything for now: publish, read posts and get metrics, on every network.** The native providers (Meta, LinkedIn, X) stay in the code but are not the route the agent uses in this round. This changes two things already built: R3 (Facebook read through Meta, `own_post_sync.py`) currently wins over Post for Me when a Page is connected, and `connect_links`/`publish_api` put the native provider first; in step 2 the route table must make Post for Me first for these actions, and the change must be logged in `plan/decisions.tsv` as a reversal of that order. Do not delete the native code.
+- **Text only** in this round. Photos and videos (media upload endpoint) come later.
+- **Publish now only (default; the owner did not ask for more, confirm if that changes).** Scheduling, editing and deleting a published post are not part of this round.
+- **There is no Post for Me account or API key yet.** Someone on the team has to create the account and generate the API key (the app-level `PFM_JWT_TOKEN`). Until then nothing can run live: build everything against the mocked HTTP transport (as the existing tests do) and do not ask the owner to paste the key in chat. When the key exists it goes only in `lumi/.env` and in the Railway variables (SECRETS RULE; see `docs/API_KEYS.md`). The owner and the team still have to decide which plan to pay for (Post for Me is a paid service); record that decision in `plan/decisions.tsv`.
+- **Blocker before any live test:** the account and key above, the social accounts connected through Post for Me (its `auth-url` flow, not the Meta login), and the owner's explicit permission for the first real publish, on a test account.
+
+**Known blockers that affect this work:** the Groq free-tier limit (8,000 tokens per minute) makes turns with tools fail with 429/413 (the prompt is about 11,700 tokens); slimming it (task A2, needs a golden evaluation) and the per-chat history split (Blocks B and C) are pending. A real publish is an outward-facing action: only with the owner's explicit permission, on a test account.
+
+## Next step: audit which database tables are in use (asked by the owner 2026-10-27)
+
+Goal: check that **every table in the database is actually used**, list the ones that are not, and prepare the endpoints so that the unused data can be worked on later from the interface. This is an audit first; it changes no table and deletes nothing.
+
+**How to do it (plan first, as the MANDATORY WORKING PROCESS says):**
+1. **List the tables.** From the Django models (`apps/*/models.py`, `lumi_ai`) and from the live schema (`\dt` on the dev database), so a table that exists in one and not the other also shows up. Keep the list in `docs/` (or `plan/`) as a table: name, app, what it holds.
+2. **For each table, find who writes it and who reads it.** Search the code for the model name and the table name: services, repositories (`apps/intelligence/repos`), agent tools (`lumi_ai/tools`), management commands, background jobs, serializers and views. Use `entire graph search` / `entire graph impact` first, as the Entire code graph section says. Record the file and line for each writer and reader.
+3. **Classify each table:** used end to end (written and read, reachable from an endpoint or the agent); written but never read (data is collected and nobody shows it); read but never written (nothing fills it); not touched at all (dead or planned).
+4. **Check the data too, not only the code.** Count rows per table on the dev database. A table with code but zero rows after normal use is suspect (for example a path that never runs).
+5. **Collect the result** in a short report: the list of tables that are not fully used, why, and a proposal per table (add an endpoint, wire it into the agent, fill it from an existing flow, or retire it by the team's decision). Do not drop or migrate anything in this task.
+6. **For each table that needs an endpoint,** add it to the backlog with the contract the interface will need (path, method, auth, request and response shape), following `docs/CONTRATOS.md` and the endpoint rules of this file (an agent tool is preferred when the chat can do the job). Implementation of those endpoints is a later task, each one with its own tests.
+
+**Done when:** the report is committed, every table has a line saying used or not used with evidence (file:line and row count), and each unused table has a proposed endpoint or a proposed decision. Known candidates to look at first: tables created for features that are only partly wired (Post for Me posts and metric snapshots beyond views, `chat_conversations` once Block C exists, listening and peer-framework tables, ingest passes, `UserAction` and request tables).
+
+## Project status: what is done and what comes next (snapshot 2026-10-27, branch `lumi-orquestador`)
+
+Same working mode as above: this is a snapshot, add new dated snapshots below it instead of editing old ones. Sources: `git log`, `plan/ContextoTareas.md`, `plan/PLAN_REDES-SOCIALES.md` section 8, `plan/decisions.tsv`. Note: the phase checkboxes in `plan/ContextoTareas.md` (lines ~135-160) are not ticked even though the code for those tasks exists in the branch; trust the code and the test run over those boxes, and tick them when the audit confirms each one.
+
+**Done (verified by running it):**
+- **Local run.** Django/DRF + PostgreSQL backend (uvicorn, port 8000) and React/Vite frontend (port 3010) start locally; `/health` is ok. Local Postgres via pgserver; a Docker `postgres:16` also works.
+- **Tests.** `apps/connections` and `apps/intelligence`: 1,020 passed, 2 skipped. Known failures that only happen on Windows (subprocess environment, cp1252 encoding, a timer in the SSE test) are left as they are.
+- **Handover phases 0-2** from the TRASPASO section: legacy FastAPI moved to `lumi/legacy`, paths repointed, docs and baseline recorded.
+- **Agent resilience (Block A of the memory plan).** Short 429s are waited out (`_rate_limit_wait`), the `remember` tool was removed (the background extractor writes memory), `recall_memory` is the only memory tool. Memory across chats works through the rolling summary (checked live with an empty history).
+- **Frontend.** Clear English errors in the chat when the agent does not answer (HTML replies, silent or cut stream); selects readable in dark mode.
+- **Connections.** Facebook connected through Meta (a Page, not a personal profile; the Page "Sean Labs" is active). CORS now allows the `Idempotency-Key` header so the publish screen can reach the server. The error for a Facebook login with no Pages explains the Page requirement.
+- **Credentials policy.** Social-network app credentials live only in `.env` / Railway, documented in `docs/API_KEYS.md` and `docs/CONEXIONES.md`. A database credentials table was built and then reverted on purpose.
+- **R3 (Facebook read through Meta).** Posts and views of the 20 newest posts are stored with `source=meta`; tested with a mocked Graph and checked live once (3 posts stored for the Page, views 1, 1 and 2). Likes, comments and shares stay `NULL`.
+- **Plans written.** `plan/PLAN_REDES-SOCIALES.md` (provider and capability split) and, in this file, the next steps for Post for Me and the database-table audit.
+
+**Not done / open:**
+- **Chat reliability on the Groq free tier.** The system prompt is about 11,700 tokens and the limit is 8,000 tokens per minute, so tool turns fail with 429 or 413 and the context trimmer drops older messages. Task A2 (slim prompt and tools) needs a golden evaluation first.
+- **Memory plan Blocks B and C.** B: semantic dedupe of notes (`dedupe_memory`). C: a separate history per chat (`chat_conversations`, `conversation_id`, API, frontend, contract updates).
+- **Social network plan.** R0 (decisions with Christian), R1 (revalidate the Meta API against official docs), R2 (single routes table), R4-R8 (publish media, comments, agent tools by action, LinkedIn and YouTube, docs and security review). The owner's decision of 2026-10-27 (Post for Me for everything, text only) changes the order: see the Post for Me section above.
+- **Real publish never exercised** by the owner; it needs a test account and explicit permission.
+- **Draft PR** `lumi-orquestador` -> `main` is not open; it needs Christian's OK. Nothing is merged to `main`.
+- **Blocks needing other people:** a Post for Me account and API key (nobody has created them yet), the App Review / Business Verification of Meta to publish for third parties, Christian's decisions in section 6 of the social plan.
+
+**Recommended order from here:** (1) Post for Me, step 1 `publish_post` tool with preview and confirmation, built against the mocked transport; (2) steps 2-5 of that section; (3) the database-table audit, which is read-only and can run in parallel; (4) A2 and Blocks B-C before any demo, because without them the chat fails under the token limit; (5) tick the stale boxes in `plan/ContextoTareas.md` and open the Draft PR when Christian agrees. One commit per step, tests with the HTTP transport mocked, nothing live without the owner's permission, no force-push, nothing to `main`.
 
 ## Entire code graph
 

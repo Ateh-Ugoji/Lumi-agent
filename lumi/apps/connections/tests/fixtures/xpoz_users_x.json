@@ -1,0 +1,26 @@
+{
+  "results": [
+    {
+      "username": "naval",
+      "name": "Naval",
+      "profileImageUrl": "https://img.example/n.jpg",
+      "followersCount": 2500000
+    },
+    {
+      "username": "notnaval",
+      "name": "Not Naval",
+      "profileImageUrl": null,
+      "followersCount": 120
+    },
+    {
+      "username": "navalfan",
+      "name": null,
+      "profileImageUrl": null,
+      "followersCount": null
+    }
+  ],
+  "count": 3,
+  "dataSource": "live",
+  "has_more": false,
+  "next_page_cursor": null
+}

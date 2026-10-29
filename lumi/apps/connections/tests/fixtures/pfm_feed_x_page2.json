@@ -1,0 +1,50 @@
+{
+  "data": [
+    {
+      "platform": "x",
+      "platform_post_id": "98",
+      "social_account_id": "sa_1",
+      "platform_account_id": "9001",
+      "platform_url": "https://x.com/ateh/status/98",
+      "caption": "RT @someone: great thread",
+      "media": [],
+      "posted_at": "2026-10-10T10:00:00Z",
+      "metrics": {
+        "public_metrics": {
+          "like_count": 0,
+          "reply_count": 0,
+          "retweet_count": 0,
+          "impression_count": 10,
+          "quote_count": 0,
+          "bookmark_count": 0
+        }
+      }
+    },
+    {
+      "platform": "x",
+      "platform_post_id": "97",
+      "social_account_id": "sa_1",
+      "platform_account_id": "9001",
+      "platform_url": "https://x.com/ateh/status/97",
+      "caption": "An older original post",
+      "media": [],
+      "posted_at": "2026-09-01T10:00:00Z",
+      "metrics": {
+        "public_metrics": {
+          "like_count": 5,
+          "reply_count": 1,
+          "retweet_count": 0,
+          "impression_count": 300,
+          "quote_count": 0,
+          "bookmark_count": 0
+        }
+      }
+    }
+  ],
+  "meta": {
+    "cursor": "pgn_next_2",
+    "limit": 3,
+    "next": null,
+    "has_more": false
+  }
+}

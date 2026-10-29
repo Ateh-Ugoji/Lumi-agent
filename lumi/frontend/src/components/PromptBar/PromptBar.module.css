@@ -305,7 +305,7 @@
     border-radius 0.15s ease;
 }
 
-/* Lumi green focus outline (exact ChatBar ring) */
+/* Lumi green focus outline (shared focus ring) */
 .composerBox:focus-within {
   background: rgba(255, 255, 255, 0.09);
   border-color: rgba(255, 255, 255, 0.22);

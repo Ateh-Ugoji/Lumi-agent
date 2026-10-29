@@ -1,0 +1,208 @@
+"""AIConfig: every model id, limit and threshold of the AI package, in one place.
+
+Django builds it once with :meth:`AIConfig.from_env` (T4, from ``settings``/``os.environ``);
+``from_mapping`` takes already-typed values. Nothing else in ``lumi_ai`` reads the environment. Defaults are the values the legacy code used (``lumi/legacy/app/agent``).
+Model ids are configuration, not code: ``check_keys`` validates them against each provider's
+real model list.
+"""
+
+from __future__ import annotations
+
+import os
+from collections.abc import Mapping
+from dataclasses import dataclass, fields
+from typing import Any
+
+#: Fields that ``.env`` may set. The variable is the field name upper-cased (``groq_model_large`` ->
+#: ``GROQ_MODEL_LARGE``). Loop/RAG thresholds are tuning, not deployment, so they stay in code.
+ENV_FIELDS: tuple[str, ...] = (
+    "groq_model_large",
+    "groq_model_small",
+    "groq_model_fallback",
+    "openrouter_model",
+    "gemini_model",
+    "openlux_model",
+    "whisper_model",
+    "groq_api_key",
+    "openrouter_api_key",
+    "gemini_api_key",
+    "openlux_api_key",
+    "typesafe_api_key",
+    "neatlogs_api_key",
+    "chroma_api_key",
+    "chroma_tenant",
+    "chroma_database",
+    "chroma_path",
+    "video_provider",
+    "video_api_key",
+    "video_model",
+    "video_max_mb",
+    "video_max_per_run",
+    "video_timeout_seconds",
+    "provider_cooldown_seconds",
+    "provider_cooldown_max_seconds",
+    "rate_limit_retry_max_seconds",
+    "llm_timeout_seconds",
+)
+
+
+def _convert(name: str, raw: str, default: object) -> object:
+    """Env strings are text: parse by the type of the field's default."""
+    text = raw.strip()
+    try:
+        if isinstance(default, bool):
+            lowered = text.lower()
+            if lowered in {"1", "true", "yes", "on"}:
+                return True
+            if lowered in {"0", "false", "no", "off"}:
+                return False
+            raise ValueError(text)
+        if isinstance(default, int):
+            return int(text)
+        if isinstance(default, float):
+            return float(text)
+    except ValueError:
+        raise ValueError(
+            f"{name.upper()}={raw!r} is not a valid {type(default).__name__}"
+        ) from None
+    return text
+
+
+@dataclass(frozen=True, slots=True)
+class AIConfig:
+    # --- models (the legacy defaults; unverified against today's catalogs) ---
+    groq_model_large: str = "openai/gpt-oss-120b"
+    groq_model_small: str = "openai/gpt-oss-20b"
+    groq_model_fallback: str = "qwen/qwen3.8-27b"
+    openrouter_model: str = "meta-llama/llama-3.3-70b-instruct"
+    gemini_model: str = "gemini-3.5-flash-lite"  # free-tier chat fallback behind Groq
+    openlux_model: str = "qwen3.8-27b"
+    whisper_model: str = "whisper-large-v3-turbo"
+
+    # --- keys (None = absent; the callers decide whether that is fatal) ---
+    groq_api_key: str | None = None
+    openrouter_api_key: str | None = None
+    gemini_api_key: str | None = None
+    openlux_api_key: str | None = None
+    typesafe_api_key: str | None = None
+    neatlogs_api_key: str | None = None
+    chroma_api_key: str | None = None
+    chroma_tenant: str | None = None
+    chroma_database: str | None = None
+    chroma_path: str = ".chroma"
+    video_provider: str | None = None
+    video_api_key: str | None = None
+    video_model: str = "gemini-3.5-flash-lite"  # only read when VIDEO_PROVIDER=gemini
+    video_max_mb: int = (
+        20  # bigger videos are skipped, never truncated (Gemini inline limit)
+    )
+    video_max_per_run: int = 5  # new (uncached) analyses one pipeline run may start
+    video_timeout_seconds: float = 120.0
+
+    # --- agent loop (lumi/legacy/app/agent/loop.py) ---
+    max_tool_iterations: int = 6
+    max_history_messages: int = 10
+    tool_context_char_limit: int = 4_000
+    old_tool_context_char_limit: int = 1_200
+    max_request_tokens: int = 6_700
+    est_chars_per_token: float = 3.5
+    tool_timeout_seconds: float = 120.0
+    sufficiency_threshold: float = 0.75
+    sufficiency_min_tools: int = 2  # tool calls before the judge is asked "enough?"
+    mcp_discovery_timeout_seconds: float = 3.0
+    memory_worthy_threshold: float = 0.6
+
+    # --- voice profile ---
+    voice_min_posts: int = 5
+    voice_sample_posts: int = 10  # posts shown to the model, spread over the history
+    voice_corpus_limit: int = 200  # newest posts considered before sampling
+    voice_reply_samples: int = 10
+
+    # --- RAG / memory (legacy memory.py, voice_corpus.py) ---
+    rag_reindex_limit: int = 5000  # posts per profile and collection a reindex reads
+    memory_note_max_chars: int = 500
+    memory_decay_days: int = (
+        90  # notes not recalled or created for this long are dropped
+    )
+    memory_max_distance: float = (
+        0.85  # cosine; farther memories are not offered (uncalibrated)
+    )
+    memory_max_per_turn: int = 8  # facts the extractor may store from one turn
+    memory_summary_max_chars: int = 2000
+
+    # --- competitor analysis (cost guards: every account is a provider call, every 6 posts an LLM call) ---
+    peer_max_accounts: int = 8
+    peer_max_posts_to_tag: int = 80
+    peer_discovery_posts: int = 100  # posts a keyword search may read to find handles
+    peer_advice_max_items: int = 4
+
+    # --- generation (the prompt must stay far below the ~7000-token request wall of Groq) ---
+    generation_max_regenerations: int = 2  # guided retries after the first draft
+    generation_examples: int = 3  # the user's own similar posts shown to the writer
+    generation_example_chars: int = 400
+    generation_frameworks: int = (
+        2  # winning structures of the niche shown to the writer
+    )
+    generation_judge_confidence: float = (
+        0.8  # a "yes" below this confidence is regenerated
+    )
+
+    # --- quality gate (uncalibrated starting points: tune them against posts the user really accepted) ---
+    quality_min_criterion: float = (
+        0.5  # any rubric criterion below this means regenerate
+    )
+    quality_pass_mean: float = 0.7  # the mean of the criteria must reach this to pass
+    quality_fail_below: float = (
+        0.3  # the mean, or "no invented facts", below this means fail
+    )
+    quality_min_style_similarity: float = (
+        0.0  # 0 = recorded but not used: the raw cosine has no calibrated scale yet
+    )
+
+    # --- providers ---
+    provider_cooldown_seconds: float = (
+        300.0  # after a 401/402/403/429 a candidate rests this long
+    )
+    provider_cooldown_max_seconds: float = (
+        900.0  # ceiling when a provider sends Retry-After
+    )
+    # A 429 that says "try again in a few seconds" (a per-minute token limit) is waited out and the
+    # same candidate retried once; a longer wait (a daily limit) goes straight to the next one.
+    rate_limit_retry_max_seconds: float = 15.0
+    llm_timeout_seconds: float = 60.0
+
+    # --- turn classifier, stage 2 ---
+    turn_class_jev_enabled: bool = False
+    turn_class_jev_timeout_ms: int = 1_500
+    turn_class_jev_high: float = 0.7
+    turn_class_jev_low: float = 0.4
+
+    @classmethod
+    def from_mapping(cls, values: Mapping[str, Any]) -> AIConfig:
+        """Build from a flat mapping with lowercase field names; unknown keys are an error.
+
+        Empty strings count as unset, so ``VIDEO_PROVIDER=`` in ``.env`` turns video off.
+        """
+        known = {f.name for f in fields(cls)}
+        unknown = sorted(set(values) - known)
+        if unknown:
+            raise ValueError(f"unknown AIConfig keys: {', '.join(unknown)}")
+        cleaned = {k: v for k, v in values.items() if v is not None and v != ""}
+        return cls(**cleaned)
+
+    @classmethod
+    def from_env(cls, environ: Mapping[str, str] | None = None) -> AIConfig:
+        """Build from environment variables (``os.environ`` by default).
+
+        Reads exactly the names in ``ENV_FIELDS`` (upper-cased). Unset or empty means "use the
+        default"; a malformed number is an error that names the variable.
+        """
+        env = os.environ if environ is None else environ
+        defaults = {f.name: f.default for f in fields(cls)}
+        values: dict[str, Any] = {}
+        for name in ENV_FIELDS:
+            raw = env.get(name.upper())
+            if raw is None or raw.strip() == "":
+                continue
+            values[name] = _convert(name, raw, defaults[name])
+        return cls(**values)

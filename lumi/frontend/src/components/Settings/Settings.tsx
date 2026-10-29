@@ -1,32 +1,22 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useState } from "react";
 import { useLightMode } from "../../hooks/useLightMode";
 import { IconArrowBoxLeft, IconMoon, IconSun } from "../Sidebar/Icons";
-import { getProfiles, getConnectAuthUrl, type ProfileSummary } from "../../api/agent";
+import { errorMessage, type ConnectReturn, type ProfileSummary, type User } from "../../api";
+import { useT } from "../../i18n/index.ts";
+import LangToggle from "../../i18n/LangToggle";
+import ConnectionsPanel from "./ConnectionsPanel";
 import styles from "./Settings.module.css";
 
-export type SettingsSection =
-  | "profile"
-  | "appearance"
-  | "social"
-  | "invitations"
-  | "workspace"
-  | "plan";
+export type SettingsSection = "profile" | "appearance" | "social" | "connectors";
 
 const SECTIONS: { key: SettingsSection; label: string }[] = [
-  { key: "profile", label: "Profile" },
-  { key: "appearance", label: "Appearance" },
-  { key: "social", label: "Connected Accounts" },
-  { key: "invitations", label: "Invitations" },
-  { key: "workspace", label: "Workspace" },
-  { key: "plan", label: "Plan" },
+  { key: "profile", label: "settings.section_profile" },
+  { key: "appearance", label: "settings.section_appearance" },
+  { key: "social", label: "settings.section_social" },
+  { key: "connectors", label: "settings.section_connectors" },
 ];
 
-
-const SEAT_TOTAL = 10;
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-type Member = { id: number; name: string; email: string; owner?: boolean };
-type Invite = { id: number; email: string };
+const NETWORKS = ["x", "linkedin", "facebook", "instagram", "tiktok"] as const;
 
 const initialsOf = (name: string) =>
   name
@@ -40,58 +30,65 @@ export default function Settings({
   section,
   onSectionChange,
   onBack,
+  user,
+  profiles,
+  activeProfileId,
+  onSelectProfile,
+  onCreateProfile,
+  onClearHistory,
+  onLogout,
+  returned,
+  onDismissReturn,
+  onConnectionsChanged,
 }: {
   section: SettingsSection;
   onSectionChange: (next: SettingsSection) => void;
   onBack: () => void;
+  user: User;
+  profiles: ProfileSummary[];
+  activeProfileId: number | null;
+  onSelectProfile: (id: number) => void;
+  onCreateProfile: (platform: string, handle: string) => Promise<unknown>;
+  onClearHistory: (profileId: number) => Promise<void>;
+  onLogout: () => void;
+  returned: ConnectReturn | null;
+  onDismissReturn: () => void;
+  onConnectionsChanged: () => void;
 }) {
   const { light, set: setLight } = useLightMode();
-  const [name, setName] = useState("");
-  const [profileSaved, setProfileSaved] = useState(false);
-  const [members, setMembers] = useState<Member[]>([]);
-  const [pending, setPending] = useState<Invite[]>([]);
-  const [connectedProfiles, setConnectedProfiles] = useState<ProfileSummary[]>([]);
-  const [loadingProfiles, setLoadingProfiles] = useState(false);
-  const [avatarFailed, setAvatarFailed] = useState(false);
+  const t = useT();
+  const [newPlatform, setNewPlatform] = useState<string>("x");
+  const [newHandle, setNewHandle] = useState("");
+  const [profileError, setProfileError] = useState<string | null>(null);
+  const [profileBusy, setProfileBusy] = useState(false);
+  const [historyNote, setHistoryNote] = useState<string | null>(null);
 
-  useEffect(() => {
-    setLoadingProfiles(true);
-    getProfiles()
-      .then((data) => {
-        setConnectedProfiles(data);
-        if (data.length > 0 && !name) setName(data[0].name);
-      })
-      .catch((err) => console.error("Error loading profiles:", err))
-      .finally(() => setLoadingProfiles(false));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const active = profiles.find((p) => p.id === activeProfileId) ?? null;
+  const shownName = user.display_name || user.email;
 
-  const activeProfile = connectedProfiles.length > 0 ? connectedProfiles[0] : null;
-
-  const [invite, setInvite] = useState("");
-  const [inviteError, setInviteError] = useState<string | null>(null);
-  const [wsName, setWsName] = useState("Lumi");
-  const [wsMono, setWsMono] = useState("L");
-  const [wsSaved, setWsSaved] = useState(false);
-  const [billingNote, setBillingNote] = useState(false);
-
-  const sendInvite = (event: FormEvent) => {
-    event.preventDefault();
-    const email = invite.trim();
-    if (!EMAIL_RE.test(email)) {
-      setInviteError("Enter a valid email address.");
-      return;
+  const addProfile = async () => {
+    if (!newHandle.trim() || profileBusy) return;
+    setProfileBusy(true);
+    setProfileError(null);
+    try {
+      await onCreateProfile(newPlatform, newHandle);
+      setNewHandle("");
+    } catch (err) {
+      setProfileError(errorMessage(err, t("settings.profile_error")));
+    } finally {
+      setProfileBusy(false);
     }
-    if (
-      pending.some((row) => row.email === email) ||
-      members.some((member) => member.email === email)
-    ) {
-      setInviteError("That person is already invited or a member.");
-      return;
+  };
+
+  const clearHistory = async () => {
+    if (!active) return;
+    if (!window.confirm(t("settings.delete_confirm", { handle: active.handle }))) return;
+    try {
+      await onClearHistory(active.id);
+      setHistoryNote(t("settings.history_cleared"));
+    } catch (err) {
+      setHistoryNote(errorMessage(err, t("settings.history_error")));
     }
-    setPending((prev) => [...prev, { id: Date.now(), email }]);
-    setInvite("");
-    setInviteError(null);
   };
 
   return (
@@ -107,7 +104,7 @@ export default function Settings({
             <IconArrowBoxLeft size={16} />
           </button>
           <div className={styles.headMeta}>
-            <h1 className={styles.title}>Settings</h1>
+            <h1 className={styles.title}>{t("settings.title")}</h1>
             <p className={styles.subtitle}>Lumi by Onscript</p>
           </div>
         </div>
@@ -119,100 +116,110 @@ export default function Settings({
                 key={item.key}
                 type="button"
                 onClick={() => onSectionChange(item.key)}
-                className={`${styles.navBtn} ${
-                  section === item.key ? styles.navBtnActive : ""
-                }`}
+                className={`${styles.navBtn} ${section === item.key ? styles.navBtnActive : ""}`}
               >
-                <span>{item.label}</span>
-                {item.key === "invitations" && pending.length > 0 && (
-                  <span className={styles.navBadge}>{pending.length}</span>
-                )}
+                <span>{t(item.label)}</span>
               </button>
             ))}
           </nav>
 
           <div className={styles.panel}>
             {section === "profile" && (
-              <section className={styles.card}>
-                <div className={styles.cardTitle}>Profile</div>
-                <p className={styles.cardHint}>
-                  How you appear to teammates in this workspace.
-                </p>
-                <div className={styles.profileRow}>
-                  <span className={styles.avatar}>
-                    {activeProfile && !avatarFailed ? (
-                      <img
-                        src={`https://unavatar.io/x/${activeProfile.handle}`}
-                        alt={activeProfile.name}
-                        onError={() => setAvatarFailed(true)}
-                        style={{
-                          width: "100%",
-                          height: "100%",
-                          borderRadius: "50%",
-                          objectFit: "cover",
-                          display: "block",
-                        }}
-                      />
-                    ) : (
-                      initialsOf(name || "Lumi")
-                    )}
-                  </span>
-                  <span className={styles.profileMeta}>
-                    <span className={styles.profileName}>
-                      {name.trim() || "Unnamed"}
+              <>
+                <section className={styles.card}>
+                  <div className={styles.cardTitle}>{t("settings.account")}</div>
+                  <div className={styles.profileRow}>
+                    <span className={styles.avatar}>{initialsOf(shownName)}</span>
+                    <span className={styles.profileMeta}>
+                      <span className={styles.profileName}>{shownName}</span>
+                      <span className={styles.profileMail}>{user.email}</span>
                     </span>
-                    <span className={styles.profileMail}>
-                      {activeProfile ? `@${activeProfile.handle}` : "No account connected"}
-                    </span>
-                  </span>
-                </div>
-                <label className={styles.field}>
-                  <span className={styles.fieldLabel}>Display name</span>
-                  <input
-                    className={styles.input}
-                    value={name}
-                    onChange={(event) => {
-                      setName(event.target.value);
-                      setProfileSaved(false);
-                    }}
-                  />
-                </label>
-                <label className={styles.field}>
-                  <span className={styles.fieldLabel}>X handle</span>
-                  <input
-                    className={`${styles.input} ${styles.inputStatic}`}
-                    value={activeProfile ? `@${activeProfile.handle}` : ""}
-                    readOnly
-                    tabIndex={-1}
-                  />
-                </label>
-                <div className={styles.cardActions}>
-                  <button
-                    type="button"
-                    className={styles.btn}
-                    disabled={!name.trim()}
-                    onClick={() => setProfileSaved(true)}
-                  >
-                    Save changes
-                  </button>
-                  {profileSaved && (
-                    <span className={styles.savedNote}>Saved</span>
+                  </div>
+                  <div className={styles.cardActions}>
+                    <button type="button" className={styles.btn} onClick={onLogout}>
+                      {t("settings.logout")}
+                    </button>
+                  </div>
+                </section>
+
+                <section className={styles.card}>
+                  <div className={styles.cardTitle}>{t("settings.profiles")}</div>
+                  <p className={styles.cardHint}>{t("settings.profiles_blurb")}</p>
+                  {profiles.length === 0 && (
+                    <p className={styles.mutedText}>{t("settings.no_profiles")}</p>
                   )}
-                </div>
-              </section>
+                  <ul className={styles.accountList} aria-label="Profiles">
+                    {profiles.map((p) => (
+                      <li key={p.id} className={styles.accountRow}>
+                        <span>
+                          <strong>@{p.handle}</strong> · {p.platform}
+                          {p.has_voice_profile ? t("settings.voice_ready") : ""}
+                        </span>
+                        {p.id === activeProfileId ? (
+                          <span className={styles.chipOn}>{t("settings.active")}</span>
+                        ) : (
+                          <button
+                            type="button"
+                            className={styles.textBtn}
+                            onClick={() => onSelectProfile(p.id)}
+                          >
+                            {t("settings.use_this")}
+                          </button>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                  <div className={styles.cardActions}>
+                    <select
+                      className={styles.select}
+                      aria-label={t("settings.new_network")}
+                      value={newPlatform}
+                      onChange={(e) => setNewPlatform(e.target.value)}
+                    >
+                      {NETWORKS.map((n) => (
+                        <option key={n} value={n}>
+                          {n}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      className={styles.input}
+                      aria-label={t("settings.new_handle")}
+                      placeholder={t("settings.handle_placeholder")}
+                      value={newHandle}
+                      onChange={(e) => setNewHandle(e.target.value)}
+                    />
+                    <button
+                      type="button"
+                      className={styles.btn}
+                      disabled={!newHandle.trim() || profileBusy}
+                      onClick={() => void addProfile()}
+                    >
+                      {t("settings.add_profile")}
+                    </button>
+                  </div>
+                  {profileError && (
+                    <p role="alert" className={styles.errorText}>
+                      {profileError}
+                    </p>
+                  )}
+                  {active && (
+                    <div className={styles.cardActions}>
+                      <button type="button" className={styles.textBtn} onClick={() => void clearHistory()}>
+                        {t("settings.clear_history", { handle: active.handle })}
+                      </button>
+                      {historyNote && <span className={styles.savedNote}>{historyNote}</span>}
+                    </div>
+                  )}
+                </section>
+              </>
             )}
 
-            {section === "appearance" && (
-              <section className={styles.card}>
-                <div className={styles.cardTitle}>Appearance</div>
-                <p className={styles.cardHint}>
-                  The theme applies everywhere, including the chat.
-                </p>
-                <div
-                  className={styles.themeSeg}
-                  role="group"
-                  aria-label="Theme"
-                >
+            {section === "appearance" && (              <>
+                <section className={styles.card}>
+                  <div className={styles.cardTitle}>{t("settings.appearance")}</div>
+                  <p className={styles.cardHint}>{t("settings.theme_hint")}</p>
+                  <div className={styles.themeSeg} role="group" aria-label={t("settings.theme")}>
                   <button
                     type="button"
                     aria-pressed={!light}
@@ -220,7 +227,7 @@ export default function Settings({
                     onClick={() => setLight(false)}
                   >
                     <IconMoon size={15} />
-                    Dark
+                    {t("settings.dark")}
                   </button>
                   <button
                     type="button"
@@ -229,282 +236,37 @@ export default function Settings({
                     onClick={() => setLight(true)}
                   >
                     <IconSun size={15} />
-                    Light
+                    {t("settings.light")}
                   </button>
                 </div>
-              </section>
+                </section>
+
+                <section className={styles.card}>
+                  <div className={styles.cardTitle}>{t("settings.language")}</div>
+                  <p className={styles.cardHint}>{t("settings.language_hint")}</p>
+                  <LangToggle />
+                </section>
+              </>
             )}
 
             {section === "social" && (
-              <section className={styles.card}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                  <div>
-                    <div className={styles.cardTitle}>Connected Accounts</div>
-                    <p className={styles.cardHint}>
-                      Social accounts linked to Lumi via Post for Me.
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    className={styles.btn}
-                    onClick={async () => {
-                      const url = await getConnectAuthUrl("twitter");
-                      if (url) window.location.href = url;
-                    }}
-                  >
-                    + Connect Account
-                  </button>
-                </div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 12, marginTop: 16 }}>
-                  {loadingProfiles && (
-                    <div style={{ color: "var(--text-muted)", fontSize: 13, padding: 12 }}>
-                      Loading connected accounts...
-                    </div>
-                  )}
-                  {!loadingProfiles && connectedProfiles.length === 0 && (
-                    <div style={{ textAlign: "center", padding: "24px 16px", background: "rgba(255,255,255,0.02)", borderRadius: 8 }}>
-                      <p style={{ color: "var(--text-muted)", fontSize: 13, marginBottom: 12 }}>
-                        No social accounts connected yet.
-                      </p>
-                      <button
-                        type="button"
-                        className={styles.btn}
-                        onClick={async () => {
-                          const url = await getConnectAuthUrl("twitter");
-                          if (url) window.location.href = url;
-                        }}
-                      >
-                        Connect Social Account
-                      </button>
-                    </div>
-                  )}
-                  {!loadingProfiles &&
-                    connectedProfiles.map((p) => (
-                      <div
-                        key={p.id}
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "space-between",
-                          padding: "12px 16px",
-                          borderRadius: 8,
-                          background: "rgba(255,255,255,0.04)",
-                        }}
-                      >
-                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                          <span style={{ fontWeight: 600, fontSize: 14, textTransform: "capitalize" }}>
-                            {p.platform === "x" ? "X (Twitter)" : p.platform}
-                          </span>
-                          <span style={{ color: "#38bdf8", fontSize: 13 }}>
-                            @{p.handle}
-                          </span>
-                        </div>
-                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                          {p.has_voice_profile && (
-                            <span style={{ fontSize: 11, padding: "2px 6px", borderRadius: 4, background: "rgba(56, 189, 248, 0.15)", color: "#38bdf8" }}>
-                              Voice active
-                            </span>
-                          )}
-                          <span style={{ color: "#4ade80", fontSize: 12, fontWeight: 500 }}>
-                            ● Connected
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                </div>
-              </section>
+              <ConnectionsPanel
+                providers={["meta", "linkedin", "x", "pfm"]}
+                profileId={activeProfileId}
+                profile={active}
+                returned={returned}
+                onDismissReturn={onDismissReturn}
+                onChanged={onConnectionsChanged}
+              />
             )}
 
-            {section === "invitations" && (
-
-              <section className={styles.card}>
-                <div className={styles.cardTitle}>Invitations</div>
-                <p className={styles.cardHint}>
-                  Invite teammates by email and manage who has access.
-                </p>
-                <div className={styles.seatsHead}>
-                  <span className={styles.seatsLabel}>
-                    {members.length} of {SEAT_TOTAL} seats used
-                  </span>
-                  <span className={styles.seatsLabel}>
-                    {pending.length} pending
-                  </span>
-                </div>
-                <div className={styles.seatBar}>
-                  <span
-                    className={styles.seatFill}
-                    style={{
-                      width: `${Math.min(
-                        (members.length / SEAT_TOTAL) * 100,
-                        100,
-                      )}%`,
-                    }}
-                  />
-                </div>
-                <form className={styles.inviteForm} onSubmit={sendInvite}>
-                  <input
-                    className={styles.input}
-                    value={invite}
-                    placeholder="teammate@company.com"
-                    aria-label="Invitee email"
-                    onChange={(event) => {
-                      setInvite(event.target.value);
-                      setInviteError(null);
-                    }}
-                  />
-                  <button type="submit" className={styles.btn}>
-                    Send invite
-                  </button>
-                </form>
-                {inviteError && <p className={styles.error}>{inviteError}</p>}
-                {pending.length > 0 && (
-                  <div className={styles.list}>
-                    <div className={styles.listHead}>Pending invites</div>
-                    {pending.map((row) => (
-                      <div key={row.id} className={styles.listRow}>
-                        <span className={styles.listName}>{row.email}</span>
-                        <span className={styles.statusChip}>Pending</span>
-                        <button
-                          type="button"
-                          className={styles.textBtn}
-                          onClick={() =>
-                            setPending((prev) =>
-                              prev.filter((item) => item.id !== row.id),
-                            )
-                          }
-                        >
-                          Revoke
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                <div className={styles.list}>
-                  <div className={styles.listHead}>Members</div>
-                  {members.map((member) => (
-                    <div key={member.id} className={styles.listRow}>
-                      <span className={styles.memberAvatar}>
-                        {initialsOf(member.name)}
-                      </span>
-                      <span className={styles.listName}>{member.name}</span>
-                      <span
-                        className={
-                          member.owner ? styles.roleChipOwner : styles.roleChip
-                        }
-                      >
-                        {member.owner ? "Owner" : "Member"}
-                      </span>
-                      {!member.owner && (
-                        <button
-                          type="button"
-                          className={`${styles.textBtn} ${styles.textBtnDanger}`}
-                          onClick={() =>
-                            setMembers((prev) =>
-                              prev.filter((item) => item.id !== member.id),
-                            )
-                          }
-                        >
-                          Remove
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </section>
-            )}
-
-            {section === "workspace" && (
-              <section className={styles.card}>
-                <div className={styles.cardTitle}>Workspace</div>
-                <p className={styles.cardHint}>
-                  Shared settings for everyone in this workspace.
-                </p>
-                <label className={styles.field}>
-                  <span className={styles.fieldLabel}>Workspace name</span>
-                  <input
-                    className={styles.input}
-                    value={wsName}
-                    onChange={(event) => {
-                      setWsName(event.target.value);
-                      setWsSaved(false);
-                    }}
-                  />
-                </label>
-                <label className={styles.field}>
-                  <span className={styles.fieldLabel}>Monogram</span>
-                  <input
-                    className={styles.input}
-                    value={wsMono}
-                    maxLength={2}
-                    onChange={(event) => {
-                      setWsMono(event.target.value);
-                      setWsSaved(false);
-                    }}
-                  />
-                </label>
-                <label className={styles.field}>
-                  <span className={styles.fieldLabel}>Workspace URL</span>
-                  <input
-                    className={`${styles.input} ${styles.inputStatic}`}
-                    value="lumi.app/lumi"
-                    readOnly
-                    tabIndex={-1}
-                  />
-                </label>
-                <div className={styles.cardActions}>
-                  <button
-                    type="button"
-                    className={styles.btn}
-                    disabled={!wsName.trim() || !wsMono.trim()}
-                    onClick={() => setWsSaved(true)}
-                  >
-                    Save changes
-                  </button>
-                  {wsSaved && <span className={styles.savedNote}>Saved</span>}
-                </div>
-              </section>
-            )}
-
-            {section === "plan" && (
-              <section className={styles.card}>
-                <div className={styles.cardTitle}>Plan</div>
-                <p className={styles.cardHint}>
-                  Your current subscription and seat usage.
-                </p>
-                <div className={styles.planRow}>
-                  <span className={styles.planName}>Pro</span>
-                  <span className={styles.planPrice}>
-                    $12
-                    <span className={styles.planUnit}> / seat / month</span>
-                  </span>
-                </div>
-                <div className={styles.planMeta}>
-                  <div className={styles.planMetaRow}>
-                    <span>Seats</span>
-                    <span>
-                      {members.length} of {SEAT_TOTAL}
-                    </span>
-                  </div>
-                  <div className={styles.planMetaRow}>
-                    <span>Billing</span>
-                    <span>Monthly · renews Nov 7, 2026</span>
-                  </div>
-                </div>
-                <div className={styles.cardActions}>
-                  <button
-                    type="button"
-                    className={styles.btn}
-                    onClick={() => setBillingNote(true)}
-                  >
-                    Upgrade
-                  </button>
-                  {billingNote && (
-                    <span className={styles.savedNote}>
-                      We will email alex@lumi.app about billing.
-                    </span>
-                  )}
-                </div>
-              </section>
+            {section === "connectors" && (
+              <ConnectionsPanel
+                providers={["google"]}
+                profileId={activeProfileId}
+                returned={returned}
+                onDismissReturn={onDismissReturn}
+              />
             )}
           </div>
         </div>

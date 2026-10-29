@@ -5,6 +5,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type RefObject,
 } from "react";
 import AmbientBackground from "./components/AmbientBackground/AmbientBackground";
 import PromptBar from "./components/PromptBar/PromptBar";
@@ -29,17 +30,32 @@ import {
   SUBLINE_STORE_KEY,
 } from "./constants/sublines";
 import {
-  streamChatMessage,
-  sendChatMessage,
-  getProfiles,
-  getProfileAnalytics,
-  generateChatTitle,
+  ApiError,
+  analyticsFrom,
+  connectLinksFrom,
   deleteChatHistory,
-  type StreamEvent,
-  type ProfileSummary,
+  generateChatTitle,
+  finishConnect,
+  getProfileAnalytics,
+  parseCallbackLanding,
+  sendChatMessage,
+  streamChatMessage,
+  agentErrorMessage,
+  chatErrorMessage,
+  CALLBACK_DONE_URL,
+  type CallbackLanding,
+  type ConnectLink,
+  type ConnectReturn,
   type ProfileAnalytics,
-} from "./api/agent";
+  type StreamEvent,
+} from "./api";
+import { useAuth } from "./auth/AuthContext";
+import { useProfiles } from "./hooks/useProfiles";
+import PublishStudio from "./components/Publish/PublishStudio";
+import { ACTIVE_KEY, CHATS_KEY, DRAFTS_KEY } from "./session";
 import styles from "./App.module.css";
+import { speak, stopSpeaking } from "./voice/speak";
+import { useSmoothText } from "./reveal/useSmoothText";
 
 
 type Message = {
@@ -48,6 +64,8 @@ type Message = {
   text: string;
   insights?: boolean;
   analytics?: ProfileAnalytics | null;
+  /** Connect links the server returned for this reply; only these are drawn as connect cards. */
+  connectLinks?: ConnectLink[];
   sim?: { scriptId: string; elapsedMs: number; customScript?: SimScript };
   thinking?: string;
 };
@@ -78,10 +96,6 @@ let nextId = 1;
 let nextChatId = 1;
 let sessionPick: number | null = null;
 
-const CHATS_KEY = "lumi_agent_chats";
-const ACTIVE_KEY = "lumi_agent_active";
-const DRAFTS_KEY = "lumi_agent_drafts";
-
 const loadDrafts = (): Record<string, string> => {
   try {
     const raw = localStorage.getItem(DRAFTS_KEY);
@@ -103,10 +117,23 @@ const loadChats = (): Chat[] => {
     if (raw) {
       const parsed = JSON.parse(raw) as Chat[];
       if (Array.isArray(parsed) && parsed.length > 0) {
+        // Reissue duplicate message ids: a Vite Fast Refresh re-ran this
+        // module (resetting `nextId` to 1) while React state survived, so
+        // ids collided. Duplicates break `key` uniqueness AND make an old
+        // message share `revealingId` with the fresh reply — its settled
+        // onRevealDone then clears the flag and the new reply renders full
+        // instantly (no reveal). Healing on load keeps ids unique.
+        const seen = new Set<number>();
         for (const c of parsed) {
           nextChatId = Math.max(nextChatId, (c.id ?? 0) + 1);
           for (const msg of c.messages ?? []) {
-            nextId = Math.max(nextId, (msg.id ?? 0) + 1);
+            let id = msg.id ?? 0;
+            if (seen.has(id)) {
+              id = nextId++;
+              msg.id = id;
+            }
+            seen.add(id);
+            nextId = Math.max(nextId, id + 1);
           }
         }
         return parsed;
@@ -131,6 +158,11 @@ const applyEdgeGates = (el: HTMLElement) => {
   }
 };
 
+// Fast Refresh re-runs this module (resetting nextId/nextChatId to 1) but
+// preserves React state, so re-derive the counters from storage right away.
+// Without this, every hot update makes the next message reuse an existing id.
+loadChats();
+
 /** X bird icon (simple SVG) */
 function XIcon({ className }: { className?: string }) {
   return (
@@ -140,10 +172,9 @@ function XIcon({ className }: { className?: string }) {
   );
 }
 
-/** Detect if a markdown link is a "Connect X" / OAuth / platform auth link */
-function isConnectLink(text: string, _url: string): boolean {
-  const low = text.toLowerCase();
-  return low.includes("connect") || low.includes("link") || low.includes("authorize");
+/** The connect link the server returned for this URL, if any. The label text is never a signal. */
+function connectLinkFor(url: string, links: ConnectLink[] | undefined): ConnectLink | undefined {
+  return links?.find((link) => link.url === url);
 }
 
 /**
@@ -156,15 +187,34 @@ function isConnectLink(text: string, _url: string): boolean {
 function AgentMessage({
   text,
   analytics,
+  connectLinks,
   onPill,
+  animate = false,
+  scrollRef,
+  nearBottomRef,
+  onRevealDone,
+  flushRef,
 }: {
   text: string;
   analytics?: ProfileAnalytics | null;
+  connectLinks?: ConnectLink[];
   onPill?: (t: string) => void;
+  /** True only for the freshly-streamed reply: reveal it gradually. */
+  animate?: boolean;
+  scrollRef?: RefObject<HTMLDivElement | null>;
+  nearBottomRef?: RefObject<boolean>;
+  onRevealDone?: () => void;
+  flushRef?: { current: (() => void) | null };
 }) {
+  // Buffer-and-reveal: while `animate`, the message renders
+  // `text.slice(0, shown)` and types itself out at an adaptive speed
+  // (reveal/useSmoothText). History/reloads pass animate=false and render
+  // the full text instantly — old messages never re-animate.
+  const { text: visible, revealing, flush } = useSmoothText(text, animate);
+
   const nodes = useMemo(() => {
     // Split text into paragraphs first
-    const paragraphs = text.split(/\n\n+/);
+    const paragraphs = visible.split(/\n\n+/);
     return paragraphs.map((para, pi) => {
       // Tokenise inline: **bold**, `code`, [label](url)
       const INLINE = /(\*\*(.+?)\*\*|`([^`]+)`|\[([^\]]+)\]\((https?:\/\/[^)]+)\))/g;
@@ -183,10 +233,11 @@ function AgentMessage({
           // [label](url)
           const label = m[4];
           const url = m[5];
-          if (isConnectLink(label, url)) {
+          const connect = connectLinkFor(url, connectLinks);
+          if (connect) {
             parts.push(
               <a key={m.index} href={url} target="_blank" rel="noopener noreferrer" className={styles.connectCard}>
-                <XIcon className={styles.connectCardIcon} />
+                {connect.platform === "x" && <XIcon className={styles.connectCardIcon} />}
                 {label}
               </a>
             );
@@ -214,7 +265,31 @@ function AgentMessage({
       });
       return <p key={pi} className={styles.msgText}>{withBreaks}</p>;
     });
-  }, [text]);
+  }, [visible, connectLinks]);
+
+  // While revealing, keep the growing text pinned to the bottom — only if the
+  // user was already near the bottom (never fight manual scrolling).
+  useLayoutEffect(() => {
+    if (!animate || !revealing) return;
+    const el = scrollRef?.current;
+    if (!el || !nearBottomRef?.current) return;
+    const max = Math.max(el.scrollHeight - el.clientHeight, 0);
+    el.scrollTop = max;
+  }, [visible, animate, revealing, scrollRef, nearBottomRef]);
+
+  // Expose flush() to the Stop button while this message is the one revealing.
+  useEffect(() => {
+    if (!animate || !flushRef) return;
+    flushRef.current = flush;
+    return () => {
+      if (flushRef.current === flush) flushRef.current = null;
+    };
+  }, [animate, flush, flushRef]);
+
+  // Reveal settled: let the App clear its "this message is revealing" flag.
+  useEffect(() => {
+    if (animate && !revealing) onRevealDone?.();
+  }, [animate, revealing, onRevealDone]);
 
   return (
     <>
@@ -259,6 +334,9 @@ export default function App() {
     setInput(draftFor(activeId));
   }, [activeId]);
   const [busy, setBusy] = useState(false);
+  // Id of the freshly-streamed agent reply that is revealing right now
+  // (null = nothing animating; history/reloads never re-animate).
+  const [revealingId, setRevealingId] = useState<number | null>(null);
   type ActiveRun = {
     runId: number;
     script: SimScript;
@@ -282,33 +360,83 @@ export default function App() {
   const [pills, setPills] = useState<string[]>(pickPills);
   const [subline, setSubline] = useState<string | null>(null);
   const [sublineShown, setSublineShown] = useState(false);
-  const [view, setView] = useState<"chat" | "chronic" | "settings">("chat");
+  const [view, setView] = useState<"chat" | "chronic" | "publish" | "settings">("chat");
   const [settingsSection, setSettingsSection] =
     useState<SettingsSection>("profile");
-  const [profiles, setProfiles] = useState<ProfileSummary[]>([]);
-  const [profilesLoaded, setProfilesLoaded] = useState(false);
+  const { user, logout } = useAuth();
+  const {
+    profiles,
+    activeId: activeProfileId,
+    active: activeProfile,
+    select: selectProfile,
+    create: createProfile,
+    refresh: refreshProfiles,
+  } = useProfiles();
   const [analytics, setAnalytics] = useState<ProfileAnalytics | null>(null);
+  const [connectReturn, setConnectReturn] = useState<ConnectReturn | null>(null);
 
   useEffect(() => {
-    getProfiles()
-      .then((data) => {
-        setProfiles(data);
-        setProfilesLoaded(true);
-        // Fetch analytics for the first (active) profile
-        if (data.length > 0) {
-          getProfileAnalytics(data[0].id).then((a) => {
-            if (a) setAnalytics(a);
-          });
-        }
-      })
-      .catch(() => setProfilesLoaded(true));
-  }, [view]);
+    setAnalytics(null);
+    if (activeProfileId === null) return;
+    let cancelled = false;
+    getProfileAnalytics(activeProfileId).then((a) => {
+      if (!cancelled && a) setAnalytics(a);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeProfileId]);
 
-  const hasConnectedAccounts = profiles.length > 0;
+  // The provider redirects the browser to /connections/<provider>/callback on this app. Finish the
+  // grant here with this user's Token: the server refuses a state that someone else started. The
+  // URL is replaced at once, so a reload or a shared link never repeats the grant.
+  const landingRef = useRef<CallbackLanding | null>(null);
+  const landingSentRef = useRef(false);
+  useLayoutEffect(() => {
+    const found = parseCallbackLanding(window.location.pathname, window.location.search);
+    if (!found) return;
+    landingRef.current = found;
+    window.history.replaceState(null, "", CALLBACK_DONE_URL);
+    setSettingsSection(found.kind !== "pfm" && found.provider === "google" ? "connectors" : "social");
+    setView("settings");
+  }, []);
+  useEffect(() => {
+    const landing = landingRef.current;
+    if (!landing || landingSentRef.current) return;
+    landingSentRef.current = true;
+    finishConnect(landing)
+      .then((done) => {
+        setConnectReturn(
+          done.connected
+            ? { kind: "connected", provider: done.provider }
+            : {
+                kind: "error",
+                code: "connections.no_accounts",
+                provider: landing.kind === "pfm" ? "pfm" : landing.provider,
+              },
+        );
+        refreshProfiles();
+      })
+      .catch((err: unknown) => {
+        const code = err instanceof ApiError ? err.code : "internal_error";
+        setConnectReturn({
+          kind: "error",
+          code,
+          provider: landing.kind === "pfm" ? "pfm" : landing.provider,
+        });
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const runCounterRef = useRef(0);
   const settledReplyRef = useRef(0);
   const pendingChatIdRef = useRef(0);
+  // True when the in-flight send came from the mic — the reply is spoken aloud.
+  const voiceReplyRef = useRef(false);
+  // In-flight /chat/stream fetch — aborted by the Stop button.
+  const abortRef = useRef<AbortController | null>(null);
+  // Registered by the revealing message so Stop can flush it to full text.
+  const flushRef = useRef<(() => void) | null>(null);
 
   const streamRef = useRef<HTMLDivElement>(null);
   const nearBottomRef = useRef(true);
@@ -344,6 +472,32 @@ export default function App() {
     };
   }, [view]);
 
+  // Heal duplicate message ids in LIVE state (a Fast Refresh used to reset
+  // nextId while this state survived). Idempotent: returns the same
+  // reference when ids are already unique, so it never re-renders on its own.
+  useEffect(() => {
+    setChats((prev) => {
+      const seen = new Set<number>();
+      let dirty = false;
+      const healed = prev.map((c) => ({
+        ...c,
+        messages: c.messages.map((m) => {
+          if (seen.has(m.id)) {
+            dirty = true;
+            const id = nextId++;
+            seen.add(id);
+            nextId = Math.max(nextId, id + 1);
+            return { ...m, id };
+          }
+          seen.add(m.id);
+          nextId = Math.max(nextId, m.id + 1);
+          return m;
+        }),
+      }));
+      return dirty ? healed : prev;
+    });
+  }, []);
+
   useEffect(() => {
     try {
       localStorage.setItem(CHATS_KEY, JSON.stringify(chats));
@@ -352,6 +506,12 @@ export default function App() {
       // storage unavailable (private mode etc.) - ignore
     }
   }, [chats, activeId]);
+
+  // Leaving a chat mid-reveal (or returning to it later) shows full text —
+  // the reveal only ever plays once, right after the reply streams in.
+  useEffect(() => {
+    setRevealingId(null);
+  }, [activeId]);
 
   useEffect(() => {
     let alive = true;
@@ -478,7 +638,13 @@ export default function App() {
 
   const send = (raw: string) => {
     const text = raw.trim();
-    if (!text) return;
+    if (!text || busy) return;
+    if (activeProfileId === null) {
+      // Chat works on a profile. Without one, send the user where it is created.
+      setSettingsSection("profile");
+      setView("settings");
+      return;
+    }
     pendingChatIdRef.current = activeId;
     const targetChatId = activeId;
     const currentChat = chats.find((c) => c.id === targetChatId);
@@ -530,6 +696,7 @@ export default function App() {
       ],
     };
 
+    const chatProfileId = activeProfileId;
     const startTime = performance.now();
     const liveSteps: SimStep[] = [...initialScript.steps];
 
@@ -540,10 +707,23 @@ export default function App() {
     });
     setBusy(true);
 
+    // One abort controller per run: the Stop button cancels the fetch, and
+    // the catch below must then NOT fall through to the direct-POST retry
+    // (that would re-run the whole agent turn server-side).
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     (async () => {
       try {
-        const activeProfileId = profiles.length > 0 ? profiles[0].id : 1;
-        const result = await streamChatMessage(activeProfileId, text, (evt: StreamEvent) => {
+        let streamError: string | null = null;
+        const result = await streamChatMessage(chatProfileId, text, (evt: StreamEvent) => {
+          if (evt.type === "error") {
+            // Agent failures arrive as a normal SSE event, not a rejected HTTP
+            // request. Dropping them makes a crashed run look like a success
+            // with an empty reply.
+            streamError = agentErrorMessage(evt.code, evt.error);
+            return;
+          }
           if (evt.type === "tool_start") {
             const toolName = evt.tool;
             const args = evt.arguments || {};
@@ -551,8 +731,8 @@ export default function App() {
             let kind: SimStepKind = "action";
             // The connected account's platform drives the header icon: steps
             // marked "social" crossfade the ball into that platform's logo.
-            const activePlatform: string = profiles[0]?.platform || "x";
-            const activeHandle = profiles[0]?.handle || "";
+            const activePlatform: string = activeProfile?.platform || "x";
+            const activeHandle = activeProfile?.handle || "";
             // The connected account's face — same unavatar source the Sidebar uses.
             const activeAvatarUrl = activeHandle
               ? `https://unavatar.io/${activePlatform === "x" ? "x" : activePlatform}/${activeHandle}`
@@ -561,17 +741,24 @@ export default function App() {
             let avatarUrl: string | undefined;
 
             if (toolName === "connect_account") {
-              label = "Generating secure X authorization link...";
+              const target = String(args.platform || activeProfile?.platform || "x");
+              label = `Generating secure ${target} authorization link...`;
               kind = "action";
-              platforms = ["x"];
+              platforms = [target];
             } else if (toolName === "check_niche_trends") {
               label = `Searching high-impression peer posts (${args.query || "niche"})`;
               kind = "social";
+              // Both tools take a `platform` arg that defaults to the profile's
+              // own network — the logo must follow it, never a fixed guess.
+              platforms = [String(args.platform || activePlatform)];
+            } else if (toolName === "save_user_request") {
+              label = "Saving your requested handles (as user requests, not peers)";
+              kind = "action";
               platforms = ["x"];
             } else if (toolName === "discover_and_extract_niche_frameworks") {
-              label = `Extracting winning content frameworks (${args.niche || "tech"})`;
+              label = `Extracting winning content frameworks (${args.query || args.niche || "niche"})`;
               kind = "analysis";
-              platforms = ["x", "linkedin"];
+              platforms = [String(args.platform || activePlatform)];
             } else if (toolName === "extract_voice_profile") {
               label = "Extracting your creator voice profile";
               kind = "social";
@@ -599,7 +786,7 @@ export default function App() {
             } else if (toolName === "repurpose_caption") {
               label = `Repurposing caption for ${args.target_platform || "socials"}`;
               kind = "writing";
-              platforms = [args.target_platform || "x"];
+              platforms = [String(args.target_platform || "x")];
             }
 
 
@@ -653,16 +840,21 @@ export default function App() {
               startedAt: startTime,
             });
           }
-        });
+        }, { signal: controller.signal });
 
         // Finished streaming response
         const elapsed = Math.round(performance.now() - startTime);
-        liveSteps.push({
-          id: `step-finish`,
-          label: "Synthesizing response",
-          kind: "writing",
-          durationMs: 400,
-        });
+        if (streamError) {
+          const lastStep = liveSteps[liveSteps.length - 1];
+          if (lastStep) lastStep.detail = "Failed";
+        } else {
+          liveSteps.push({
+            id: `step-finish`,
+            label: "Synthesizing response",
+            kind: "writing",
+            durationMs: 400,
+          });
+        }
 
         const completedScript: SimScript = {
           id: `live-${runId}`,
@@ -671,10 +863,16 @@ export default function App() {
         };
 
         const target = pendingChatIdRef.current;
-        const analyticsExec = result.tool_executions?.find(
-          (e) => e.name === "get_analytics" && e.result,
-        );
 
+        const replyText = streamError
+          ? `⚠️ ${streamError}`
+          : result.content?.trim() ||
+            "I finished working on that — let me know if you'd like more detail.";
+
+        // Pre-generate the reply id so the same batch can mark it as
+        // "revealing"; the updater itself stays pure (StrictMode-safe).
+        const replyId = nextId++;
+        setRevealingId(replyId);
         setChats((prev) =>
           prev.map((c) =>
             c.id === target
@@ -683,10 +881,11 @@ export default function App() {
                   messages: [
                     ...c.messages,
                     {
-                      id: nextId++,
+                      id: replyId,
                       role: "agent",
-                      text: result.content?.trim() || "I finished working on that — let me know if you'd like more detail.",
-                      analytics: analyticsExec ? analyticsExec.result : undefined,
+                      text: replyText,
+                      analytics: analyticsFrom(result.tool_executions),
+                      connectLinks: connectLinksFrom(result.tool_executions),
                       sim: {
                         scriptId: completedScript.id,
                         elapsedMs: elapsed,
@@ -699,17 +898,66 @@ export default function App() {
           ),
         );
 
+        if (voiceReplyRef.current) {
+          voiceReplyRef.current = false;
+          speak(replyText.replace(/^⚠️\s*/, ""));
+        }
+
       } catch (err: any) {
+        if (controller.signal.aborted) {
+          // Stop pressed: an honest "stopped" note — and never the direct
+          // POST below, which would re-run the whole agent turn server-side.
+          voiceReplyRef.current = false;
+          const stoppedTarget = pendingChatIdRef.current;
+          const stoppedId = nextId++;
+          setRevealingId(stoppedId);
+          setChats((prev) =>
+            prev.map((c) =>
+              c.id === stoppedTarget
+                ? {
+                    ...c,
+                    messages: [
+                      ...c.messages,
+                      { id: stoppedId, role: "agent", text: "⏹ Stopped — I didn't finish that." },
+                    ],
+                  }
+                : c,
+            ),
+          );
+          return; // finally still clears activeRun / busy
+        }
         console.warn("Live stream failed, falling back to direct chat:", err);
         const target = pendingChatIdRef.current;
-        const activeProfileId = profiles.length > 0 ? profiles[0].id : 1;
+        const noRetryCodes = ["agent_timeout", "stream_incomplete", "bad_response"];
+        if (
+          err instanceof ApiError &&
+          ((err.status >= 400 && err.status < 500) || noRetryCodes.includes(err.code))
+        ) {
+          // The server answered and refused, or the agent already started and went silent:
+          // running the turn again would only repeat the refusal or double the work.
+          const refusedId = nextId++;
+          setRevealingId(refusedId);
+          setChats((prev) =>
+            prev.map((c) =>
+              c.id === target
+                ? {
+                    ...c,
+                    messages: [
+                      ...c.messages,
+                      { id: refusedId, role: "agent", text: `⚠️ ${chatErrorMessage(err)}` },
+                    ],
+                  }
+                : c,
+            ),
+          );
+          return;
+        }
 
         try {
-          const direct = await sendChatMessage(activeProfileId, text);
+          const direct = await sendChatMessage(chatProfileId, text);
           const elapsed = Math.round(performance.now() - startTime);
-          const directAnalyticsExec = direct.tool_executions?.find(
-            (e) => e.name === "get_analytics" && e.result,
-          );
+          const directId = nextId++;
+          setRevealingId(directId);
           setChats((prev) =>
             prev.map((c) =>
               c.id === target
@@ -718,22 +966,26 @@ export default function App() {
                     messages: [
                       ...c.messages,
                       {
-                        id: nextId++,
+                        id: directId,
                         role: "agent",
                         text: direct.content || "Done!",
-                        analytics: directAnalyticsExec ? directAnalyticsExec.result : undefined,
+                        analytics: analyticsFrom(direct.tool_executions),
+                        connectLinks: connectLinksFrom(direct.tool_executions),
                       },
                     ],
                   }
                 : c,
             ),
           );
+          if (voiceReplyRef.current) {
+            voiceReplyRef.current = false;
+            speak(direct.content || "Done!");
+          }
         } catch (fallbackErr: any) {
-          const errorMsg =
-            fallbackErr?.message ||
-            err?.message ||
-            "Unable to reach the Lumi agent backend. Please check that the server is running on http://localhost:8000.";
+          const errorMsg = chatErrorMessage(fallbackErr ?? err);
 
+          const errorId = nextId++;
+          setRevealingId(errorId);
           setChats((prev) =>
             prev.map((c) =>
               c.id === target
@@ -742,21 +994,33 @@ export default function App() {
                     messages: [
                       ...c.messages,
                       {
-                        id: nextId++,
+                        id: errorId,
                         role: "agent",
-                        text: `⚠️ Connection error: ${errorMsg}`,
+                        text: `⚠️ ${errorMsg}`,
                       },
                     ],
                   }
                 : c,
             ),
           );
+          if (voiceReplyRef.current) {
+            voiceReplyRef.current = false;
+            speak(`Sorry — I could not reach the backend. ${errorMsg}`);
+          }
         }
       } finally {
+        if (abortRef.current === controller) abortRef.current = null;
         setActiveRun(null);
         setBusy(false);
       }
     })();
+  };
+
+  // Stop: abort the in-flight stream, and flush any mid-flight reveal so
+  // everything received so far appears at once.
+  const stopRun = () => {
+    abortRef.current?.abort();
+    flushRef.current?.();
   };
 
   const resetChat = () => {
@@ -774,6 +1038,7 @@ export default function App() {
     }
     setActiveRun(null);
     setBusy(false);
+    setRevealingId(null);
     setInput("");
     setPills(pickPills());
   };
@@ -794,9 +1059,6 @@ export default function App() {
     if (draftsRef.current) {
       delete draftsRef.current[idStr];
       persistDrafts();
-    }
-    if (profiles.length > 0) {
-      deleteChatHistory(profiles[0].id).catch(() => {});
     }
   };
 
@@ -822,14 +1084,6 @@ export default function App() {
     .reverse()
     .map((c) => ({ id: String(c.id), label: c.title || "Untitled" }));
 
-  useLayoutEffect(() => {
-    const say = new URLSearchParams(window.location.search).get(
-      "say",
-    );
-    if (say && messages.length === 0 && !busy) send(say);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   return (
     <div className={styles.page}>
       <AmbientBackground />
@@ -846,20 +1100,30 @@ export default function App() {
 
           recents={recents}
           userProfile={
-            profiles.length > 0
-              ? { name: profiles[0].name, handle: profiles[0].handle }
-              : null
+            activeProfile ? { name: activeProfile.name, handle: activeProfile.handle } : null
           }
-          activeNav={view === "settings" ? "settings" : view === "chronic" ? "chronic" : "home"}
+          activeNav={
+            view === "settings"
+              ? "settings"
+              : view === "chronic"
+                ? "chronic"
+                : view === "publish"
+                  ? "publish"
+                  : "home"
+          }
           onNavigate={(key) => {
             if (key === "settings") setView("settings");
             else if (key === "chronic") setView("chronic");
+            else if (key === "publish") setView("publish");
             else setView("chat");
           }}
           onOpenSettings={(section) => {
             setSettingsSection(section as SettingsSection);
             setView("settings");
           }}
+          onSignOut={() => void logout()}
+          footerLabel="Log out"
+          onFooterClick={() => void logout()}
         />
         <main className={styles.main}>
           {view === "settings" ? (
@@ -867,10 +1131,29 @@ export default function App() {
               section={settingsSection}
               onSectionChange={setSettingsSection}
               onBack={() => setView("chat")}
+              user={user}
+              profiles={profiles}
+              activeProfileId={activeProfileId}
+              onSelectProfile={selectProfile}
+              onCreateProfile={createProfile}
+              onClearHistory={deleteChatHistory}
+              onLogout={() => void logout()}
+              returned={connectReturn}
+              onDismissReturn={() => setConnectReturn(null)}
+              onConnectionsChanged={() => void refreshProfiles()}
+            />
+          ) : view === "publish" ? (
+            <PublishStudio
+              profileId={activeProfileId}
+              handle={activeProfile?.handle ?? null}
+              onOpenConnections={() => {
+                setSettingsSection("social");
+                setView("settings");
+              }}
             />
           ) : view === "chronic" ? (
             <ChronicOnline
-              profileId={profiles.length > 0 ? profiles[0].id : 1}
+              profileId={activeProfileId}
               onRepurpose={(caption, author) => {
                 setView("chat");
                 send(
@@ -947,7 +1230,15 @@ export default function App() {
                             <AgentMessage
                               text={m.text}
                               analytics={m.analytics ?? (m.insights ? analytics : null)}
+                              connectLinks={m.connectLinks}
                               onPill={(t) => handleInput(t)}
+                              animate={m.id === revealingId}
+                              scrollRef={streamRef}
+                              nearBottomRef={nearBottomRef}
+                              onRevealDone={() =>
+                                setRevealingId((cur) => (cur === m.id ? null : cur))
+                              }
+                              flushRef={flushRef}
                             />
                           ) : (
                             <p className={styles.msgText}>{m.text}</p>
@@ -968,13 +1259,20 @@ export default function App() {
                     )}
                   </div>
                 </div>
-                <div
-                  className={`${styles.edge} ${styles.edgeBottom}`}
-                  aria-hidden="true"
-                />
               </div>
 
               <div className={styles.dock}>
+                {(busy || revealingId !== null) && (
+                  <div className={styles.stopRow}>
+                    <button
+                      type="button"
+                      className={styles.stopBtn}
+                      onClick={stopRun}
+                    >
+                      ■ Stop
+                    </button>
+                  </div>
+                )}
                 {messages.length === 0 && !busy && (
                   <div className={styles.pills}>
                     {pills.map((p) => (

@@ -1,0 +1,41 @@
+.group {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.btn,
+.active {
+  min-width: 38px;
+  padding: 4px 10px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted, #9aa0a6);
+  font-family: "Outfit", sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition:
+    background-color 160ms ease,
+    color 160ms ease;
+}
+
+.btn:hover {
+  color: var(--text, #fff);
+}
+
+.active {
+  background: rgba(255, 255, 255, 0.14);
+  color: var(--text, #fff);
+}
+
+:global([data-light="true"]) .group {
+  border-color: rgba(0, 0, 0, 0.14);
+  background: rgba(0, 0, 0, 0.05);
+}

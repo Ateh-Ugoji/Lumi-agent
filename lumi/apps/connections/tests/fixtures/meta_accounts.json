@@ -1,0 +1,5 @@
+{"data": [
+  {"id": "1001", "name": "Pagina Uno", "access_token": "meta-page1-FAKE", "tasks": ["ANALYZE", "ADVERTISE", "CREATE_CONTENT"]},
+  {"id": "1002", "name": "Pagina Dos", "access_token": "meta-page2-FAKE", "tasks": ["ANALYZE"]},
+  {"id": "1003", "name": "Sin token", "tasks": ["CREATE_CONTENT"]}
+]}

@@ -285,7 +285,7 @@ Where Google redirects after consent. Query params: `code` (auth code), `state`,
 
 ### AI recaption (added 2026-10-25)
 
-Direct REST path to the caption-repurpose pipeline for the **webapp composer's auto AI-recaption** (the chat UI keeps using the `repurpose_caption` agent tool; both consume the same DB-free core in `app/services/repurpose_flow.py`). Runs the requested platforms **concurrently** (pure LLM fan-out, one read session + one batched write session), so a 4-platform recaption costs roughly one platform's wall time.
+Direct REST path to the caption-repurpose pipeline for the **webapp composer's auto AI-recaption** (the chat UI keeps using the `repurpose_caption` agent tool; both consume the same DB-free core in `legacy/app/services/repurpose_flow.py`). Runs the requested platforms **concurrently** (pure LLM fan-out, one read session + one batched write session), so a 4-platform recaption costs roughly one platform's wall time.
 
 #### `POST /repurpose`
 

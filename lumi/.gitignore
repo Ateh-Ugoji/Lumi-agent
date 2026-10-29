@@ -6,6 +6,9 @@ __pycache__/
 .pytest_cache/
 *.db
 
+# Local Chroma vector store (CHROMA_PATH)
+.chroma/
+
 # Frontend
 node_modules/
 dist/
@@ -21,3 +24,5 @@ memory.md
 *.log
 _purge_p16.py
 temp-agents.md
+.pgdata/
+staticfiles/

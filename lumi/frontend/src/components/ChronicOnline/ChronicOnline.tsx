@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { getTrendMatches, scanNicheTrends, type TrendMatch } from "../../api/agent";
+import { errorMessage, getTrendMatches, scanNicheTrends, type TrendMatch } from "../../api";
+import { useT } from "../../i18n/index.ts";
 import styles from "./ChronicOnline.module.css";
 
 type ChronicOnlineProps = {
-  profileId?: number;
+  profileId: number | null;
   onRepurpose: (caption: string, author: string) => void;
   onBack?: () => void;
 };
@@ -63,7 +64,7 @@ const Icons = {
 };
 
 export default function ChronicOnline({
-  profileId = 1,
+  profileId,
   onRepurpose,
   onBack,
 }: ChronicOnlineProps) {
@@ -75,12 +76,19 @@ export default function ChronicOnline({
   const [topicFilter, setTopicFilter] = useState<"all" | "indie" | "ai" | "viral">("all");
   const [avatarErrors, setAvatarErrors] = useState<Record<string, boolean>>({});
   const [scanError, setScanError] = useState<string | null>(null);
+  const t = useT();
 
   const loadMatches = async () => {
+    if (profileId === null) {
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
       const data = await getTrendMatches(profileId, 80);
       setMatches(data);
+    } catch (err) {
+      setScanError(errorMessage(err, t("chronic.trends_failed")));
     } finally {
       setLoading(false);
     }
@@ -91,18 +99,14 @@ export default function ChronicOnline({
   }, [profileId]);
 
   const handleScan = async () => {
+    if (profileId === null) return;
     try {
       setScanning(true);
       setScanError(null);
-      await scanNicheTrends(
-        profileId,
-        ["sama", "levelsio", "karpathy", "paulg", "swyx"],
-        20,
-      );
+      await scanNicheTrends(profileId);
       await loadMatches();
     } catch (err) {
-      console.error("Scan failed", err);
-      setScanError("Scan failed. Check that XPOZ_API_KEY is set on the backend, then try again.");
+      setScanError(errorMessage(err, t("chronic.scan_failed")));
     } finally {
       setScanning(false);
     }

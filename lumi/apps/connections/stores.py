@@ -1,0 +1,800 @@
+"""Django implementations of the ports the pure core defines.
+
+* ``DjangoOAuthStateStore``: one use per state, claimed by a single ``UPDATE ... RETURNING``.
+* ``DjangoPublishLedger``: ``publish_jobs`` rows as the idempotency ledger.
+* ``DjangoCreditLedger``: ``xpoz_credit_ledger`` rows.
+* ``DjangoHandleStore``: ``handle_search_cache`` plus ``social_handles``.
+
+Each async method runs its blocking ORM work with ``sync_to_async(thread_sensitive=True)``.
+Handles are written through ``apps.profiles.services.get_or_create_handle`` (docs/CONTRATOS.md
+section 5). That service only fills empty fields, which is also the rule for the picture.
+"""
+
+from __future__ import annotations
+
+import os
+import re
+from collections.abc import Callable, Iterable
+from dataclasses import replace
+from datetime import timedelta
+
+from asgiref.sync import sync_to_async
+from django.db import IntegrityError, connection, transaction
+from django.db.models import F, Q, Sum
+from django.db.models.functions import Now
+from django.utils import timezone
+
+from apps.core.choices import IngestSource
+from apps.core.fields import TokenDecryptError
+from apps.intelligence.repos.aio import aio
+from apps.profiles.models import HandleOrigin, Post, SocialHandle, SocialProfile
+from apps.profiles.services import (
+    InvalidHandle,
+    get_or_create_handle,
+    update_handle_avatar,
+)
+
+from .clients.credits import CreditEntry
+from .config import ConnectionsConfig
+from .errors import BudgetExceeded, OAuthStateError
+from .handles.types import CacheEntry, HandleRow
+from .mcp.gateway import PendingWrite
+from .models import (
+    HandleSearchCache,
+    HandleSearchCacheEntry,
+    IngestPass,
+    McpAuthAccount,
+    McpPendingWrite,
+    OAuthState,
+    PublishJob,
+    PublishStatus,
+    UserSavedHandle,
+    XpozCreditLedger,
+)
+from .oauth import OAuthStateRecord
+from .passes import StoredPost
+from .providers.base import PublishResult, TokenSet
+from .publishing import LedgerEntry, LedgerStatus, PublishInProgress
+
+_HANDLE_RE = re.compile(r"^[a-z0-9._-]{1,100}$")
+_REMEMBERED_LIMIT = 200
+
+
+# --- OAuth state ---------------------------------------------------------------------------
+
+_CONSUME_SQL = """
+UPDATE oauth_states
+   SET consumed_at = now()
+ WHERE state = %s AND provider = %s AND consumed_at IS NULL AND expires_at > now()
+   AND user_id = %s
+RETURNING user_id, provider, code_verifier, redirect_after, expires_at, social_profile_id
+"""
+
+
+class DjangoOAuthStateStore:
+    """``redirect_uri_for`` rebuilds the callback URL, which is not stored per state."""
+
+    def __init__(self, redirect_uri_for: Callable[[str], str]) -> None:
+        self._redirect_uri_for = redirect_uri_for
+
+    async def save(self, record: OAuthStateRecord) -> None:
+        await sync_to_async(self._save, thread_sensitive=True)(record)
+
+    async def consume(
+        self, state: str, provider: str, *, user_id: int | str
+    ) -> OAuthStateRecord | None:
+        return await sync_to_async(self._consume, thread_sensitive=True)(
+            state, provider, int(user_id)
+        )
+
+    def _save(self, record: OAuthStateRecord) -> None:
+        OAuthState.objects.create(
+            state=record.state,
+            user_id=record.user_id,
+            provider=record.provider,
+            social_profile_id=record.profile_id,
+            code_verifier=record.code_verifier or "",
+            redirect_after=record.redirect_after,
+            expires_at=record.expires_at,
+        )
+
+    def _consume(
+        self, state: str, provider: str, user_id: int
+    ) -> OAuthStateRecord | None:
+        from apps.core.fields import decrypt_value
+
+        with connection.cursor() as cursor:
+            cursor.execute(_CONSUME_SQL, [state, provider, user_id])
+            row = cursor.fetchone()
+        if row is None:
+            unused = OAuthState.objects.filter(
+                state=state, provider=provider, consumed_at__isnull=True
+            )
+            if unused.filter(expires_at__gt=Now()).exclude(user_id=user_id).exists():
+                raise OAuthStateError("state_mismatch")
+            # Only the owner learns that the state was theirs and ran out. Everyone else,
+            # and an unknown or used state, gets the same ``state_invalid``.
+            if unused.filter(user_id=user_id, expires_at__lte=Now()).exists():
+                raise OAuthStateError("state_expired")
+            return None
+        user_id, found_provider, verifier, redirect_after, expires_at, profile_id = row
+        # RETURNING bypasses the field, so the verifier is still ciphertext here.
+        return OAuthStateRecord(
+            state=state,
+            provider=found_provider,
+            user_id=user_id,
+            redirect_uri=self._redirect_uri_for(found_provider),
+            redirect_after=redirect_after,
+            expires_at=expires_at,
+            code_verifier=decrypt_value(verifier) if verifier else None,
+            profile_id=profile_id,
+        )
+
+
+def purge_expired_states() -> int:
+    """Delete states that expired or were used. Returns how many rows went."""
+    deleted, _ = OAuthState.objects.filter(
+        Q(consumed_at__isnull=False) | Q(expires_at__lte=Now())
+    ).delete()
+    return deleted
+
+
+# --- Publishing ----------------------------------------------------------------------------
+
+
+class DjangoPublishLedger:
+    """One ledger per request: the request fixes what the ``PublishJob`` row describes."""
+
+    def __init__(
+        self,
+        *,
+        platform: str,
+        text: str,
+        connected_account_id: int | None = None,
+        attempt_id: int | None = None,
+    ) -> None:
+        self._platform = platform
+        self._text = text
+        self._account_id = connected_account_id
+        self._attempt_id = attempt_id
+
+    async def begin(
+        self, scope: int | str, key: str, fingerprint: str
+    ) -> tuple[LedgerEntry, bool]:
+        return await sync_to_async(self._begin, thread_sensitive=True)(
+            int(scope), key, fingerprint
+        )
+
+    async def restart(self, scope: int | str, key: str) -> None:
+        await sync_to_async(self._restart, thread_sensitive=True)(int(scope), key)
+
+    async def finish(
+        self,
+        scope: int | str,
+        key: str,
+        status: LedgerStatus,
+        result: PublishResult | None = None,
+        error: str = "",
+    ) -> None:
+        await sync_to_async(self._finish, thread_sensitive=True)(
+            int(scope), key, status, result, error
+        )
+
+    def _begin(
+        self, profile_id: int, key: str, fingerprint: str
+    ) -> tuple[LedgerEntry, bool]:
+        try:
+            with transaction.atomic():
+                PublishJob.objects.create(
+                    profile_id=profile_id,
+                    connected_account_id=self._account_id,
+                    attempt_id=self._attempt_id,
+                    platform=self._platform,
+                    text=self._text,
+                    status=PublishStatus.PENDING,
+                    fingerprint=fingerprint,
+                    idempotency_key=key,
+                )
+        except IntegrityError:
+            job = PublishJob.objects.get(profile_id=profile_id, idempotency_key=key)
+            return _entry(job), False
+        return LedgerEntry(key=key, fingerprint=fingerprint, status="pending"), True
+
+    def _restart(self, profile_id: int, key: str) -> None:
+        moved = PublishJob.objects.filter(
+            profile_id=profile_id,
+            idempotency_key=key,
+            status=PublishStatus.FAILED,
+        ).update(status=PublishStatus.PENDING, error="", updated_at=Now())
+        if not moved:
+            # Another request took the retry first.
+            raise PublishInProgress("this post is already being retried")
+
+    def _finish(
+        self,
+        profile_id: int,
+        key: str,
+        status: str,
+        result: PublishResult | None,
+        error: str,
+    ) -> None:
+        values: dict[str, object] = {
+            "status": status,
+            "error": error[:500],
+            "updated_at": Now(),
+        }
+        if result is not None:
+            values["external_post_id"] = result.external_post_id or ""
+            values["external_url"] = result.url or ""
+            values["dry_run"] = result.dry_run
+        PublishJob.objects.filter(
+            profile_id=profile_id, idempotency_key=key, status=PublishStatus.PENDING
+        ).update(**values)
+
+
+def _entry(job: PublishJob) -> LedgerEntry:
+    result = None
+    if job.status == PublishStatus.DONE:
+        result = PublishResult(
+            external_post_id=job.external_post_id or None,
+            url=job.external_url or None,
+            dry_run=job.dry_run,
+        )
+    return LedgerEntry(
+        key=job.idempotency_key,
+        fingerprint=job.fingerprint,
+        status=job.status,  # type: ignore[arg-type]
+        result=result,
+    )
+
+
+# --- Xpoz credits --------------------------------------------------------------------------
+
+
+CAP_WINDOW = timedelta(hours=24)
+
+
+class DjangoCreditLedger:
+    """Ledger plus the daily caps. Every paid Xpoz call asks ``ensure_room`` first.
+
+    Two caps apply over a rolling 24 h, both read from ``xpoz_credit_ledger``: one for the
+    user and one for everybody. They survive restarts and are shared by every process.
+    Two calls that check at the same moment can both pass, so the overshoot is at most one
+    call per concurrent request, and the DRF throttle on the routes keeps that small.
+    """
+
+    def __init__(self, user_id: int | None = None) -> None:
+        self._user_id = user_id
+
+    async def ensure_room(self, credits: int) -> None:
+        await sync_to_async(self._ensure_room, thread_sensitive=True)(credits)
+
+    def _ensure_room(self, credits: int) -> None:
+        config = ConnectionsConfig.from_env(os.environ)
+        since = timezone.now() - CAP_WINDOW
+        recent = XpozCreditLedger.objects.filter(created_at__gte=since)
+        checks = [(recent, config.xpoz_daily_cap_global, "global")]
+        if self._user_id is not None:
+            checks.append(
+                (
+                    recent.filter(user_id=self._user_id),
+                    config.xpoz_daily_cap_user,
+                    "user",
+                )
+            )
+        for rows, cap, scope in checks:
+            spent = rows.aggregate(total=Sum("credits"))["total"] or 0
+            if spent + credits > cap:
+                raise BudgetExceeded(
+                    f"Xpoz daily credit cap reached ({scope})",
+                    provider="xpoz",
+                    spent=spent,
+                    budget=cap,
+                )
+
+    async def record(self, entry: CreditEntry) -> None:
+        await sync_to_async(self._record, thread_sensitive=True)(entry)
+
+    def _record(self, entry: CreditEntry) -> None:
+        XpozCreditLedger.objects.create(
+            user_id=self._user_id,
+            provider=entry.provider,
+            route=entry.route,
+            credits=entry.credits,
+            key_slot=entry.key_slot,
+            run_id=entry.run_id or "",
+        )
+
+
+# --- Handles -------------------------------------------------------------------------------
+
+
+def normalize_handle(handle: str) -> str | None:
+    value = handle.strip().lstrip("@").lower()
+    return value if _HANDLE_RE.match(value) else None
+
+
+def _row(handle: SocialHandle) -> HandleRow:
+    return HandleRow(
+        handle=handle.handle_display or handle.handle_normalized,
+        platform=handle.platform,
+        display_name=handle.display_name,
+        avatar_url=handle.avatar_url,
+        followers=handle.follower_count,
+        source="cache",
+    )
+
+
+class DjangoHandleStore:
+    """Handle tables over Postgres.
+
+    ``user_id`` limits "handles of profiles already in Lumi" to the caller's own profiles, so
+    one user's profile list never leads another user's dropdown, and "saved" to the handles the
+    caller picked (``user_saved_handles``). Remembered handles and the search cache stay
+    shared: they are public identities and public search results.
+    """
+
+    def __init__(self, user_id: int | None = None) -> None:
+        self._user_id = user_id
+
+    async def profile_handles(self, platform: str, prefix: str) -> list[str]:
+        return await sync_to_async(self._profile_handles, thread_sensitive=True)(
+            platform, prefix
+        )
+
+    async def remembered(self, platform: str, prefix: str) -> list[HandleRow]:
+        return await sync_to_async(self._remembered, thread_sensitive=True)(
+            platform, prefix
+        )
+
+    async def known_keys(self, platform: str, handles: list[str]) -> set[str]:
+        return await sync_to_async(self._known_keys, thread_sensitive=True)(
+            platform, handles
+        )
+
+    async def related_entries(self, platform: str, query: str) -> list[CacheEntry]:
+        return await sync_to_async(self._related_entries, thread_sensitive=True)(
+            platform, query
+        )
+
+    # The four writers below run under ``aio``: ``scan_trends`` and ``search_frameworks`` reach them
+    # through ``HandleDirectory`` inside a tool call, and a timed-out call must not commit.
+    async def put_entry(self, entry: CacheEntry) -> None:
+        await aio(self._put_entry)(entry)
+
+    async def remember_live(self, rows: list[HandleRow]) -> None:
+        await aio(self._remember)(rows, HandleOrigin.LIVE, True, True)
+
+    async def remember_new(self, rows: list[HandleRow]) -> None:
+        await aio(self._remember)(rows, HandleOrigin.CACHE, False)
+
+    def _profile_handles(self, platform: str, prefix: str) -> list[str]:
+        profiles = SocialProfile.objects.filter(
+            handle__platform=platform,
+            handle__handle_normalized__startswith=prefix.lower(),
+        )
+        if self._user_id is not None:
+            profiles = profiles.filter(user_id=self._user_id)
+        names = profiles.values_list("handle__handle_normalized", flat=True).distinct()
+        return sorted(names)
+
+    def _remembered(self, platform: str, prefix: str) -> list[HandleRow]:
+        qs = SocialHandle.objects.filter(
+            platform=platform, handle_normalized__startswith=prefix.lower()
+        ).order_by("-follower_count", "handle_normalized")[:_REMEMBERED_LIMIT]
+        return [_row(h) for h in qs]
+
+    def _known_keys(self, platform: str, handles: list[str]) -> set[str]:
+        wanted = {n for h in handles if (n := normalize_handle(h))}
+        found = SocialHandle.objects.filter(
+            platform=platform, handle_normalized__in=wanted
+        ).values_list("handle_normalized", flat=True)
+        return {f"{platform}:{name}" for name in found}
+
+    def _related_entries(self, platform: str, query: str) -> list[CacheEntry]:
+        prefixes = [query[:i] for i in range(1, len(query) + 1)]
+        caches = (
+            HandleSearchCache.objects.filter(platform=platform)
+            .filter(
+                Q(query_normalized__in=prefixes) | Q(query_normalized__startswith=query)
+            )
+            .prefetch_related("entries__handle")
+        )
+        return [
+            CacheEntry(
+                platform=cache.platform,
+                query=cache.query_normalized,
+                fetched_at=cache.fetched_at,
+                rows=tuple(_row(e.handle) for e in cache.entries.all()),
+            )
+            for cache in caches
+        ]
+
+    def _put_entry(self, entry: CacheEntry) -> None:
+        with transaction.atomic():
+            cache, _ = HandleSearchCache.objects.update_or_create(
+                platform=entry.platform,
+                query_normalized=entry.query,
+                defaults={"fetched_at": entry.fetched_at},
+            )
+            cache.entries.all().delete()
+            handle_ids = self._ensure_handles(entry.platform, entry.rows)
+            HandleSearchCacheEntry.objects.bulk_create(
+                [
+                    HandleSearchCacheEntry(cache=cache, handle_id=hid, rank=rank)
+                    for rank, hid in enumerate(handle_ids)
+                ],
+                ignore_conflicts=True,
+            )
+
+    def _ensure_handles(self, platform: str, rows: Iterable[HandleRow]) -> list[int]:
+        """Return the ids of the rows' handles in order, creating the missing ones."""
+        names: list[str] = []
+        for row in rows:
+            name = normalize_handle(row.handle)
+            if name and name not in names:
+                names.append(name)
+        existing = dict(
+            SocialHandle.objects.filter(
+                platform=platform, handle_normalized__in=names
+            ).values_list("handle_normalized", "id")
+        )
+        missing = [n for n in names if n not in existing]
+        if missing:
+            SocialHandle.objects.bulk_create(
+                [
+                    SocialHandle(
+                        platform=platform,
+                        handle_normalized=n,
+                        handle_display=n,
+                        origin=HandleOrigin.CACHE,
+                    )
+                    for n in missing
+                ],
+                ignore_conflicts=True,
+            )
+            existing = dict(
+                SocialHandle.objects.filter(
+                    platform=platform, handle_normalized__in=names
+                ).values_list("handle_normalized", "id")
+            )
+        return [existing[n] for n in names if n in existing]
+
+    def select(self, platform: str, handle: str) -> str | None:
+        """Resolve or create the handle a user picked. Returns its normalized name, or ``None``.
+
+        The client sent this request, so it is the one writer of ``social_handles`` whose data
+        nobody checked: only ``(platform, handle)`` is used. No photo, name or follower count
+        reaches the table, an existing handle is left as it is, and a new one is stored at the
+        ``cache`` origin (never ``live``), with the normalized name as its display handle. Its
+        photo and numbers arrive later from the provider.
+        """
+        name = normalize_handle(handle)
+        if name is None:
+            return None
+        try:
+            handle_id = get_or_create_handle(platform, name, origin=HandleOrigin.CACHE)
+        except InvalidHandle:
+            return None
+        if self._user_id is not None:
+            UserSavedHandle.objects.get_or_create(
+                user_id=self._user_id, handle_id=handle_id
+            )
+        return name
+
+    def saved(self, platforms: list[str], limit: int) -> list[HandleRow]:
+        """The caller's own profile handles first-class, then the ones they picked.
+
+        Nobody else's picks show up: ``social_handles`` is shared, so "saved" is read from
+        ``user_saved_handles``. Followers first.
+        """
+        if self._user_id is None:
+            return []
+        rows: dict[str, HandleRow] = {}
+        own = SocialProfile.objects.filter(
+            user_id=self._user_id, handle__platform__in=platforms
+        )
+        for h in SocialHandle.objects.filter(pk__in=own.values("handle_id")):
+            rows[f"{h.platform}:{h.handle_normalized}"] = replace(_row(h), source="db")
+        picked = SocialHandle.objects.filter(
+            platform__in=platforms,
+            pk__in=UserSavedHandle.objects.filter(user_id=self._user_id).values(
+                "handle_id"
+            ),
+        ).order_by(F("follower_count").desc(nulls_last=True), "handle_normalized")[
+            :limit
+        ]
+        for h in picked:
+            rows.setdefault(f"{h.platform}:{h.handle_normalized}", _row(h))
+        ordered = sorted(
+            rows.values(),
+            key=lambda r: (
+                r.followers is None,
+                -(r.followers or 0),
+                r.handle.lower(),
+            ),
+        )
+        return ordered[:limit]
+
+    def counts(self) -> dict[str, int]:
+        return {
+            "remembered_handles": SocialHandle.objects.count(),
+            "cached_searches": HandleSearchCache.objects.count(),
+        }
+
+    async def remember_rows(self, rows: list[HandleRow], origin: str) -> None:
+        """Add-if-absent under ``origin``: what a handle already holds is never replaced."""
+        # Only a row the provider just returned (``source == "live"``) refreshes a picture.
+        await aio(self._remember)(rows, origin, False, True)
+
+    async def pictures(self, platform: str, handles: list[str]) -> list[HandleRow]:
+        """Rows of ``handles`` that carry a picture. A handle with no picture is left out."""
+        return await sync_to_async(self._pictures, thread_sensitive=True)(
+            platform, handles
+        )
+
+    def _pictures(self, platform: str, handles: list[str]) -> list[HandleRow]:
+        wanted = {n for h in handles if (n := normalize_handle(h))}
+        found = SocialHandle.objects.filter(
+            platform=platform, handle_normalized__in=wanted
+        ).exclude(avatar_url="")
+        return [_row(h) for h in found]
+
+    def _remember(
+        self,
+        rows: list[HandleRow],
+        origin: str,
+        overwrite: bool,
+        refresh_picture: bool = False,
+    ) -> None:
+        """Write every row through ``get_or_create_handle``.
+
+        That service only fills fields that are empty and never lowers the origin.
+        ``refresh_picture`` is for rows the provider returned in this call (a live search, a
+        completed scan): the picture then goes through ``update_handle_avatar``, which replaces
+        an old one with a new valid URL and ignores an empty one. A picked row (``select``) comes
+        from the client, so it never refreshes a public photo. ``overwrite`` (a fresh live pull)
+        only adds what the service does not own: the display name and the case of the
+        handle. A follower count enters as a dated snapshot, and a count from a cache row
+        never replaces one a live pull stored.
+        """
+        with transaction.atomic():
+            for row in rows:
+                name = normalize_handle(row.handle)
+                if name is None:
+                    continue
+                current = SocialHandle.objects.filter(
+                    platform=row.platform, handle_normalized=name
+                ).first()
+                followers = row.followers
+                if (
+                    not overwrite
+                    and current is not None
+                    and current.follower_count is not None
+                ):
+                    followers = None
+                try:
+                    handle_id = get_or_create_handle(
+                        row.platform,
+                        row.handle,
+                        origin=origin,
+                        display_name=row.display_name,
+                        avatar_url=row.avatar_url,
+                        follower_count=followers,
+                        source=IngestSource.XPOZ if followers is not None else None,
+                        handle_display=row.handle,
+                    )
+                except InvalidHandle:
+                    continue
+                if refresh_picture and row.source == "live":
+                    update_handle_avatar(handle_id, row.avatar_url)
+                if overwrite:
+                    changes: dict[str, object] = {}
+                    if row.handle:
+                        changes["handle_display"] = row.handle
+                    if row.display_name:
+                        changes["display_name"] = row.display_name
+                    if changes:
+                        SocialHandle.objects.filter(pk=handle_id).update(
+                            **changes, updated_at=Now()
+                        )
+
+
+__all__ = [
+    "DjangoCreditLedger",
+    "DjangoHandleStore",
+    "DjangoOAuthStateStore",
+    "DjangoPublishLedger",
+    "normalize_handle",
+    "purge_expired_states",
+]
+
+
+class DjangoMcpStore:
+    """Google tokens in ``mcp_auth_accounts`` and parked writes in ``mcp_pending_writes``."""
+
+    ACCOUNT = "google"
+
+    async def owner_of(self, profile_id: int) -> int | None:
+        return await sync_to_async(self._owner_of, thread_sensitive=True)(profile_id)
+
+    async def load_tokens(self, user_id: int) -> TokenSet | None:
+        return await sync_to_async(self._load, thread_sensitive=True)(user_id)
+
+    async def save_tokens(self, user_id: int, tokens: TokenSet) -> None:
+        await sync_to_async(save_google_tokens, thread_sensitive=True)(user_id, tokens)
+
+    async def park(self, write: PendingWrite) -> PendingWrite | None:
+        # ``aio``: if the tool call times out while parking, the parked write is rolled back and
+        # the user's next "yes" cannot run a call the model was told had failed.
+        return await aio(self._park)(write)
+
+    async def claim(self, profile_id: int) -> PendingWrite | None:
+        return await sync_to_async(self._claim, thread_sensitive=True)(profile_id)
+
+    @staticmethod
+    def _owner_of(profile_id: int) -> int | None:
+        return (
+            SocialProfile.objects.filter(pk=profile_id)
+            .values_list("user_id", flat=True)
+            .first()
+        )
+
+    def _load(self, user_id: int) -> TokenSet | None:
+        try:
+            row = McpAuthAccount.objects.filter(
+                user_id=user_id, account=self.ACCOUNT
+            ).first()
+        except TokenDecryptError:
+            return None  # reads as "not connected"; connecting again replaces it
+        if row is None or not row.access_token:
+            return None
+        return TokenSet(
+            access_token=row.access_token,
+            refresh_token=row.refresh_token or None,
+            expires_at=row.expires_at,
+            scopes=tuple(row.scopes),
+            token_type=row.token_type or "Bearer",
+        )
+
+    @staticmethod
+    def _park(write: PendingWrite) -> PendingWrite | None:
+        values = {
+            "user_id": write.user_id,
+            "tool": write.tool,
+            "server_tool": write.server_tool,
+            "arguments": dict(write.arguments),
+            "summary": write.summary,
+            "expires_at": write.expires_at,
+        }
+        with transaction.atomic():
+            row, created = McpPendingWrite.objects.select_for_update().get_or_create(
+                social_profile_id=write.profile_id, defaults=values
+            )
+            if created:
+                return None
+            waiting = _pending_from(row)
+            if (
+                waiting.expires_at > timezone.now()
+                and waiting.confirmation_id != write.confirmation_id
+            ):
+                return waiting
+            for field, value in values.items():
+                setattr(row, field, value)
+            row.save()
+        return None
+
+    @staticmethod
+    def _claim(profile_id: int) -> PendingWrite | None:
+        with transaction.atomic():
+            row = (
+                McpPendingWrite.objects.select_for_update(skip_locked=True)
+                .filter(social_profile_id=profile_id)
+                .first()
+            )
+            if row is None:
+                return None
+            write = _pending_from(row)
+            row.delete()
+        return write
+
+
+def _pending_from(row: McpPendingWrite) -> PendingWrite:
+    return PendingWrite(
+        user_id=row.user_id,
+        profile_id=row.social_profile_id,
+        tool=row.tool,
+        server_tool=row.server_tool,
+        arguments=row.arguments,
+        summary=row.summary,
+        expires_at=row.expires_at,
+    )
+
+
+def save_google_tokens(user_id: int, tokens: TokenSet) -> None:
+    """Upsert the user's Google grant. A refresh response without a refresh token keeps the old."""
+    try:
+        existing = McpAuthAccount.objects.filter(
+            user_id=user_id, account=DjangoMcpStore.ACCOUNT
+        ).first()
+    except TokenDecryptError:
+        # Nothing in it can be kept. Drop the unreadable grant and write the new one.
+        McpAuthAccount.objects.filter(
+            user_id=user_id, account=DjangoMcpStore.ACCOUNT
+        ).delete()
+        existing = None
+    refresh = tokens.refresh_token or (existing.refresh_token if existing else "")
+    McpAuthAccount.objects.update_or_create(
+        user_id=user_id,
+        account=DjangoMcpStore.ACCOUNT,
+        defaults={
+            "access_token": tokens.access_token,
+            "refresh_token": refresh or "",
+            "token_type": tokens.token_type,
+            "scopes": list(tokens.scopes),
+            "expires_at": tokens.expires_at,
+        },
+    )
+
+
+class DjangoPassStore:
+    """``PassStore`` over ``posts`` and ``ingest_passes``."""
+
+    async def last_complete_pass(self, handle_id: int, before):
+        return await sync_to_async(self._last_complete, thread_sensitive=True)(
+            handle_id, before
+        )
+
+    @staticmethod
+    def _last_complete(handle_id: int, before):
+        return (
+            IngestPass.objects.filter(
+                handle_id=handle_id, complete=True, started_at__lt=before
+            )
+            .order_by("-started_at")
+            .values_list("started_at", flat=True)
+            .first()
+        )
+
+    async def posts(self, handle_id: int) -> list[StoredPost]:
+        return await sync_to_async(self._posts, thread_sensitive=True)(handle_id)
+
+    @staticmethod
+    def _posts(handle_id: int) -> list[StoredPost]:
+        rows = Post.objects.filter(author_id=handle_id).values_list(
+            "id",
+            "platform_post_id",
+            "published_at",
+            "last_seen_at",
+            "is_deleted_suspect",
+        )
+        return [StoredPost(*row) for row in rows]
+
+    async def save_pass(
+        self, handle_id, *, started_at, source, complete, seen, flag, clear
+    ) -> None:
+        # ``aio``: a tool call that timed out must not stamp or flag posts afterwards.
+        await aio(self._save)(
+            handle_id, started_at, source, complete, seen, flag, clear
+        )
+
+    @staticmethod
+    def _save(handle_id, started_at, source, complete, seen, flag, clear) -> None:
+        with transaction.atomic():
+            IngestPass.objects.update_or_create(
+                handle_id=handle_id,
+                started_at=started_at,
+                defaults={"source": source, "complete": complete},
+            )
+            if seen:
+                Post.objects.filter(author_id=handle_id, pk__in=seen).update(
+                    last_seen_at=started_at
+                )
+            if flag:
+                Post.objects.filter(author_id=handle_id, pk__in=flag).update(
+                    is_deleted_suspect=True
+                )
+            if clear:
+                Post.objects.filter(author_id=handle_id, pk__in=clear).update(
+                    is_deleted_suspect=False
+                )

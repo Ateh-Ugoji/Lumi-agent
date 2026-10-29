@@ -1,0 +1,188 @@
+"""Connection settings read from an environment mapping.
+
+Takes a ``Mapping`` instead of reading ``os.environ`` so tests pass a plain dict and Django
+settings can pass ``os.environ`` later. Secrets are excluded from ``repr``.
+"""
+
+from __future__ import annotations
+
+import re
+from collections.abc import Mapping
+from dataclasses import dataclass, field
+
+from .errors import ConfigError
+
+DEFAULT_FRONTEND_URL = "http://localhost:3010"
+DEFAULT_LINKEDIN_VERSION = "202609"
+DEFAULT_META_GRAPH_VERSION = "v26.0"
+XPOZ_PLATFORMS = ("x", "instagram", "tiktok", "reddit")
+DEFAULT_XPOZ_RUN_CREDIT_BUDGET = 12  # one Instagram user search costs 12
+DEFAULT_XPOZ_DAILY_CAP_USER = 60  # credits per user in a rolling 24 h
+DEFAULT_XPOZ_DAILY_CAP_GLOBAL = 300  # credits for every user together in a rolling 24 h
+DEFAULT_HANDLE_CACHE_TTL_MINUTES = 60
+DEFAULT_HANDLE_DB_ENRICH_LIMIT = (
+    6  # new scanned handles completed per call (2 credits each)
+)
+DEFAULT_MCP_TOOLS_TTL_SECONDS = 300
+DEFAULT_MCP_CALL_TIMEOUT_SECONDS = 60
+DEFAULT_MCP_REFRESH_TIMEOUT_SECONDS = 8
+
+_TRUE = {"1", "true", "yes", "on"}
+_FALSE = {"", "0", "false", "no", "off"}
+_LINKEDIN_VERSION = re.compile(r"^20\d{2}(0[1-9]|1[0-2])$")
+_GRAPH_VERSION = re.compile(r"^v\d{1,3}\.\d{1,2}$")
+
+
+def parse_bool(value: str | None, *, name: str) -> bool:
+    """Parse a switch. Unknown spellings fail loudly so a typo cannot enable a paid API."""
+    text = (value or "").strip().lower()
+    if text in _TRUE:
+        return True
+    if text in _FALSE:
+        return False
+    raise ConfigError(f"{name} must be true or false")
+
+
+def parse_non_negative_int(value: str | None, *, name: str, default: int) -> int:
+    text = (value or "").strip()
+    if not text:
+        return default
+    try:
+        number = int(text)
+    except ValueError:
+        raise ConfigError(f"{name} must be a whole number") from None
+    if number < 0:
+        raise ConfigError(f"{name} must not be negative")
+    return number
+
+
+@dataclass(frozen=True, slots=True)
+class ConnectionsConfig:
+    frontend_url: str = DEFAULT_FRONTEND_URL
+    x_live_enabled: bool = False
+    linkedin_api_version: str = DEFAULT_LINKEDIN_VERSION
+    meta_graph_version: str = DEFAULT_META_GRAPH_VERSION
+    meta_app_id: str = ""
+    meta_app_secret: str = field(default="", repr=False)
+    linkedin_client_id: str = ""
+    linkedin_client_secret: str = field(default="", repr=False)
+    x_client_id: str = ""
+    x_client_secret: str = field(default="", repr=False)
+    pfm_jwt_token: str = field(default="", repr=False)
+    google_client_id: str = ""
+    google_client_secret: str = field(default="", repr=False)
+    google_redirect_uri: str = ""
+    mcp_tools_ttl_seconds: int = DEFAULT_MCP_TOOLS_TTL_SECONDS
+    mcp_call_timeout_seconds: int = DEFAULT_MCP_CALL_TIMEOUT_SECONDS
+    mcp_refresh_timeout_seconds: int = DEFAULT_MCP_REFRESH_TIMEOUT_SECONDS
+    xpoz_api_key: str = field(default="", repr=False)
+    xpoz_api_key_2: str = field(default="", repr=False)
+    xpoz_live_enabled: bool = False
+    xpoz_run_credit_budget: int = DEFAULT_XPOZ_RUN_CREDIT_BUDGET
+    # Caps read from ``xpoz_credit_ledger`` over a rolling 24 h, so they hold across runs and
+    # processes. The run budget above only bounds one run. 0 blocks live spending.
+    xpoz_daily_cap_user: int = DEFAULT_XPOZ_DAILY_CAP_USER
+    xpoz_daily_cap_global: int = DEFAULT_XPOZ_DAILY_CAP_GLOBAL
+    # Per-platform override of the run budget (XPOZ_RUN_CREDIT_BUDGET_<PLATFORM>). A platform
+    # listed here has its own meter; the others share ``xpoz_run_credit_budget``.
+    xpoz_platform_budgets: Mapping[str, int] = field(default_factory=dict)
+    handle_cache_ttl_minutes: int = DEFAULT_HANDLE_CACHE_TTL_MINUTES
+    # Handles a scan has never seen that may be completed with a paid user search per call.
+    # 0 saves handles only.
+    handle_db_enrich_limit: int = DEFAULT_HANDLE_DB_ENRICH_LIMIT
+
+    @classmethod
+    def from_env(cls, env: Mapping[str, str]) -> ConnectionsConfig:
+        def get(name: str, default: str = "") -> str:
+            return (env.get(name) or default).strip()
+
+        li_version = get("LINKEDIN_API_VERSION", DEFAULT_LINKEDIN_VERSION)
+        if not _LINKEDIN_VERSION.match(li_version):
+            raise ConfigError("LINKEDIN_API_VERSION must look like YYYYMM")
+        graph = get("META_GRAPH_VERSION", DEFAULT_META_GRAPH_VERSION)
+        if not _GRAPH_VERSION.match(graph):
+            raise ConfigError("META_GRAPH_VERSION must look like v26.0")
+        return cls(
+            frontend_url=get("FRONTEND_URL", DEFAULT_FRONTEND_URL).rstrip("/"),
+            x_live_enabled=parse_bool(env.get("X_LIVE_ENABLED"), name="X_LIVE_ENABLED"),
+            linkedin_api_version=li_version,
+            meta_graph_version=graph,
+            meta_app_id=get("META_APP_ID"),
+            meta_app_secret=get("META_APP_SECRET"),
+            linkedin_client_id=get("LINKEDIN_CLIENT_ID"),
+            linkedin_client_secret=get("LINKEDIN_CLIENT_SECRET"),
+            x_client_id=get("X_CLIENT_ID"),
+            x_client_secret=get("X_CLIENT_SECRET"),
+            pfm_jwt_token=get("PFM_JWT_TOKEN"),
+            google_client_id=get("GOOGLE_OAUTH_CLIENT_ID"),
+            google_client_secret=get("GOOGLE_OAUTH_CLIENT_SECRET"),
+            google_redirect_uri=get("GOOGLE_OAUTH_REDIRECT_URI"),
+            mcp_tools_ttl_seconds=parse_non_negative_int(
+                env.get("MCP_TOOLS_TTL_SECONDS"),
+                name="MCP_TOOLS_TTL_SECONDS",
+                default=DEFAULT_MCP_TOOLS_TTL_SECONDS,
+            ),
+            mcp_call_timeout_seconds=parse_non_negative_int(
+                env.get("MCP_CALL_TIMEOUT_SECONDS"),
+                name="MCP_CALL_TIMEOUT_SECONDS",
+                default=DEFAULT_MCP_CALL_TIMEOUT_SECONDS,
+            ),
+            mcp_refresh_timeout_seconds=parse_non_negative_int(
+                env.get("MCP_REFRESH_TIMEOUT_SECONDS"),
+                name="MCP_REFRESH_TIMEOUT_SECONDS",
+                default=DEFAULT_MCP_REFRESH_TIMEOUT_SECONDS,
+            ),
+            xpoz_api_key=get("XPOZ_API_KEY"),
+            xpoz_api_key_2=get("XPOZ_API_KEY_2"),
+            xpoz_live_enabled=parse_bool(
+                env.get("XPOZ_LIVE_ENABLED"), name="XPOZ_LIVE_ENABLED"
+            ),
+            xpoz_run_credit_budget=parse_non_negative_int(
+                env.get("XPOZ_RUN_CREDIT_BUDGET"),
+                name="XPOZ_RUN_CREDIT_BUDGET",
+                default=DEFAULT_XPOZ_RUN_CREDIT_BUDGET,
+            ),
+            xpoz_daily_cap_user=parse_non_negative_int(
+                env.get("XPOZ_DAILY_CREDIT_CAP_USER"),
+                name="XPOZ_DAILY_CREDIT_CAP_USER",
+                default=DEFAULT_XPOZ_DAILY_CAP_USER,
+            ),
+            xpoz_daily_cap_global=parse_non_negative_int(
+                env.get("XPOZ_DAILY_CREDIT_CAP_GLOBAL"),
+                name="XPOZ_DAILY_CREDIT_CAP_GLOBAL",
+                default=DEFAULT_XPOZ_DAILY_CAP_GLOBAL,
+            ),
+            xpoz_platform_budgets={
+                platform: parse_non_negative_int(
+                    env.get(f"XPOZ_RUN_CREDIT_BUDGET_{platform.upper()}"),
+                    name=f"XPOZ_RUN_CREDIT_BUDGET_{platform.upper()}",
+                    default=-1,
+                )
+                for platform in XPOZ_PLATFORMS
+                if (env.get(f"XPOZ_RUN_CREDIT_BUDGET_{platform.upper()}") or "").strip()
+            },
+            handle_cache_ttl_minutes=parse_non_negative_int(
+                env.get("HANDLE_CACHE_TTL_MINUTES"),
+                name="HANDLE_CACHE_TTL_MINUTES",
+                default=DEFAULT_HANDLE_CACHE_TTL_MINUTES,
+            ),
+            handle_db_enrich_limit=parse_non_negative_int(
+                env.get("HANDLE_DB_ENRICH_LIMIT"),
+                name="HANDLE_DB_ENRICH_LIMIT",
+                default=DEFAULT_HANDLE_DB_ENRICH_LIMIT,
+            ),
+        )
+
+    @property
+    def xpoz_api_keys(self) -> tuple[str, ...]:
+        """Configured Xpoz keys in rotation order, blanks dropped."""
+        return tuple(k for k in (self.xpoz_api_key, self.xpoz_api_key_2) if k)
+
+    def xpoz_budget_for(self, platform: str) -> int:
+        """Credits one run may spend on ``platform``: its override, or the shared budget."""
+        return self.xpoz_platform_budgets.get(platform, self.xpoz_run_credit_budget)
+
+    def redirect_uri(self, provider: str) -> str:
+        if provider == "google" and self.google_redirect_uri:
+            return self.google_redirect_uri
+        return f"{self.frontend_url}/connections/{provider}/callback"

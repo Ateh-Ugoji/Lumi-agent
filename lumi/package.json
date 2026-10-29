@@ -2,11 +2,11 @@
   "name": "lumi-monorepo",
   "version": "0.1.0",
   "private": true,
-  "description": "Lumi Creator AI Agent - Monorepo (FastAPI Backend + React Frontend)",
+  "description": "Lumi Creator AI Agent - Monorepo (Django Backend + React Frontend)",
   "scripts": {
     "dev:frontend": "npm run dev --prefix frontend -- --port 3010",
     "build:frontend": "npm run build --prefix frontend",
-    "dev:backend": "uv run uvicorn app.main:app --host 0.0.0.0 --port 8000",
+    "dev:backend": "DJANGO_SETTINGS_MODULE=config.settings.dev uv run uvicorn config.asgi:application --host 0.0.0.0 --port 8000 --reload",
     "lint:backend": "uv run ruff check .",
     "test:backend": "uv run pytest"
   }

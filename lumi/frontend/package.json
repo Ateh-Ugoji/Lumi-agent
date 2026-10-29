@@ -7,7 +7,7 @@
     "dev": "vite --port 3010",
     "build": "vite build",
     "typecheck": "tsc --noEmit",
-    "test": "node --test tests/formatDuration.test.ts tests/scriptPlayer.test.ts tests/revealEngine.test.ts tests/formatClock.test.ts"
+    "test": "node --test tests/*.test.ts"
   },
   "dependencies": {
     "clsx": "^2.1.1",
@@ -22,5 +22,8 @@
     "@vitejs/plugin-react": "^6.0.1",
     "typescript": "^7.0.2",
     "vite": "^8.3.4"
+  },
+  "engines": {
+    "node": ">=22.6"
   }
 }
