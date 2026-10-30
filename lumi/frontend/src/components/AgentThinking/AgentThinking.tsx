@@ -437,13 +437,21 @@ export default function AgentThinking({
   const toggle = () => setManual(!expanded);
 
   // Header icon identity: swapped pieces crossfade (150ms delay / 200ms fade).
+  // While the model reasons between turns `activeStep` is undefined; the
+  // header then keeps the logo of the social this run is actually going
+  // through (its last social step) instead of dropping back to the orb.
+  const iconStep =
+    activeStep ??
+    (final
+      ? undefined
+      : [...script.steps].reverse().find((s) => s.kind === "social"));
   const iconKey = final
     ? "spark"
-    : activeStep?.avatar_url
-      ? `avatar:${activeStep.avatar_url}`
-      : activeStep?.kind === "social"
-        ? `social:${(activeStep.platforms ?? ["x"]).join(",")}`
-        : activeStep?.kind === "action"
+    : iconStep?.avatar_url
+      ? `avatar:${iconStep.avatar_url}`
+      : iconStep?.kind === "social"
+        ? `social:${(iconStep.platforms ?? ["x"]).join(",")}`
+        : iconStep?.kind === "action"
           ? "busy"
           : "calm";
   const { previous: prevIconKey, gliding: iconGlide } = useStaggered(

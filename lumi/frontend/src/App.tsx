@@ -1062,6 +1062,12 @@ export default function App() {
     }
   };
 
+  const liveSteps = activeRun ? activeRun.script.steps : [];
+  // The init "Thinking..." row is only current while no tool has run yet.
+  // It never gets a `detail`, so without excluding it here `index` stayed
+  // pinned to step 0 and the header kept showing the orb instead of the
+  // platform logo of the step that is actually running.
+  const toolStarted = liveSteps.some((s) => s.id.startsWith("tool-"));
   const live = activeRun
     ? {
         runId: activeRun.runId,
@@ -1070,10 +1076,10 @@ export default function App() {
         elapsedMs,
         // First step that has NOT completed; -1 = everything started has
         // finished (the model is reasoning between turns) → nothing spins.
-        index: activeRun.script.steps.findIndex(
-          (s) => s.detail !== "Completed",
+        index: liveSteps.findIndex(
+          (s) => !(toolStarted && s.id === "step-init") && s.detail !== "Completed",
         ),
-        startedCount: activeRun.script.steps.length,
+        startedCount: liveSteps.length,
       }
     : null;
 
