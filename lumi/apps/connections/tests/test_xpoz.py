@@ -78,7 +78,7 @@ async def test_default_config_never_calls_xpoz() -> None:
         ConnectionsConfig.from_env({"XPOZ_API_KEY": KEY1}), transport=rec.transport
     )
     with pytest.raises(LiveDisabled):
-        await c.user_posts_page("ateh")
+        await c.user_posts_page("x", "ateh")
     assert rec.requests == []
 
 
@@ -221,24 +221,55 @@ async def test_a_transient_5xx_then_success_is_not_charged_twice() -> None:
 async def test_user_posts_page_validates_the_username_and_formats_since() -> None:
     rec = Recorder(lambda r: json_response("xpoz_user_posts_page1.json"))
     c = make(rec)
-    page = await c.user_posts_page("@Ateh", since=datetime(2026, 10, 1, 12, tzinfo=UTC))
+    page = await c.user_posts_page(
+        "x", "@Ateh", since=datetime(2026, 10, 1, 12, tzinfo=UTC)
+    )
     req = rec.requests[0]
     assert req.url.path == "/api/data/twitter/posts/users/Ateh/live"
     assert req.url.params["since"] == "2026-10-01"
     assert page.has_more and page.next_cursor == "xcur_2" and page.credits == 2
-    await c.user_posts_page("ateh", cursor="xcur_2", since=date(2026, 10, 2))
+    await c.user_posts_page("x", "ateh", cursor="xcur_2", since=date(2026, 10, 2))
     assert rec.requests[1].url.params["cursor"] == "xcur_2"
     for bad in ("../admin", "a b", "", "x" * 16):
         with pytest.raises(ValidationFailed):
-            await c.user_posts_page(bad)
+            await c.user_posts_page("x", bad)
     assert len(rec.requests) == 2
 
 
 async def test_search_posts_uses_the_posts_endpoint() -> None:
     rec = Recorder(lambda r: json_response("xpoz_user_posts_page1.json"))
-    await make(rec).search_posts(" ai agents ")
+    await make(rec).search_posts("x", " ai agents ")
     assert rec.requests[0].url.path == "/api/data/twitter/posts/live"
     assert rec.requests[0].url.params["q"] == "ai agents"
+
+
+async def test_posts_endpoints_follow_the_platform_and_its_price() -> None:
+    rec = Recorder(lambda r: json_response("xpoz_posts_instagram.json"))
+    c = make(rec, budget="40")
+    page = await c.search_posts("instagram", "lagos food")
+    assert rec.requests[0].url.path == "/api/data/instagram/posts/live"
+    assert rec.requests[0].url.params["q"] == "lagos food"
+    assert page.credits == 12 and c.meter.spent == 12
+    await c.user_posts_page("instagram", "lagos_eats")
+    assert rec.requests[1].url.path == "/api/data/instagram/posts/users/lagos_eats/live"
+    # ``since`` is X-only: the path would reject it, so it is never sent.
+    assert "since" not in rec.requests[1].url.params
+    rec2 = Recorder(lambda r: json_response("xpoz_posts_tiktok.json"))
+    tiktok = make(rec2)
+    await tiktok.search_posts("tiktok", "freelance")
+    assert rec2.requests[0].url.path == "/api/data/tiktok/posts/live"
+    assert tiktok.meter.spent == 5
+
+
+async def test_facebook_and_linkedin_have_no_post_endpoint() -> None:
+    rec = Recorder(users_ok)
+    c = make(rec)
+    for platform in ("facebook", "linkedin"):
+        with pytest.raises(UnsupportedPlatform):
+            await c.search_posts(platform, "ai")
+        with pytest.raises(UnsupportedPlatform):
+            await c.user_posts_page(platform, "ateh")
+    assert rec.requests == [] and c.meter.spent == 0
 
 
 async def test_blank_query_and_unsupported_platform_cost_nothing() -> None:

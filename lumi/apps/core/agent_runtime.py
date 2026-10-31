@@ -6,7 +6,8 @@ optional while it is being built). The runtime is a module or object with:
 * ``async run_turn(profile_id, message) -> TurnResult``
 * ``stream_turn(profile_id, message) -> AsyncIterator[SSEEvent]``
 * ``async generate_title(message) -> str | None`` (optional; the route falls back to the first words)
-* ``async scan_trends(profile_id, handles, min_likes) -> Mapping`` (the ``check_niche_trends`` tool result)
+* ``async scan_trends(profile_id, handles, min_likes, keywords=None) -> Mapping`` (the
+  ``check_niche_trends`` tool result; ``keywords`` searches posts instead of reading handles)
 
 It comes from ``set_runtime`` (tests, or INTELLIGENCE's ``ready()``) or else from the dotted path
 in ``settings.LUMI_CHAT_RUNTIME``. When neither works the routes answer 503 ``chat.unavailable``.

@@ -751,6 +751,14 @@ export default function App() {
               // Both tools take a `platform` arg that defaults to the profile's
               // own network — the logo must follow it, never a fixed guess.
               platforms = [String(args.platform || activePlatform)];
+            } else if (toolName === "search_keyword_trends") {
+              const word =
+                args.query ||
+                (Array.isArray(args.keywords) ? args.keywords.join(", ") : "") ||
+                "saved keywords";
+              label = `Searching posts by keyword (${word})`;
+              kind = "social";
+              platforms = [String(args.platform || activePlatform)];
             } else if (toolName === "save_user_request") {
               label = "Saving your requested handles (as user requests, not peers)";
               kind = "action";

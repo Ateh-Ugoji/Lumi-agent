@@ -55,7 +55,6 @@ USER_LIVE_FIELDS = (
     "quoteCount,bookmarkCount,lang,isRetweet,conversationId,quotedTweetId,"
     "replyToTweetId,replyToUserId,replyToUsername,hashtags,mentions,urls,mediaUrls"
 )
-SEARCH_POST_FIELDS = USER_LIVE_FIELDS
 
 
 @dataclass(frozen=True, slots=True)
@@ -115,9 +114,75 @@ USER_SEARCH: Mapping[str, UserSearchSpec] = {
         None,
     ),
 }
-POSTS_PATH = "/api/data/twitter/posts/live"
-USER_POSTS_PATH = "/api/data/twitter/posts/users/{username}/live"
-POSTS_QUERY_CREDITS = 2
+# Instagram, TikTok and Reddit post rows carry their own field names; the mapper reads these.
+IG_POST_FIELDS = (
+    "id,username,caption,createdAt,likeCount,commentCount,videoPlayCount,mediaType,"
+    "codeUrl,profilePicUrl"
+)
+TT_POST_FIELDS = (
+    "id,username,description,createdAt,likeCount,commentCount,playCount,forwardCount,"
+    "videoThumbnail"
+)
+RD_POST_FIELDS = (
+    "id,title,selftext,permalink,postUrl,authorUsername,subredditName,score,commentsCount,"
+    "createdAt,thumbnail"
+)
+
+
+@dataclass(frozen=True, slots=True)
+class PostEndpoint:
+    """The two post endpoints of one platform and what one page costs."""
+
+    search_path: str
+    user_path: str
+    fields: str
+    credits: int
+
+
+# Prices from https://www.xpoz.ai/pricing: X and Reddit 2 credits per query, TikTok 5, Instagram 12.
+POST_ENDPOINTS: Mapping[str, PostEndpoint] = {
+    "x": PostEndpoint(
+        "/api/data/twitter/posts/live",
+        "/api/data/twitter/posts/users/{username}/live",
+        USER_LIVE_FIELDS,
+        2,
+    ),
+    "instagram": PostEndpoint(
+        "/api/data/instagram/posts/live",
+        "/api/data/instagram/posts/users/{identifier}/live",
+        IG_POST_FIELDS,
+        12,
+    ),
+    "tiktok": PostEndpoint(
+        "/api/data/tiktok/posts/live",
+        "/api/data/tiktok/posts/users/{identifier}/live",
+        TT_POST_FIELDS,
+        5,
+    ),
+    "reddit": PostEndpoint(
+        "/api/data/reddit/posts/live",
+        "/api/data/reddit/posts/users/{username}/live",
+        RD_POST_FIELDS,
+        2,
+    ),
+}
+# X is the only platform whose timeline endpoint accepts ``since``; the rest are filtered after.
+_SINCE_PLATFORMS = frozenset({"x"})
+_USERNAME = {
+    "x": _X_USERNAME,
+    "instagram": re.compile(r"^[A-Za-z0-9._]{1,30}$"),
+    "tiktok": re.compile(r"^[A-Za-z0-9._]{1,24}$"),
+    "reddit": re.compile(r"^[A-Za-z0-9_-]{3,20}$"),
+}
+
+def post_credits(platform: str) -> int:
+    """Price of one post page, or ``UnsupportedPlatform`` when Xpoz has no post endpoint."""
+    spec = POST_ENDPOINTS.get(platform)
+    if spec is None:
+        raise UnsupportedPlatform(
+            f"Xpoz has no post search for {platform}", provider=PROVIDER
+        )
+    return spec.credits
 
 
 def user_search_credits(platform: str) -> int:
@@ -269,41 +334,55 @@ class XpozClient:
 
     async def user_posts_page(
         self,
+        platform: str,
         username: str,
         *,
         cursor: str | None = None,
         since: date | datetime | None = None,
-        fields: str = USER_LIVE_FIELDS,
     ) -> XpozPage:
-        """One page (20 posts) of a public X account, newest first. Costs 2 credits."""
+        """One page of a public account's posts, newest first (2, 12, 5 or 2 credits for
+        x, instagram, tiktok and reddit). ``since`` is only sent on X; see ``_SINCE_PLATFORMS``."""
+        spec = POST_ENDPOINTS.get(platform)
+        if spec is None:
+            raise UnsupportedPlatform(
+                f"Xpoz has no user timeline for {platform}", provider=PROVIDER
+            )
         clean = username.strip().lstrip("@")
-        if not _X_USERNAME.match(clean):
-            raise ValidationFailed("invalid X username", provider=PROVIDER)
-        params: dict[str, Any] = {"fields": fields}
+        pattern = _USERNAME[platform]
+        if not pattern.match(clean):
+            raise ValidationFailed(f"invalid {platform} username", provider=PROVIDER)
+        params: dict[str, Any] = {"fields": spec.fields}
         if cursor:
             params["cursor"] = cursor
-        if since is not None:
+        if since is not None and platform in _SINCE_PLATFORMS:
             params["since"] = (
                 since.date() if isinstance(since, datetime) else since
             ).isoformat()
         return await self._get(
-            "x.posts.user",
-            USER_POSTS_PATH.format(username=clean),
+            f"{platform}.posts.user",
+            spec.user_path.format(username=clean, identifier=clean),
             params,
-            POSTS_QUERY_CREDITS,
+            spec.credits,
+            platform,
         )
 
     async def search_posts(
-        self, query: str, *, cursor: str | None = None, fields: str = SEARCH_POST_FIELDS
+        self, platform: str, query: str, *, cursor: str | None = None
     ) -> XpozPage:
-        """One page of public X posts matching a keyword query. Costs 2 credits."""
+        """One page of public posts matching a keyword query (2, 12, 5 or 2 credits for
+        x, instagram, tiktok and reddit). Facebook and LinkedIn have no such endpoint."""
+        spec = POST_ENDPOINTS.get(platform)
+        if spec is None:
+            raise UnsupportedPlatform(
+                f"Xpoz has no post search for {platform}", provider=PROVIDER
+            )
         if not query.strip():
             raise ValidationFailed("query must not be blank", provider=PROVIDER)
-        params: dict[str, Any] = {"q": query.strip(), "fields": fields}
+        params: dict[str, Any] = {"q": query.strip(), "fields": spec.fields}
         if cursor:
             params["cursor"] = cursor
         return await self._get(
-            "x.posts.search", POSTS_PATH, params, POSTS_QUERY_CREDITS
+            f"{platform}.posts.search", spec.search_path, params, spec.credits, platform
         )
 
     async def search_users(

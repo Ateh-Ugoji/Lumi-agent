@@ -11,6 +11,7 @@ from lumi_ai.competitors.tools import CompetitorServices, build
 from lumi_ai.config import AIConfig
 from lumi_ai.ports import (
     BudgetExceeded,
+    ListeningConfig,
     NicheOut,
     PostMetrics,
     PostOut,
@@ -52,12 +53,14 @@ class Profiles:
 
 class Matches:
     def __init__(self):
-        self.rows: set[tuple[int, int]] = set()
+        self.rows: dict[tuple[int, int], str | None] = {}
 
-    async def record_listening_match(self, profile_id, post_id, score=None):
+    async def record_listening_match(
+        self, profile_id, post_id, score=None, keyword=None
+    ):
         key = (profile_id, post_id)
         fresh = key not in self.rows
-        self.rows.add(key)
+        self.rows[key] = keyword
         return fresh
 
 
@@ -69,6 +72,25 @@ class Own:
         return self.posts
 
 
+class Listening:
+    """Only the read side; the tools under test never change listening."""
+
+    def __init__(self, keywords=()):
+        self.keywords = tuple(keywords)
+
+    async def get_listening(self, profile_id):
+        return ListeningConfig(profile_id, self.keywords, True, 5)
+
+    async def set_listening(self, config):
+        raise NotImplementedError
+
+    async def unread_alerts(self, profile_id):
+        return []
+
+    async def dismiss_alert(self, profile_id, alert_id):
+        return False
+
+
 def _services(
     posts=None,
     errors=None,
@@ -78,6 +100,7 @@ def _services(
     with_rag=False,
     llm=None,
     handles=None,
+    listening=None,
 ):
     reports = FakeReports()
     peers = FakePeerStore(reports)
@@ -108,6 +131,7 @@ def _services(
         embedder=embedder,
         retriever=retriever,
         handles=handles,
+        listening=listening,
     )
     registry = build_registry(ToolDeps(), extra=build(services))
     return registry, services, social, reports, peers, llm
@@ -294,6 +318,59 @@ async def test_trends_threshold_and_missing_likes() -> None:
         registry, "check_niche_trends", handles=["peer_one"], min_likes="many"
     )
     assert out["min_likes"] == 20 and out["new_matches_found"] == 4
+
+
+async def test_keyword_trends_search_and_tag_each_match_with_its_keyword() -> None:
+    registry, services, social, _, peers, _ = _services(
+        {"search": make_posts("peer_one", 4, winners=0)}
+    )
+    out = await _call(registry, "search_keyword_trends", query="bootstrapped saas")
+    assert out["keywords"] == ["bootstrapped saas"] and out["platform"] == "x"
+    assert out["new_matches_found"] == 4 and out["per_keyword"] == {
+        "bootstrapped saas": 4
+    }
+    assert social.calls[0][:3] == ("search", "x", "bootstrapped saas")
+    assert {p["keyword"] for p in out["viral_posts"]} == {"bootstrapped saas"}
+    assert set(services.matches.rows.values()) == {"bootstrapped saas"}
+    assert all(r.niche_key == "ai:global" for r in peers.rows.values())
+    # The same posts under a second keyword are not matched twice.
+    again = await _call(registry, "search_keyword_trends", keywords=["saas pricing"])
+    assert again["new_matches_found"] == 0 and again["per_keyword"] == {
+        "saas pricing": 4
+    }
+
+
+async def test_saved_listening_keywords_are_actually_searched() -> None:
+    registry, _, social, *_ = _services(
+        {"search": make_posts("peer_one", 2, winners=0)},
+        listening=Listening(["lagos tech", "Bootstrapped"]),
+    )
+    out = await _call(registry, "search_keyword_trends")
+    assert out["keywords"] == ["lagos tech", "Bootstrapped"]
+    assert [c[2] for c in social.calls] == ["lagos tech", "Bootstrapped"]
+    # check_niche_trends reads them too when the profile tracks no account.
+    via_trends = await _call(registry, "check_niche_trends")
+    assert via_trends["keywords"] == ["lagos tech", "Bootstrapped"]
+
+
+async def test_explicit_handles_win_over_saved_keywords() -> None:
+    registry, _, social, *_ = _services(
+        {"peer_one": make_posts("peer_one", 3, winners=0)},
+        listening=Listening(["lagos tech"]),
+    )
+    out = await _call(registry, "check_niche_trends", handles=["peer_one"])
+    assert out["scanned_handles"] == {"peer_one": 3}
+    assert all(c[0] != "search" for c in social.calls)
+
+
+async def test_keyword_search_says_which_networks_have_none() -> None:
+    registry, *_ = _services()
+    out = await _call(
+        registry, "search_keyword_trends", query="lagos", platform="linkedin"
+    )
+    assert "no keyword post search for linkedin" in out["error"]
+    empty = await _call(registry, "search_keyword_trends")
+    assert "no keyword to search" in empty["error"]
 
 
 async def test_trends_need_accounts_and_say_when_nothing_could_be_read() -> None:

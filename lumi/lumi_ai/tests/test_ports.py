@@ -210,6 +210,8 @@ def test_ports_1_6_adds_the_match_store_without_touching_the_listening_store():
     assert "record_listening_match" not in dir(ports.ListeningStore)
     params = inspect.signature(ports.MatchStore.record_listening_match).parameters
     assert params["score"].default is None
+    # The keyword that surfaced the post, so trends can be read per keyword.
+    assert params["keyword"].default is None
 
 
 def test_a_media_ref_may_have_no_type_and_that_is_not_an_image():

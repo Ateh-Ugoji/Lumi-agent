@@ -1000,9 +1000,17 @@ class MatchStore(Protocol):
     """
 
     async def record_listening_match(
-        self, profile_id: int, post_id: int, score: float | None = None
+        self,
+        profile_id: int,
+        post_id: int,
+        score: float | None = None,
+        keyword: str | None = None,
     ) -> bool:
-        """Link a stored post to the profile; ``False`` when the link already existed."""
+        """Link a stored post to the profile; ``False`` when the link already existed.
+
+        ``keyword`` is the keyword search that surfaced the post, so trends can be read per
+        keyword; ``None`` means a scan of the accounts the profile tracks found it.
+        """
         ...
 
 

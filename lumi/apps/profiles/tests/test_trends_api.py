@@ -35,7 +35,7 @@ def peer_post(profile, handle, external_id, likes=10, avatar_url="", **kw):
             )
         ],
     ).post_ids
-    services.record_listening_match(profile.pk, post_id)
+    services.record_listening_match(profile.pk, post_id, keyword=kw.pop("keyword", None))
     return post_id
 
 
@@ -43,8 +43,8 @@ class FakeRuntime:
     def __init__(self, result):
         self.result, self.calls = result, []
 
-    async def scan_trends(self, profile_id, handles, min_likes):
-        self.calls.append((profile_id, handles, min_likes))
+    async def scan_trends(self, profile_id, handles, min_likes, keywords=None):
+        self.calls.append((profile_id, handles, min_likes, keywords))
         return self.result
 
 
@@ -96,6 +96,7 @@ def test_matches_shape_and_latest_metrics(api, profile):
         "author_avatar_url",
         "metrics",
         "discovered_at",
+        "keyword",
     }
     assert (match["platform"], match["author_handle"], match["platform_post_id"]) == (
         "x",
@@ -167,7 +168,7 @@ def test_scan_passes_the_request_to_the_agent_registry(api, profile, fake_scan):
         "new_matches_found": 1,
         "viral_posts": [{"author": "a", "likes": 90}],
     }
-    assert fake.calls == [(profile.pk, ["a"], 50)]
+    assert fake.calls == [(profile.pk, ["a"], 50, None)]
 
 
 def test_scan_defaults_leave_handles_to_the_profile_niche(api, profile, fake_scan):
@@ -176,7 +177,30 @@ def test_scan_defaults_leave_handles_to_the_profile_niche(api, profile, fake_sca
         api.post(f"{BASE}/scan", {"profile_id": profile.pk}, format="json").status_code
         == 200
     )
-    assert fake.calls == [(profile.pk, None, 20)]
+    assert fake.calls == [(profile.pk, None, 20, None)]
+
+
+def test_scan_passes_keywords_and_matches_filter_by_them(api, profile, fake_scan):
+    fake = fake_scan({"new_matches_found": 2, "viral_posts": [], "keywords": ["a", "b"]})
+    response = api.post(
+        f"{BASE}/scan",
+        {"profile_id": profile.pk, "keywords": ["lagos tech"], "min_likes": 10},
+        format="json",
+    )
+    assert response.status_code == 200
+    assert response.json()["keywords"] == ["a", "b"]
+    assert fake.calls == [(profile.pk, None, 10, ["lagos tech"])]
+
+    peer_post(profile, "peer", "7", keyword="Lagos Tech")
+    peer_post(profile, "peer", "8")
+    everything = api.get(f"{BASE}/matches?profile_id={profile.pk}").json()["matches"]
+    assert len(everything) == 2
+    filtered = api.get(
+        f"{BASE}/matches?profile_id={profile.pk}&keyword=lagos%20tech"
+    ).json()["matches"]
+    assert [(m["platform_post_id"], m["keyword"]) for m in filtered] == [
+        ("7", "Lagos Tech")
+    ]
 
 
 def test_scan_requires_my_profile_id(api, stranger_api, profile, fake_scan):

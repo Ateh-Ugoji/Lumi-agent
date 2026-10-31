@@ -133,11 +133,32 @@ def _first(data: Mapping[str, Any], *keys: str) -> int | None:
     return None
 
 
-def parse_datetime(value: Any) -> datetime | None:
-    if not value:
+def _from_epoch(value: float) -> datetime | None:
+    """A POSIX timestamp in seconds (or milliseconds above 1e11) as an aware UTC datetime."""
+    if value <= 0:
         return None
+    if value > 1e11:
+        value /= 1000.0
     try:
-        parsed = datetime.fromisoformat(str(value))
+        return datetime.fromtimestamp(value, tz=UTC)
+    except (OverflowError, OSError, ValueError):
+        return None
+
+
+def parse_datetime(value: Any) -> datetime | None:
+    """An ISO-8601 string or a POSIX timestamp. Xpoz sends ``createdAt`` as either one,
+    depending on the platform (X and Instagram as ISO text, TikTok as epoch seconds)."""
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return _from_epoch(float(value))
+    text = str(value).strip()
+    if not text:
+        return None
+    if text.isdigit() and len(text) in (10, 13):
+        return _from_epoch(float(text))
+    try:
+        parsed = datetime.fromisoformat(text)
     except ValueError:
         return None
     return parsed.replace(tzinfo=UTC) if parsed.tzinfo is None else parsed
@@ -280,6 +301,86 @@ def map_pfm_item(
         source="pfm",
         text_truncated=detect_truncation(text),
         media=pfm_media(item.get("media")),
+    )
+
+
+def _post_url(platform: str, item: Mapping[str, Any], post_id: str, author: str | None) -> str | None:
+    """The public URL of a mapped post, from the row when it reports one."""
+    given = _text(item.get("postUrl")) or _text(item.get("codeUrl"))
+    if given:
+        return given
+    permalink = _text(item.get("permalink"))
+    if platform == "reddit":
+        return f"https://www.reddit.com{permalink}" if permalink else None
+    if not author:
+        return None
+    if platform == "instagram":
+        return f"https://www.instagram.com/{author}/p/{post_id}/"
+    if platform == "tiktok":
+        return f"https://www.tiktok.com/@{author}/video/{post_id}"
+    return None
+
+
+def map_xpoz_platform_post(
+    platform: str, item: Mapping[str, Any], *, user_handle: str | None = None
+) -> PostIn | None:
+    """Map one post row from Xpoz on any platform with a post endpoint.
+
+    X rows go through ``map_xpoz_post``. Instagram, TikTok and Reddit rows name their own
+    fields (``caption`` / ``description`` / ``title`` + ``selftext``), so each is read here.
+    """
+    if platform == "x":
+        return map_xpoz_post(item, user_handle=user_handle)
+    external_id = _text(str(item["id"])) if item.get("id") is not None else None
+    published = parse_datetime(item.get("createdAt"))
+    author = _handle(item.get("username") or item.get("authorUsername")) or _handle(
+        user_handle
+    )
+    if platform == "instagram":
+        text = _text(item.get("caption"))
+        metrics = PostMetrics(
+            views=_first(item, "videoPlayCount"),
+            likes=_first(item, "likeCount"),
+            comments=_first(item, "commentCount"),
+            shares=_first(item, "reshareCount"),
+            bookmarks=_first(item, "saveCount"),
+        )
+        avatar = _text(item.get("profilePicUrl"))
+    elif platform == "tiktok":
+        text = _text(item.get("description"))
+        metrics = PostMetrics(
+            views=_first(item, "playCount"),
+            likes=_first(item, "likeCount"),
+            comments=_first(item, "commentCount"),
+            shares=_first(item, "forwardCount"),
+            bookmarks=_first(item, "collectCount"),
+        )
+        avatar = None
+    elif platform == "reddit":
+        title = _text(item.get("title"))
+        body = _text(item.get("selftext"))
+        text = "\n\n".join(part for part in (title, body) if part)
+        # Reddit has no likes: ``score`` is upvotes minus downvotes, the closest honest number.
+        metrics = PostMetrics(
+            likes=_first(item, "score"), comments=_first(item, "commentsCount")
+        )
+        avatar = None
+    else:
+        return None
+    if external_id is None or text is None or published is None:
+        return None
+    return PostIn(
+        platform=cast(Any, platform),
+        external_id=external_id,
+        text=text,
+        published_at=published,
+        author_handle=author,
+        kind=cast(Any, classify_post_kind(text)),
+        url=_post_url(platform, item, external_id, author),
+        metrics=metrics,
+        source="xpoz",
+        text_truncated=detect_truncation(text),
+        author_avatar_url=avatar,
     )
 
 

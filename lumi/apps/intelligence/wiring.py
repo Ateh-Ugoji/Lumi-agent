@@ -221,6 +221,7 @@ def get_wiring() -> Wiring:
         embedder=embedder,
         retriever=retriever,
         handles=repos.HandleBookRepo(),
+        listening=repos.ListeningRepo(),
     )
     # CONNECT's gateway: connector tools for the registry and ``resolve_pending`` before each turn.
     gateway = mcp_gateway.build_mcp_gateway()

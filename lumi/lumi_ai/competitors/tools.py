@@ -34,6 +34,7 @@ from lumi_ai.ports import (
     FrameworkOut,
     HandleBook,
     KnownHandle,
+    ListeningStore,
     LiveDisabled,
     MatchStore,
     PeerPostIn,
@@ -52,8 +53,11 @@ PLATFORMS: tuple[str, ...] = get_args(PlatformType)
 DEFAULT_PLATFORM: PlatformType = "x"
 DEFAULT_MIN_LIKES = 20
 TREND_POSTS_PER_HANDLE = 10
+KEYWORD_POSTS = 20  # posts one keyword search may read
+MAX_KEYWORDS = 5
 EXAMPLE_TEXT_CHARS = 400
 _FATAL = (UnsupportedPlatform, LiveDisabled, ProviderAuthError)
+_PLATFORMS_WITH_KEYWORD_SEARCH = ("x", "instagram", "tiktok")
 
 _PLATFORM_PARAM = {
     "type": "string",
@@ -71,6 +75,7 @@ class CompetitorServices:
     embedder: Embedder | None = None
     retriever: Retriever | None = None
     handles: HandleBook | None = None
+    listening: ListeningStore | None = None  # the keywords saved in listening
 
 
 def _framework_view(fw: FrameworkOut, relevance: float | None) -> dict[str, Any]:
@@ -105,6 +110,18 @@ def _clean_handles(raw: Any) -> list[str]:
         if name:
             seen.setdefault(name)
     return list(seen)
+
+
+def _clean_keywords(raw: Any) -> list[str]:
+    """Up to ``MAX_KEYWORDS`` non-blank keywords, deduplicated ignoring case."""
+    if isinstance(raw, str):
+        raw = [raw]
+    seen: dict[str, str] = {}
+    for item in raw or []:
+        word = str(item).strip()
+        if word:
+            seen.setdefault(word.lower(), word)
+    return list(seen.values())[:MAX_KEYWORDS]
 
 
 def _refusal(exc: SocialDataError) -> dict[str, Any]:
@@ -319,6 +336,132 @@ def build(services: CompetitorServices) -> list[ToolSpec]:
             "warnings": list(lift.warnings),
         }
 
+    # -- keyword searches ---------------------------------------------------
+
+    async def _saved_keywords(ctx: ToolContext) -> list[str]:
+        """The keywords the profile saved in listening. Reads the table, never guesses."""
+        if s.listening is None:
+            return []
+        config = await s.listening.get_listening(ctx.profile_id)
+        return _clean_keywords(list(config.keywords))
+
+    async def keyword_hits(
+        ctx: ToolContext,
+        words: list[str],
+        plat: PlatformType,
+        threshold: int,
+        per_keyword: int = KEYWORD_POSTS,
+    ) -> dict[str, Any]:
+        """Search public posts by keyword and keep the viral ones as matches, tagged by keyword."""
+        assert s.matches is not None
+        niche = await s.profiles.get_niche(ctx.profile_id)
+        niche_key = niche.niche_key if niche else None
+        found: list[dict[str, Any]] = []
+        failures: list[str] = []
+        per_keyword_count: dict[str, int] = {}
+        new_matches = 0
+        stopped: str | None = None
+        authors: dict[str, KnownHandle] = {}
+        limit = max(1, min(int(per_keyword), ctx.config.peer_discovery_posts))
+        for word in words:
+            try:
+                posts = await s.pipeline.social.search_posts(plat, word, limit)
+            except BudgetExceeded as exc:
+                stopped = budget_message(f"searching {word!r} on {plat}", exc)
+                break
+            except _FATAL as exc:
+                return {**_refusal(exc), "platform": plat, "keywords": words}
+            except SocialDataError as exc:
+                failures.append(f"{word!r}: {exc}")
+                continue
+            authors_of(posts, into=authors)
+            viral = [p for p in posts if _is_viral(p, threshold) and p.author_handle]
+            per_keyword_count[word] = len(viral)
+            if not viral:
+                continue
+            stored = await s.pipeline.peer_posts.save_peer_posts(
+                ctx.profile_id,
+                [_peer_post(p, str(p.author_handle), niche_key) for p in viral],
+            )
+            for row in stored:
+                fresh = await s.matches.record_listening_match(
+                    ctx.profile_id, row.id, keyword=word
+                )
+                if fresh:
+                    new_matches += 1
+                    found.append(
+                        {
+                            "keyword": word,
+                            "author": row.author_handle,
+                            "text": row.text[:EXAMPLE_TEXT_CHARS],
+                            "url": row.url,
+                            "likes": row.metrics.likes if row.metrics else None,
+                            "views": row.metrics.views if row.metrics else None,
+                            "avatar_url": row.author_avatar_url or "",
+                        }
+                    )
+        await remember_authors(s.handles, plat, authors)
+        if found:
+            stored_pictures = await known_pictures(
+                s.handles, plat, sorted({str(f["author"]) for f in found})
+            )
+            for item in found:
+                item["avatar_url"] = stored_pictures.get(
+                    str(item["author"]).lower(), item["avatar_url"]
+                )
+        out: dict[str, Any] = {
+            "platform": plat,
+            "keywords": words,
+            "min_likes": threshold,
+            "new_matches_found": new_matches,
+            "viral_posts": found,
+            "per_keyword": per_keyword_count,
+        }
+        if failures:
+            out["failed_keywords"] = failures
+        if stopped:
+            out["warning"] = stopped
+        if not per_keyword_count and (failures or stopped):
+            out["error"] = (
+                "no keyword could be searched, so nothing is known about the niche right now: "
+                + str(stopped or failures[0])
+            )
+        return out
+
+    async def keyword_trends(
+        ctx: ToolContext,
+        query: str | None = None,
+        keywords: list[str] | None = None,
+        platform: str | None = None,
+        min_likes: int = DEFAULT_MIN_LIKES,
+        per_keyword: int = KEYWORD_POSTS,
+    ) -> dict[str, Any]:
+        assert s.matches is not None
+        plat = await _platform(ctx, platform)
+        if plat is None:
+            return {"error": f"unknown platform {platform!r}; use one of {PLATFORMS}"}
+        words = _clean_keywords(keywords) or _clean_keywords([query] if query else [])
+        if not words:
+            words = await _saved_keywords(ctx)
+        if not words:
+            return {
+                "error": (
+                    "no keyword to search: pass query or keywords, or save some in listening "
+                    f"(Settings -> Listening). {plat} is the network searched."
+                ),
+                "platforms_with_keyword_search": list(_PLATFORMS_WITH_KEYWORD_SEARCH),
+            }
+        if plat not in _PLATFORMS_WITH_KEYWORD_SEARCH:
+            return {
+                "error": (
+                    f"Xpoz has no keyword post search for {plat}; use one of "
+                    f"{_PLATFORMS_WITH_KEYWORD_SEARCH}"
+                )
+            }
+        return await keyword_hits(
+            ctx, words, plat, _int(min_likes, DEFAULT_MIN_LIKES), per_keyword
+        )
+
     # -- check_niche_trends -------------------------------------------------
 
     async def trends(
@@ -326,6 +469,7 @@ def build(services: CompetitorServices) -> list[ToolSpec]:
         handles: list[str] | None = None,
         min_likes: int = DEFAULT_MIN_LIKES,
         platform: str | None = None,
+        keywords: list[str] | None = None,
     ) -> dict[str, Any]:
         assert s.matches is not None
         plat = await _platform(ctx, platform)
@@ -336,9 +480,27 @@ def build(services: CompetitorServices) -> list[ToolSpec]:
         wanted = _clean_handles(handles) or _clean_handles(
             niche.tracked_handles.get(plat, ()) if niche else ()
         )
+        # Keywords are the other way into the niche: the ones passed, else the saved listening set
+        # when there is no account to scan. Explicit handles win over saved keywords.
+        words = _clean_keywords(keywords)
+        if not words and not wanted and plat in _PLATFORMS_WITH_KEYWORD_SEARCH:
+            words = await _saved_keywords(ctx)
+        if words:
+            if plat not in _PLATFORMS_WITH_KEYWORD_SEARCH:
+                return {
+                    "error": (
+                        f"Xpoz has no keyword post search for {plat}; use one of "
+                        f"{_PLATFORMS_WITH_KEYWORD_SEARCH}"
+                    )
+                }
+            return await keyword_hits(ctx, words, plat, threshold)
         if not wanted:
             return {
-                "error": f"no accounts to check on {plat}: pass handles or track some in the profile's niche",
+                "error": (
+                    f"no accounts to check on {plat}: pass handles or keywords, track accounts in "
+                    "the profile's niche, or save keywords in listening"
+                ),
+                "saved_keywords": await _saved_keywords(ctx),
             }
         niche_key = niche.niche_key if niche else None
         found: list[dict[str, Any]] = []
@@ -512,13 +674,19 @@ def build(services: CompetitorServices) -> list[ToolSpec]:
                 name="check_niche_trends",
                 description=(
                     "Read recent posts of niche accounts and keep the ones above a like threshold as "
-                    "matches the user can repurpose. Defaults to the accounts tracked in the profile's niche. "
-                    "Costs provider credits."
+                    "matches the user can repurpose. Defaults to the accounts tracked in the profile's niche; "
+                    "with keywords (or with no tracked account and keywords saved in listening) it searches "
+                    "posts by keyword instead. Costs provider credits."
                 ),
                 parameters={
                     "type": "object",
                     "properties": {
                         "handles": {"type": "array", "items": {"type": "string"}},
+                        "keywords": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "Search these keywords on the platform instead of reading accounts.",
+                        },
                         "min_likes": {
                             "type": "integer",
                             "description": f"Likes needed to count as viral (default {DEFAULT_MIN_LIKES}).",
@@ -530,6 +698,46 @@ def build(services: CompetitorServices) -> list[ToolSpec]:
                 handler=trends,
                 cost="credits",
                 side_effects="writes_db",
+            )
+        )
+        tools.append(
+            ToolSpec(
+                name="search_keyword_trends",
+                description=(
+                    "Search public posts by keyword on one network and keep the ones above a like "
+                    "threshold as matches, tagged with the keyword that found them. Without query or "
+                    "keywords it uses the keywords saved in listening. X, Instagram and TikTok have "
+                    "keyword search; Facebook and LinkedIn do not. Costs provider credits "
+                    "(Instagram costs 12 per page, the rest 2-5)."
+                ),
+                parameters={
+                    "type": "object",
+                    "properties": {
+                        "query": {
+                            "type": "string",
+                            "description": "One keyword or phrase, e.g. 'bootstrapped saas'.",
+                        },
+                        "keywords": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": f"Up to {MAX_KEYWORDS} keywords; each one is a paid search.",
+                        },
+                        "platform": _PLATFORM_PARAM,
+                        "min_likes": {
+                            "type": "integer",
+                            "description": f"Likes needed to count as viral (default {DEFAULT_MIN_LIKES}).",
+                        },
+                        "per_keyword": {
+                            "type": "integer",
+                            "description": f"Posts to read per keyword (default {KEYWORD_POSTS}).",
+                        },
+                    },
+                    "required": [],
+                },
+                handler=keyword_trends,
+                cost="credits",
+                side_effects="writes_db",
+                cache_ttl=0,
             )
         )
     return tools

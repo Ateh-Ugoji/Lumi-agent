@@ -80,14 +80,52 @@ async def test_live_switch_off_raises_and_never_calls() -> None:
     assert rec.requests == []
 
 
-@pytest.mark.parametrize("platform", ["linkedin", "facebook", "instagram", "tiktok"])
-async def test_posts_are_x_only_and_refuse_without_spending(platform: str) -> None:
+@pytest.mark.parametrize("platform", ["linkedin", "facebook"])
+async def test_networks_without_a_post_endpoint_refuse_without_spending(
+    platform: str,
+) -> None:
     data, rec, client = build(paged("xpoz_user_posts_page1.json"))
     with pytest.raises(UnsupportedPlatform):
-        await data.fetch_user_posts(platform, "ateh", None, 5)
+        await data.fetch_user_posts(platform, "ateh", None, 5)  # type: ignore[arg-type]
     with pytest.raises(UnsupportedPlatform):
-        await data.search_posts(platform, "ai", 5)
+        await data.search_posts(platform, "ai", 5)  # type: ignore[arg-type]
     assert rec.requests == [] and client.meter.spent == 0
+
+
+async def test_instagram_search_maps_its_own_fields() -> None:
+    data, rec, client = build(lambda r: json_response("xpoz_posts_instagram.json"), budget="12")
+    posts = await data.search_posts("instagram", "lagos food", 5)
+    assert rec.requests[0].url.path == "/api/data/instagram/posts/live"
+    assert [p.text for p in posts] == [
+        "Three spots in Yaba you have not tried yet",
+        "The jollof ranking nobody asked for",
+    ]
+    first = posts[0]
+    assert first.platform == "instagram" and first.author_handle == "lagos_eats"
+    assert first.metrics.likes == 4210 and first.metrics.views == 91200
+    assert first.url == "https://www.instagram.com/p/DPq8mQ9jKxR/"
+    assert first.author_avatar_url and first.kind == "original"
+    # No codeUrl on the second row: the permalink is built from the handle and the id.
+    assert posts[1].url == "https://www.instagram.com/yaba_bites/p/3430102783691229106/"
+    assert client.meter.spent == 12
+
+
+async def test_instagram_timeline_works_and_skips_the_since_param() -> None:
+    data, rec, _ = build(lambda r: json_response("xpoz_posts_instagram.json"), budget="12")
+    posts = await data.fetch_user_posts(
+        "instagram", "lagos_eats", datetime(2026, 10, 20), 10
+    )
+    assert len(posts) == 2 and rec.requests[0].url.params.get("since") is None
+    assert rec.requests[0].url.path == "/api/data/instagram/posts/users/lagos_eats/live"
+
+
+async def test_tiktok_search_maps_description_and_play_count() -> None:
+    data, rec, _ = build(lambda r: json_response("xpoz_posts_tiktok.json"))
+    (post,) = await data.search_posts("tiktok", "freelance", 5)
+    assert rec.requests[0].url.path == "/api/data/tiktok/posts/live"
+    assert post.text == "How we priced our first retainer #freelance"
+    assert post.metrics.views == 410000 and post.metrics.likes == 18200
+    assert post.url == "https://www.tiktok.com/@builtinlagos/video/7419203847562910001"
 
 
 async def test_limit_zero_spends_nothing() -> None:

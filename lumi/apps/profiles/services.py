@@ -837,14 +837,19 @@ def save_baseline(baseline: BaselineOut) -> None:
 
 
 def record_listening_match(
-    profile_id: int, post_id: int, score: float | None = None
+    profile_id: int,
+    post_id: int,
+    score: float | None = None,
+    keyword: str | None = None,
 ) -> bool:
-    """``True`` when the match is new."""
+    """``True`` when the match is new. ``keyword`` records what search found it, if any."""
+    word = (keyword or "").strip()[:KEYWORD_MAX] or None
     with connection.cursor() as cursor:
         cursor.execute(
-            "INSERT INTO listening_matches (profile_id, post_id, discovered_at, score)"
-            " VALUES (%s, %s, now(), %s) ON CONFLICT (profile_id, post_id) DO NOTHING RETURNING id",
-            [profile_id, post_id, score],
+            "INSERT INTO listening_matches (profile_id, post_id, discovered_at, score, keyword)"
+            " VALUES (%s, %s, now(), %s, %s)"
+            " ON CONFLICT (profile_id, post_id) DO NOTHING RETURNING id",
+            [profile_id, post_id, score, word],
         )
         return cursor.fetchone() is not None
 
@@ -864,6 +869,7 @@ class TrendMatch(TypedDict):
         dict[str, int | None] | None
     )  # latest snapshot; ``None`` before the first one
     discovered_at: datetime
+    keyword: str | None  # the keyword search that found it; ``None`` for handle scans
 
 
 MATCHES_MAX = 200
@@ -881,13 +887,21 @@ def public_avatar_url(value: str | None) -> str | None:
     return url if url.lower().startswith(_AVATAR_SCHEMES) else None
 
 
-def list_trend_matches(profile_id: int, limit: int = 50) -> list[TrendMatch]:
-    """Posts of other accounts the profile found, newest first, with their latest metrics."""
+def list_trend_matches(
+    profile_id: int, limit: int = 50, keyword: str | None = None
+) -> list[TrendMatch]:
+    """Posts of other accounts the profile found, newest first, with their latest metrics.
+
+    ``keyword`` narrows to what one keyword search surfaced; matches found by scanning the
+    profile's tracked accounts carry no keyword and are only in the unfiltered list.
+    """
     limit = max(1, min(int(limit), MATCHES_MAX))
+    rows = ListeningMatch.objects.filter(profile_id=profile_id)
+    word = (keyword or "").strip()
+    if word:
+        rows = rows.filter(keyword__iexact=word)
     matches = list(
-        ListeningMatch.objects.filter(profile_id=profile_id)
-        .select_related("post__author")
-        .order_by("-discovered_at", "-id")[:limit]
+        rows.select_related("post__author").order_by("-discovered_at", "-id")[:limit]
     )
     latest = _latest_snapshots([m.post_id for m in matches])
     out: list[TrendMatch] = []
@@ -906,6 +920,7 @@ def list_trend_matches(profile_id: int, limit: int = 50) -> list[TrendMatch]:
                 author_avatar_url=public_avatar_url(m.post.author.avatar_url),
                 metrics={f: getattr(snap, f) for f in METRIC_FIELDS} if snap else None,
                 discovered_at=m.discovered_at,
+                keyword=m.keyword,
             )
         )
     return out

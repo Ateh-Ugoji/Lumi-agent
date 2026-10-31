@@ -119,6 +119,11 @@ def test_parse_datetime_is_always_aware_and_never_invented() -> None:
     )
     assert parse_datetime("2026-10-20T10:00:00").tzinfo is not None
     assert parse_datetime("not a date") is None and parse_datetime(None) is None
+    # TikTok reports ``createdAt`` as epoch seconds, Instagram and X as ISO text.
+    assert parse_datetime(1776205023) == datetime(2026, 4, 14, 22, 17, 3, tzinfo=UTC)
+    assert parse_datetime(1776205023000) == parse_datetime(1776205023)
+    assert parse_datetime("1776205023") == parse_datetime(1776205023)
+    assert parse_datetime(0) is None and parse_datetime(True) is None
 
 
 def test_x_metrics_come_from_public_metrics_and_zero_stays_zero() -> None:

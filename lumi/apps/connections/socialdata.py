@@ -2,14 +2,15 @@
 
 Coverage is what Xpoz offers, no more:
 
-* ``x``: user posts, keyword search, user search and lookup.
-* ``instagram`` and ``tiktok``: user search and lookup only (no post endpoints are wired).
-* ``linkedin`` and ``facebook``: ``UnsupportedPlatform``. Reddit is not part of the port's
-  platform list, so it is reachable through ``XpozClient`` and the handle search only.
+* ``x``, ``instagram`` and ``tiktok``: user posts, keyword search, user search and lookup.
+* ``linkedin`` and ``facebook``: ``UnsupportedPlatform``; Xpoz has no post endpoint for either,
+  and publishing-side APIs (Meta Graph, LinkedIn) are what serve those networks instead.
+  Reddit has post endpoints too, but it is not part of the port's platform list.
 
-``fetch_user_posts`` pages 20 rows at a time (2 credits per page for X). When the run budget
-runs out after some posts were read, the posts already paid for are returned instead of being
-thrown away. With nothing read yet, ``BudgetExceeded`` is raised.
+``fetch_user_posts`` pages 20 rows at a time (2, 12 and 5 credits per page for x, instagram
+and tiktok). When the run budget runs out after some posts were read, the posts already paid
+for are returned instead of being thrown away. With nothing read yet, ``BudgetExceeded`` is
+raised. Keep ``XPOZ_RUN_CREDIT_BUDGET`` at or above 12 or an Instagram page never fits.
 """
 
 from __future__ import annotations
@@ -22,11 +23,12 @@ from lumi_ai.ports import Platform, PostIn, UserInfo
 
 from .clients.xpoz import USER_SEARCH, XpozClient, XpozPage
 from .errors import BudgetExceeded, UnsupportedPlatform
-from .ingest import map_xpoz_post, parse_datetime
+from .ingest import map_xpoz_platform_post, parse_datetime
 
 PROVIDER = "xpoz"
-MAX_PAGES = 10  # hard stop against a cursor loop: 10 pages = 20 credits on X
+MAX_PAGES = 10  # hard stop against a cursor loop: 10 pages = 20 credits on X, 120 on Instagram
 _USER_PLATFORMS = ("x", "instagram", "tiktok")
+_POST_PLATFORMS = ("x", "instagram", "tiktok")
 
 
 def _unsupported(platform: str, what: str) -> UnsupportedPlatform:
@@ -74,7 +76,7 @@ class XpozSocialData:
     async def fetch_user_posts(
         self, platform: Platform, handle: str, since: datetime | None, limit: int
     ) -> list[PostIn]:
-        if platform != "x":
+        if platform not in _POST_PLATFORMS:
             raise _unsupported(platform, "reading user posts")
         if limit <= 0:
             return []
@@ -84,7 +86,7 @@ class XpozSocialData:
         for _ in range(MAX_PAGES):
             try:
                 page: XpozPage = await self._client.user_posts_page(
-                    handle, cursor=cursor, since=floor
+                    platform, handle, cursor=cursor, since=floor
                 )
             except BudgetExceeded:
                 if posts:
@@ -96,7 +98,7 @@ class XpozSocialData:
                 if floor is not None and published is not None and published < floor:
                     reached_old = True
                     continue
-                post = map_xpoz_post(row, user_handle=handle)
+                post = map_xpoz_platform_post(platform, row, user_handle=handle)
                 if post is not None:
                     posts.append(post)
             if len(posts) >= limit or reached_old or not page.has_more:
@@ -108,21 +110,23 @@ class XpozSocialData:
     async def search_posts(
         self, platform: Platform, query: str, limit: int
     ) -> list[PostIn]:
-        if platform != "x":
-            raise _unsupported(platform, "post search")
+        if platform not in _POST_PLATFORMS:
+            raise _unsupported(
+                platform, f"keyword search (Xpoz has no {platform} post search)"
+            )
         if limit <= 0:
             return []
         posts: list[PostIn] = []
         cursor: str | None = None
         for _ in range(MAX_PAGES):
             try:
-                page = await self._client.search_posts(query, cursor=cursor)
+                page = await self._client.search_posts(platform, query, cursor=cursor)
             except BudgetExceeded:
                 if posts:
                     break
                 raise
             for row in page.results:
-                post = map_xpoz_post(row)
+                post = map_xpoz_platform_post(platform, row)
                 if post is not None:
                     posts.append(post)
             if len(posts) >= limit or not page.has_more:

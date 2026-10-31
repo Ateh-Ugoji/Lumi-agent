@@ -75,16 +75,26 @@ async def stream_turn(profile_id: int, message: str) -> AsyncIterator[SSEEvent]:
 
 
 async def scan_trends(
-    profile_id: int, handles: list[str] | None, min_likes: int
+    profile_id: int,
+    handles: list[str] | None,
+    min_likes: int,
+    keywords: list[str] | None = None,
 ) -> Mapping[str, Any]:
-    """The ``check_niche_trends`` tool, run for the "scan now" button (no model in between)."""
+    """The ``check_niche_trends`` tool, run for the "scan now" button (no model in between).
+
+    ``keywords`` runs keyword searches on the platform instead of reading tracked handles;
+    omitting both is what makes the tool fall back to the keywords saved in listening.
+    """
     wiring = get_wiring()
     spec = wiring.registry.get("check_niche_trends")
     if spec is None:
         return {"error": "trend scanning is not available"}
     begin_run(profile_id)
     return await spec.handler(
-        ToolContext(profile_id, wiring.config), handles=handles, min_likes=min_likes
+        ToolContext(profile_id, wiring.config),
+        handles=handles,
+        min_likes=min_likes,
+        keywords=keywords,
     )
 
 

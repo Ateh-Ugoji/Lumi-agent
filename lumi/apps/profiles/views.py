@@ -177,7 +177,9 @@ class TrendMatchesView(APIView):
         query = TrendMatchesQuerySerializer(data=request.query_params)
         query.is_valid(raise_exception=True)
         matches = services.list_trend_matches(
-            _require_profile(request), query.validated_data["limit"]
+            _require_profile(request),
+            query.validated_data["limit"],
+            query.validated_data.get("keyword"),
         )
         return Response({"matches": matches})
 
@@ -194,6 +196,7 @@ class ScanTrendsView(APIView):
             profile_id,
             data.validated_data.get("handles"),
             data.validated_data["min_likes"],
+            data.validated_data.get("keywords"),
         )
         if result.get("error"):
             raise ApiError(
@@ -202,10 +205,11 @@ class ScanTrendsView(APIView):
                 status_code=status.HTTP_502_BAD_GATEWAY,
                 details={"reason": str(result["error"])[:300]},
             )
-        return Response(
-            {
-                "profile_id": profile_id,
-                "new_matches_found": result.get("new_matches_found", 0),
-                "viral_posts": list(result.get("viral_posts", [])),
-            }
-        )
+        body = {
+            "profile_id": profile_id,
+            "new_matches_found": result.get("new_matches_found", 0),
+            "viral_posts": list(result.get("viral_posts", [])),
+        }
+        if result.get("keywords"):
+            body["keywords"] = list(result["keywords"])
+        return Response(body)

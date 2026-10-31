@@ -296,9 +296,13 @@ class MatchRepo:
 
     @aio
     def record_listening_match(
-        self, profile_id: int, post_id: int, score: float | None = None
+        self,
+        profile_id: int,
+        post_id: int,
+        score: float | None = None,
+        keyword: str | None = None,
     ) -> bool:
-        return services.record_listening_match(profile_id, post_id, score)
+        return services.record_listening_match(profile_id, post_id, score, keyword)
 
 
 class ChatRepo:

@@ -488,6 +488,9 @@ class ListeningMatch(models.Model):
     )
     discovered_at = models.DateTimeField(db_default=Now())
     score = models.FloatField(null=True, blank=True)
+    # The keyword search that surfaced this post, when a keyword is what found it. ``None``
+    # means the post came from scanning the accounts the profile tracks.
+    keyword = models.CharField(max_length=100, null=True, blank=True)
 
     class Meta:
         db_table = "listening_matches"
