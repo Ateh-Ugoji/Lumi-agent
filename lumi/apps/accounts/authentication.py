@@ -18,7 +18,7 @@ TOUCH_EVERY = timedelta(hours=1)
 class TokenAuthentication(BaseAuthentication):
     def authenticate(self, request):
         parts = get_authorization_header(request).split()
-        if not parts or parts[0].lower() != KEYWORD.lower().encode():
+        if not parts or parts[0].lower() not in (KEYWORD.lower().encode(), b"bearer"):
             return None
         if len(parts) != 2:
             raise exceptions.AuthenticationFailed("Cabecera de autorización inválida.")
