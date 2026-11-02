@@ -488,3 +488,80 @@
   flex: 1;
   min-width: 140px;
 }
+
+
+.socialGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 12px;
+  margin: 16px 0 12px;
+}
+
+.socialConnectBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--glass-mid);
+  border: 1px solid var(--glass-border);
+  color: var(--text);
+  font-family: "DM Sans", sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.socialConnectBtn:hover:not(:disabled) {
+  background: var(--glass-thick);
+  border-color: var(--glass-border-h);
+  transform: translateY(-1px);
+}
+
+.socialConnectBtn:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.socialConnectBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.socialIconWrap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  flex-shrink: 0;
+}
+
+.socialBtnText {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.manualToggleWrap {
+  margin-top: 10px;
+}
+
+.textBtnMuted {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-family: "DM Sans", sans-serif;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 4px 0;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  transition: color 0.15s ease;
+}
+
+.textBtnMuted:hover {
+  color: var(--text);
+}

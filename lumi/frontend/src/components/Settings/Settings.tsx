@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useLightMode } from "../../hooks/useLightMode";
 import { IconArrowBoxLeft, IconMoon, IconSun } from "../Sidebar/Icons";
-import { errorMessage, type ConnectReturn, type ProfileSummary, type User } from "../../api";
+import { errorMessage, startConnect, startConnectMessage, type ConnectReturn, type ProfileSummary, type User } from "../../api";
+import SocialIcon from "../ThinkingState/SocialIcons";
 import { useT } from "../../i18n/index.ts";
 import LangToggle from "../../i18n/LangToggle";
 import ConnectionsPanel from "./ConnectionsPanel";
@@ -17,6 +18,14 @@ const SECTIONS: { key: SettingsSection; label: string }[] = [
 ];
 
 const NETWORKS = ["x", "linkedin", "facebook", "instagram", "tiktok"] as const;
+
+const SOCIAL_CONNECT_OPTIONS = [
+  { platform: "x", label: "X (Twitter)" },
+  { platform: "instagram", label: "Instagram" },
+  { platform: "tiktok", label: "TikTok" },
+  { platform: "linkedin", label: "LinkedIn" },
+  { platform: "facebook", label: "Facebook" },
+] as const;
 
 const initialsOf = (name: string) =>
   name
@@ -62,6 +71,25 @@ export default function Settings({
   const [profileError, setProfileError] = useState<string | null>(null);
   const [profileBusy, setProfileBusy] = useState(false);
   const [historyNote, setHistoryNote] = useState<string | null>(null);
+  const [connectingPlatform, setConnectingPlatform] = useState<string | null>(null);
+  const [connectError, setConnectError] = useState<string | null>(null);
+  const [showManual, setShowManual] = useState(false);
+
+  const handleConnectPfm = async (platform: string) => {
+    setConnectingPlatform(platform);
+    setConnectError(null);
+    try {
+      const url = await startConnect("pfm", {
+        platform,
+        profileId: activeProfileId,
+        redirectAfter: "/",
+      });
+      window.location.assign(url);
+    } catch (err) {
+      setConnectingPlatform(null);
+      setConnectError(startConnectMessage(err));
+    }
+  };
 
   const active = profiles.find((p) => p.id === activeProfileId) ?? null;
   const shownName = user.display_name || user.email;
@@ -169,35 +197,76 @@ export default function Settings({
                       </li>
                     ))}
                   </ul>
-                  <div className={styles.cardActions}>
-                    <select
-                      className={styles.select}
-                      aria-label={t("settings.new_network")}
-                      value={newPlatform}
-                      onChange={(e) => setNewPlatform(e.target.value)}
-                    >
-                      {NETWORKS.map((n) => (
-                        <option key={n} value={n}>
-                          {n}
-                        </option>
+                  <div style={{ marginTop: 20 }}>
+                    <div className={styles.cardTitle}>{t("settings.connect_socials_title")}</div>
+                    <p className={styles.cardHint}>{t("settings.connect_socials_desc")}</p>
+                    <div className={styles.socialGrid}>
+                      {SOCIAL_CONNECT_OPTIONS.map((item) => (
+                        <button
+                          key={item.platform}
+                          type="button"
+                          className={styles.socialConnectBtn}
+                          disabled={connectingPlatform !== null}
+                          onClick={() => void handleConnectPfm(item.platform)}
+                        >
+                          <span className={styles.socialIconWrap}>
+                            <SocialIcon name={item.platform} size={16} />
+                          </span>
+                          <span className={styles.socialBtnText}>
+                            {connectingPlatform === item.platform
+                              ? t("settings.connecting")
+                              : t("settings.connect_network", { network: item.label })}
+                          </span>
+                        </button>
                       ))}
-                    </select>
-                    <input
-                      className={styles.input}
-                      aria-label={t("settings.new_handle")}
-                      placeholder={t("settings.handle_placeholder")}
-                      value={newHandle}
-                      onChange={(e) => setNewHandle(e.target.value)}
-                    />
-                    <button
-                      type="button"
-                      className={styles.btn}
-                      disabled={!newHandle.trim() || profileBusy}
-                      onClick={() => void addProfile()}
-                    >
-                      {t("settings.add_profile")}
-                    </button>
+                    </div>
+                    {connectError && (
+                      <p role="alert" className={styles.errorText}>
+                        {connectError}
+                      </p>
+                    )}
+                    <div className={styles.manualToggleWrap}>
+                      <button
+                        type="button"
+                        className={styles.textBtnMuted}
+                        onClick={() => setShowManual((prev) => !prev)}
+                      >
+                        {showManual ? "Hide manual entry" : t("settings.add_manual")}
+                      </button>
+                    </div>
                   </div>
+
+                  {showManual && (
+                    <div className={styles.cardActions} style={{ marginTop: 12 }}>
+                      <select
+                        className={styles.select}
+                        aria-label={t("settings.new_network")}
+                        value={newPlatform}
+                        onChange={(e) => setNewPlatform(e.target.value)}
+                      >
+                        {NETWORKS.map((n) => (
+                          <option key={n} value={n}>
+                            {n}
+                          </option>
+                        ))}
+                      </select>
+                      <input
+                        className={styles.input}
+                        aria-label={t("settings.new_handle")}
+                        placeholder={t("settings.handle_placeholder")}
+                        value={newHandle}
+                        onChange={(e) => setNewHandle(e.target.value)}
+                      />
+                      <button
+                        type="button"
+                        className={styles.btn}
+                        disabled={!newHandle.trim() || profileBusy}
+                        onClick={() => void addProfile()}
+                      >
+                        {t("settings.add_profile")}
+                      </button>
+                    </div>
+                  )}
                   {profileError && (
                     <p role="alert" className={styles.errorText}>
                       {profileError}

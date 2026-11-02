@@ -21,6 +21,7 @@ import {
   type ProfileSummary,
 } from "../../api";
 import { useT } from "../../i18n/index.ts";
+import SocialIcon from "../ThinkingState/SocialIcons";
 import styles from "./Settings.module.css";
 
 /** Message keys, resolved with `t` at render so the language switch applies. */
@@ -114,12 +115,12 @@ export default function ConnectionsPanel({
     }
   };
 
-  const connect = async (provider: Provider) => {
+  const connect = async (provider: Provider, customPlatform?: string) => {
     patch(provider, { busy: true, error: null, note: null });
     try {
       const url = await startConnect(provider, {
         profileId: provider === "google" ? null : profileId,
-        platform: provider === "pfm" ? pfmPlatform : undefined,
+        platform: provider === "pfm" ? (customPlatform || pfmPlatform) : undefined,
         redirectAfter: "/",
       });
       window.location.assign(url);
@@ -275,21 +276,24 @@ export default function ConnectionsPanel({
               </ul>
             )}
 
+            {provider === "pfm" && (
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", margin: "10px 0 14px" }}>
+                {PFM_PLATFORMS.map((p) => (
+                  <button
+                    key={p}
+                    type="button"
+                    className={styles.segBtn}
+                    style={{ padding: "6px 12px", fontSize: "12px", gap: "6px" }}
+                    disabled={card.busy || card.loading || status?.configured === false}
+                    onClick={() => void connect("pfm", p)}
+                  >
+                    <SocialIcon name={p} size={14} />
+                    <span>Connect {p === "x" ? "X" : p.charAt(0).toUpperCase() + p.slice(1)}</span>
+                  </button>
+                ))}
+              </div>
+            )}
             <div className={styles.cardActions}>
-              {provider === "pfm" && (
-                <select
-                  className={styles.select}
-                  aria-label={t("panel.select_network")}
-                  value={pfmPlatform}
-                  onChange={(e) => setPfmPlatform(e.target.value)}
-                >
-                  {PFM_PLATFORMS.map((p) => (
-                    <option key={p} value={p}>
-                      {p}
-                    </option>
-                  ))}
-                </select>
-              )}
               <button
                 type="button"
                 className={styles.btn}

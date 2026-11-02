@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+import time
 from pathlib import Path
 
 DB_NAME = "lumi"
@@ -28,6 +29,9 @@ def main() -> int:
     )
     parser.add_argument(
         "--test", action="store_true", help=f"also create the {TEST_DB_NAME} database"
+    )
+    parser.add_argument(
+        "--keep-alive", action="store_true", help="keep running indefinitely"
     )
     args = parser.parse_args()
 
@@ -53,6 +57,15 @@ def main() -> int:
 
     sys.stderr.write(f"Postgres listo en {pgdata}\n")
     sys.stdout.write(server.get_uri(DB_NAME) + "\n")
+    sys.stdout.flush()
+
+    if args.keep_alive:
+        try:
+            while True:
+                time.sleep(3600)
+        except KeyboardInterrupt:
+            pass
+
     return 0
 
 

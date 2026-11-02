@@ -179,6 +179,18 @@ const en: Record<string, string> = {
   "settings.clear_history": "Delete the chat history of @{handle}",
   "settings.language": "Language",
   "settings.language_hint": "Applies across the app, including the chat and this page.",
+  "settings.connect_socials_title": "Connect Social Accounts (Post for Me)",
+  "settings.connect_socials_desc":
+    "Authorize your accounts through Post for Me to read your timeline, monitor trends, and publish directly.",
+  "settings.connect_network": "Connect {network}",
+  "settings.connecting": "Connecting…",
+  "settings.add_manual": "Or add handle manually (offline mode)",
+  "modal.connect_title": "Connect your social accounts",
+  "modal.connect_desc":
+    "Link your accounts with Post for Me to research trends in your niche, analyze posts, and write in your voice.",
+  "modal.connect_cta": "Connect",
+  "modal.skip": "I'll do this later",
+  "modal.connected": "Connected",
   "profiles.load_failed": "Couldn't load the profiles.",
 
   // --- Chronic Online ---
@@ -348,6 +360,18 @@ const es: Record<string, string> = {
   "settings.clear_history": "Borrar historial de chat de @{handle}",
   "settings.language": "Idioma",
   "settings.language_hint": "Se aplica en toda la app, incluido el chat y esta página.",
+  "settings.connect_socials_title": "Conectar redes sociales (Post for Me)",
+  "settings.connect_socials_desc":
+    "Autoriza tus cuentas con Post for Me para leer tu timeline, monitorizar tendencias y publicar directamente.",
+  "settings.connect_network": "Conectar {network}",
+  "settings.connecting": "Conectando…",
+  "settings.add_manual": "O añade usuario manualmente (sin conexión)",
+  "modal.connect_title": "Conecta tus redes sociales",
+  "modal.connect_desc":
+    "Conecta tus cuentas con Post for Me para buscar tendencias en tu nicho, analizar posts y redactar con tu propia voz.",
+  "modal.connect_cta": "Conectar",
+  "modal.skip": "Hacerlo más tarde",
+  "modal.connected": "Conectado",
   "profiles.load_failed": "No se pudieron cargar los perfiles.",
 
   // --- Chronic Online ---

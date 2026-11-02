@@ -13,6 +13,7 @@ import InsightCards from "./components/InsightCards/InsightCards";
 import WinnersCard, { type WinnersData } from "./components/WinnersCard/WinnersCard";
 
 import Settings, { type SettingsSection } from "./components/Settings/Settings";
+import ConnectSocialsModal from "./components/ConnectSocialsModal/ConnectSocialsModal";
 import ChronicOnline from "./components/ChronicOnline/ChronicOnline";
 import SidebarNav from "./components/Sidebar/Sidebar";
 import ThinkingState from "./components/ThinkingState/ThinkingState";
@@ -528,6 +529,34 @@ export default function App() {
   } = useProfiles();
   const [analytics, setAnalytics] = useState<ProfileAnalytics | null>(null);
   const [connectReturn, setConnectReturn] = useState<ConnectReturn | null>(null);
+  const [showConnectModal, setShowConnectModal] = useState(false);
+
+  useEffect(() => {
+    try {
+      if (sessionStorage.getItem("lumi_just_signed_in") === "true") {
+        sessionStorage.removeItem("lumi_just_signed_in");
+        setShowConnectModal(true);
+      }
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    if (user && profiles.length === 0) {
+      try {
+        const dismissed = sessionStorage.getItem("lumi_connect_prompt_dismissed");
+        if (!dismissed) {
+          setShowConnectModal(true);
+        }
+      } catch {}
+    }
+  }, [user, profiles.length]);
+
+  const handleCloseConnectModal = () => {
+    setShowConnectModal(false);
+    try {
+      sessionStorage.setItem("lumi_connect_prompt_dismissed", "true");
+    } catch {}
+  };
 
   useEffect(() => {
     setAnalytics(null);
@@ -1513,6 +1542,11 @@ export default function App() {
           )}
         </main>
       </div>
+      <ConnectSocialsModal
+        isOpen={showConnectModal}
+        onClose={handleCloseConnectModal}
+        connectedPlatforms={profiles.map((p) => p.platform)}
+      />
     </div>
   );
 }

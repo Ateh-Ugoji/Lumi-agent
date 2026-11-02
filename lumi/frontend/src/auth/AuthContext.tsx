@@ -79,10 +79,16 @@ export default function AuthGate({ children }: { children: ReactNode }) {
         notice={state.status === "anonymous" ? state.notice : undefined}
         onLogin={async (email, password) => {
           const user = await apiLogin(email, password);
+          try {
+            sessionStorage.setItem("lumi_just_signed_in", "true");
+          } catch {}
           setState({ status: "in", user });
         }}
         onRegister={async (email, password, name) => {
           const user = await apiRegister(email, password, name);
+          try {
+            sessionStorage.setItem("lumi_just_signed_in", "true");
+          } catch {}
           setState({ status: "in", user });
         }}
       />

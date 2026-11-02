@@ -24,7 +24,7 @@ from django.db import DatabaseError, IntegrityError, connection, transaction
 from apps.core.errors import ApiError
 from apps.core.fields import TokenDecryptError, decrypt_value
 from apps.core.permissions import get_owned_profile
-from apps.profiles.services import update_profile_avatar
+from apps.profiles.services import get_or_create_profile, update_profile_avatar
 
 from .clients.pfm import PfmClient
 from .config import ConnectionsConfig
@@ -608,6 +608,19 @@ def sync_pfm_accounts(user) -> int:
                 if acc.status == "connected"
                 else AccountStatus.REVOKED
             )
+            if (
+                row.status == AccountStatus.ACTIVE
+                and not row.social_profile_id
+                and row.handle
+                and row.platform in ("x", "linkedin", "facebook", "instagram", "tiktok")
+            ):
+                try:
+                    profile_id, _ = get_or_create_profile(
+                        user.pk, row.platform, row.handle
+                    )
+                    row.social_profile_id = profile_id
+                except (DatabaseError, IntegrityError, ValueError) as exc:
+                    logger.warning("auto-linking profile for %s failed: %s", row.handle, exc)
             row.save()
             if row.status == AccountStatus.ACTIVE and row.social_profile_id:
                 # The service writes only when ``username`` is the profile's own handle.
