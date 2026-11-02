@@ -142,6 +142,7 @@ def test_xpoz_probe_never_touches_the_network_or_spends_credits(monkeypatch) -> 
 
     monkeypatch.setattr("apps.connections.clients.xpoz.XpozClient._get", boom)
     monkeypatch.setattr("httpx.AsyncClient.send", boom)
+    monkeypatch.delenv("XPOZ_API_KEY_2", raising=False)
     monkeypatch.setenv("XPOZ_API_KEY", "xp-s3cr3t")
     monkeypatch.setenv("XPOZ_LIVE_ENABLED", "true")
     connection_keys.register_all()

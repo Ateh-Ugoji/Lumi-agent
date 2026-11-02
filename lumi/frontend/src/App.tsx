@@ -10,6 +10,7 @@ import {
 import AmbientBackground from "./components/AmbientBackground/AmbientBackground";
 import PromptBar from "./components/PromptBar/PromptBar";
 import InsightCards from "./components/InsightCards/InsightCards";
+import WinnersCard, { type WinnersData } from "./components/WinnersCard/WinnersCard";
 
 import Settings, { type SettingsSection } from "./components/Settings/Settings";
 import ChronicOnline from "./components/ChronicOnline/ChronicOnline";
@@ -56,7 +57,10 @@ import { ACTIVE_KEY, CHATS_KEY, DRAFTS_KEY } from "./session";
 import styles from "./App.module.css";
 import { speak, stopSpeaking } from "./voice/speak";
 import { useSmoothText } from "./reveal/useSmoothText";
+import { parseInline, parseMarkdown, type MdBlock, type MdInline } from "./markdown";
 
+/** Shown when a run dies before the agent could answer. */
+const INTERRUPTED_TEXT = "Agent interrupted — please try again.";
 
 type Message = {
   id: number;
@@ -64,6 +68,10 @@ type Message = {
   text: string;
   insights?: boolean;
   analytics?: ProfileAnalytics | null;
+  /** Niche winners card data for this reply (frameworks, peers, viral posts). */
+  winners?: WinnersData | null;
+  /** True when the stream died before the agent finished the turn. */
+  interrupted?: boolean;
   /** Connect links the server returned for this reply; only these are drawn as connect cards. */
   connectLinks?: ConnectLink[];
   sim?: { scriptId: string; elapsedMs: number; customScript?: SimScript };
@@ -177,16 +185,203 @@ function connectLinkFor(url: string, links: ConnectLink[] | undefined): ConnectL
   return links?.find((link) => link.url === url);
 }
 
+/** Inline tokens → nodes. A newline inside text becomes a <br>. */
+function renderInline(
+  tokens: MdInline[],
+  keyBase: string,
+  connectLinks?: ConnectLink[],
+): React.ReactNode[] {
+  const out: React.ReactNode[] = [];
+  tokens.forEach((token, i) => {
+    const key = `${keyBase}-${i}`;
+    if (token.kind === "strong") {
+      out.push(
+        <strong key={key} className={styles.msgBold}>
+          {token.text}
+        </strong>,
+      );
+      return;
+    }
+    if (token.kind === "em") {
+      out.push(
+        <em key={key} className={styles.msgEm}>
+          {token.text}
+        </em>,
+      );
+      return;
+    }
+    if (token.kind === "code") {
+      out.push(
+        <code key={key} className={styles.msgCode}>
+          {token.text}
+        </code>,
+      );
+      return;
+    }
+    if (token.kind === "link") {
+      const connect = connectLinkFor(token.href, connectLinks);
+      out.push(
+        connect ? (
+          <a
+            key={key}
+            href={token.href}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={styles.connectCard}
+          >
+            {connect.platform === "x" && <XIcon className={styles.connectCardIcon} />}
+            {token.text}
+          </a>
+        ) : (
+          <a
+            key={key}
+            href={token.href}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={styles.msgLink}
+          >
+            {token.text}
+          </a>
+        ),
+      );
+      return;
+    }
+    token.text.split("\n").forEach((line, li) => {
+      if (li > 0) out.push(<br key={`${key}-br${li}`} />);
+      if (line) out.push(line);
+    });
+  });
+  return out;
+}
+
+/** Block nodes → nodes: headings, rules, quotes, lists and code fences. */
+function renderBlocks(blocks: MdBlock[], connectLinks?: ConnectLink[]): React.ReactNode[] {
+  return blocks.map((block, i) => {
+    const key = `blk-${i}`;
+    switch (block.kind) {
+      case "heading":
+        return (
+          <p key={key} className={styles.msgHeading} data-level={block.level}>
+            {renderInline(parseInline(block.text), key, connectLinks)}
+          </p>
+        );
+      case "rule":
+        return <hr key={key} className={styles.msgRule} />;
+      case "quote":
+        return (
+          <blockquote key={key} className={styles.msgQuote}>
+            {renderInline(parseInline(block.text), key, connectLinks)}
+          </blockquote>
+        );
+      case "code":
+        return (
+          <pre key={key} className={styles.msgPre}>
+            <code>{block.text}</code>
+          </pre>
+        );
+      case "list": {
+        const Tag = block.ordered ? "ol" : "ul";
+        return (
+          <Tag key={key} className={styles.msgList}>
+            {block.items.map((item, j) => (
+              <li
+                key={`${key}-${j}`}
+                className={styles.msgListItem}
+                style={{ marginLeft: Math.min(item.indent, 6) * 8 }}
+              >
+                {renderInline(parseInline(item.text), `${key}-${j}`, connectLinks)}
+              </li>
+            ))}
+          </Tag>
+        );
+      }
+      default:
+        return (
+          <p key={key} className={styles.msgPara}>
+            {renderInline(parseInline(block.text), key, connectLinks)}
+          </p>
+        );
+    }
+  });
+}
+
 /**
- * Renders a single agent message with inline markdown:
- * - `[text](url)` → Connect X card (if connect link) or plain <a>
- * - **bold** → <strong>
- * - `code` → <code>
- * - Paragraphs split by double newline
+ * Turns a niche/peer tool result (or the reply's own bolded headlines) into
+ * the data the Winners card renders.
+ */
+function extractWinnersData(toolResult: any, query: string, reply: string): WinnersData {
+  const data: WinnersData = {
+    title: "Winners in the Space",
+    peers: [],
+    frameworks: [],
+    posts: [],
+  };
+
+  if (toolResult) {
+    if (Array.isArray(toolResult.frameworks)) {
+      data.frameworks = toolResult.frameworks.map((fw: any) => {
+        if (typeof fw === "string") return { name: fw };
+        const rawText = fw.text || "";
+        const nameMatch = rawText.match(/Winning framework:\s*([^\n—–-]+)/i);
+        const structMatch = rawText.match(/structure:\s*([^\n;]+)/i);
+        const hookMatch = rawText.match(/hook:\s*([^\n;]+)/i);
+        const driverMatch = rawText.match(/engagement driver:\s*([^\n;]+)/i);
+        const pillarMatch = rawText.match(/Content pillar:\s*([^\n(]+)/i);
+        const whyMatch = rawText.match(/Why it works:\s*([^\nWinning]+)/i);
+
+        return {
+          name: nameMatch ? nameMatch[1].trim() : (fw.metadata?.query || "Winning Content Framework"),
+          structure: structMatch ? structMatch[1].trim() : undefined,
+          hook: hookMatch ? hookMatch[1].trim() : undefined,
+          whyItWorks: driverMatch ? driverMatch[1].trim() : (whyMatch ? whyMatch[1].trim() : undefined),
+          pillar: pillarMatch ? pillarMatch[1].trim() : undefined,
+        };
+      });
+    }
+
+    if (Array.isArray(toolResult.source_handles)) {
+      data.peers = toolResult.source_handles.map((h: string) => ({
+        handle: h.replace(/^@/, ""),
+        role: "Niche Peer Leader",
+      }));
+    }
+
+    const rawPosts = toolResult.peer_posts || toolResult.viral_posts || [];
+    if (Array.isArray(rawPosts)) {
+      data.posts = rawPosts.map((p: any) => ({
+        author: (p.author || p.author_handle || "creator").replace(/^@/, ""),
+        caption: p.caption || p.text || "",
+        likes: p.likes ?? p.metrics?.like_count,
+        retweets: p.retweets ?? p.metrics?.retweet_count,
+        url: p.url || p.platform_url,
+      }));
+    }
+  }
+
+  const isWinnersQuery = /winners?|frameworks?|peers?|niche trends?|top creators?|winning content/i.test(query);
+  if ((!data.frameworks || data.frameworks.length === 0) && isWinnersQuery) {
+    const boldMatches = [...reply.matchAll(/\*\*(?:[0-9]+\.\s*)?([^*:\n]+)\*\*/g)];
+    if (boldMatches.length > 0) {
+      data.frameworks = boldMatches.slice(0, 3).map((m) => ({
+        name: m[1].replace(/["']/g, "").trim(),
+        structure: "Hook > Value Proposition > Proof / Link",
+        whyItWorks: "Drives community engagement and bookmarks in tech niche",
+      }));
+    }
+  }
+
+  return data;
+}
+
+/**
+ * Renders a single agent message with block + inline markdown:
+ * headings, rules, quotes, lists and fenced code (markdown.ts), plus
+ * `[text](url)` → Connect card (server-issued links only) or plain <a>.
  */
 function AgentMessage({
   text,
   analytics,
+  winners,
   connectLinks,
   onPill,
   animate = false,
@@ -197,6 +392,7 @@ function AgentMessage({
 }: {
   text: string;
   analytics?: ProfileAnalytics | null;
+  winners?: WinnersData | null;
   connectLinks?: ConnectLink[];
   onPill?: (t: string) => void;
   /** True only for the freshly-streamed reply: reveal it gradually. */
@@ -212,60 +408,13 @@ function AgentMessage({
   // the full text instantly — old messages never re-animate.
   const { text: visible, revealing, flush } = useSmoothText(text, animate);
 
-  const nodes = useMemo(() => {
-    // Split text into paragraphs first
-    const paragraphs = visible.split(/\n\n+/);
-    return paragraphs.map((para, pi) => {
-      // Tokenise inline: **bold**, `code`, [label](url)
-      const INLINE = /(\*\*(.+?)\*\*|`([^`]+)`|\[([^\]]+)\]\((https?:\/\/[^)]+)\))/g;
-      const parts: React.ReactNode[] = [];
-      let last = 0;
-      let m: RegExpExecArray | null;
-      while ((m = INLINE.exec(para)) !== null) {
-        if (m.index > last) parts.push(para.slice(last, m.index));
-        if (m[2] !== undefined) {
-          // **bold**
-          parts.push(<strong key={m.index} className={styles.msgBold}>{m[2]}</strong>);
-        } else if (m[3] !== undefined) {
-          // `code`
-          parts.push(<code key={m.index} className={styles.msgCode}>{m[3]}</code>);
-        } else if (m[4] !== undefined && m[5]) {
-          // [label](url)
-          const label = m[4];
-          const url = m[5];
-          const connect = connectLinkFor(url, connectLinks);
-          if (connect) {
-            parts.push(
-              <a key={m.index} href={url} target="_blank" rel="noopener noreferrer" className={styles.connectCard}>
-                {connect.platform === "x" && <XIcon className={styles.connectCardIcon} />}
-                {label}
-              </a>
-            );
-          } else {
-            parts.push(
-              <a key={m.index} href={url} target="_blank" rel="noopener noreferrer" className={styles.msgLink}>{label}</a>
-            );
-          }
-        }
-        last = m.index + m[0].length;
-      }
-      if (last < para.length) parts.push(para.slice(last));
-      // single-newline breaks inside a paragraph
-      const withBreaks: React.ReactNode[] = [];
-      parts.forEach((node, ni) => {
-        if (typeof node === "string") {
-          const lines = node.split("\n");
-          lines.forEach((ln, li) => {
-            if (li > 0) withBreaks.push(<br key={`${pi}-${ni}-br${li}`} />);
-            if (ln) withBreaks.push(ln);
-          });
-        } else {
-          withBreaks.push(node);
-        }
-      });
-      return <p key={pi} className={styles.msgText}>{withBreaks}</p>;
-    });
-  }, [visible, connectLinks]);
+  // GFM block parsing (headings, rules, lists, quotes, fences) lives in
+  // markdown.ts; inline tokens are rendered against this message's connect
+  // links so only server-issued URLs become connect cards.
+  const nodes = useMemo(
+    () => renderBlocks(parseMarkdown(visible), connectLinks),
+    [visible, connectLinks],
+  );
 
   // While revealing, keep the growing text pinned to the bottom — only if the
   // user was already near the bottom (never fight manual scrolling).
@@ -297,6 +446,11 @@ function AgentMessage({
       {analytics && (
         <div className={styles.insightSlot}>
           <InsightCards analytics={analytics} onPill={onPill} />
+        </div>
+      )}
+      {winners && (
+        <div className={styles.insightSlot}>
+          <WinnersCard data={winners} onPill={onPill} />
         </div>
       )}
     </>
@@ -874,8 +1028,32 @@ export default function App() {
 
         const replyText = streamError
           ? `⚠️ ${streamError}`
-          : result.content?.trim() ||
-            "I finished working on that — let me know if you'd like more detail.";
+          : !result.completed
+            ? INTERRUPTED_TEXT
+            : result.content?.trim() ||
+              "I finished working on that — let me know if you'd like more detail.";
+
+        // Analytics: the tool result, else the live profile summary when the
+        // user clearly asked about performance.
+        const isAnalyticsQuery =
+          /impressions?|analytics|reach|metrics|performance|stats|views|engagement/i.test(text);
+        const messageAnalytics =
+          analyticsFrom(result.tool_executions) ?? (isAnalyticsQuery ? analytics : undefined);
+
+        // Winners: a niche/peer tool result, else inferred from a winners-shaped ask.
+        const peerAdviceExec = result.tool_executions?.find(
+          (e) =>
+            (e.name === "get_peer_advice" ||
+              e.name === "check_niche_trends" ||
+              e.name === "discover_and_extract_niche_frameworks") &&
+            e.result,
+        );
+        const isWinnersQuery =
+          /winners?|frameworks?|peers?|niche trends?|top creators?|winning content/i.test(text);
+        const messageWinners =
+          peerAdviceExec?.result || isWinnersQuery
+            ? extractWinnersData(peerAdviceExec?.result, text, replyText)
+            : undefined;
 
         // Pre-generate the reply id so the same batch can mark it as
         // "revealing"; the updater itself stays pure (StrictMode-safe).
@@ -892,7 +1070,9 @@ export default function App() {
                       id: replyId,
                       role: "agent",
                       text: replyText,
-                      analytics: analyticsFrom(result.tool_executions),
+                      interrupted: !result.completed,
+                      analytics: messageAnalytics,
+                      winners: messageWinners,
                       connectLinks: connectLinksFrom(result.tool_executions),
                       sim: {
                         scriptId: completedScript.id,
@@ -964,6 +1144,20 @@ export default function App() {
         try {
           const direct = await sendChatMessage(chatProfileId, text);
           const elapsed = Math.round(performance.now() - startTime);
+          const directPeerExec = direct.tool_executions?.find(
+            (e) =>
+              (e.name === "get_peer_advice" ||
+                e.name === "check_niche_trends" ||
+                e.name === "discover_and_extract_niche_frameworks") &&
+              e.result,
+          );
+          const directIsWinnersQuery =
+            /winners?|frameworks?|peers?|niche trends?|top creators?|winning content/i.test(text);
+          const directText = direct.content || "Done!";
+          const directWinners =
+            directPeerExec?.result || directIsWinnersQuery
+              ? extractWinnersData(directPeerExec?.result, text, directText)
+              : undefined;
           const directId = nextId++;
           setRevealingId(directId);
           setChats((prev) =>
@@ -976,8 +1170,9 @@ export default function App() {
                       {
                         id: directId,
                         role: "agent",
-                        text: direct.content || "Done!",
+                        text: directText,
                         analytics: analyticsFrom(direct.tool_executions),
+                        winners: directWinners,
                         connectLinks: connectLinksFrom(direct.tool_executions),
                       },
                     ],
@@ -1231,6 +1426,7 @@ export default function App() {
                         )}
                         <div
                           data-role={m.role}
+                          data-interrupted={m.interrupted ? "true" : undefined}
                           className={
                             m.role === "user"
                               ? styles.userMsg
@@ -1244,6 +1440,7 @@ export default function App() {
                             <AgentMessage
                               text={m.text}
                               analytics={m.analytics ?? (m.insights ? analytics : null)}
+                              winners={m.winners ?? null}
                               connectLinks={m.connectLinks}
                               onPill={(t) => handleInput(t)}
                               animate={m.id === revealingId}
@@ -1307,6 +1504,9 @@ export default function App() {
                   onTextChange={handleInput}
                   onSend={send}
                   busy={busy}
+                  history={messages
+                    .filter((m) => m.role === "user")
+                    .map((m) => m.text)}
                 />
               </div>
             </>

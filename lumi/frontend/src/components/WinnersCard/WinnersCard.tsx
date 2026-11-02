@@ -1,0 +1,196 @@
+import { useState } from "react";
+import styles from "./WinnersCard.module.css";
+
+export type WinnerPeer = {
+  handle: string;
+  name?: string;
+  avatarUrl?: string;
+  role?: string;
+};
+
+export type WinnerFramework = {
+  name: string;
+  hook?: string;
+  structure?: string;
+  whyItWorks?: string;
+  pillar?: string;
+  prompt?: string;
+};
+
+export type WinnerPost = {
+  author: string;
+  caption: string;
+  likes?: number;
+  retweets?: number;
+  url?: string;
+};
+
+export type WinnersData = {
+  title?: string;
+  niche?: string;
+  peers?: WinnerPeer[];
+  frameworks?: WinnerFramework[];
+  posts?: WinnerPost[];
+};
+
+const DEFAULT_PEERS: WinnerPeer[] = [
+  { handle: "sama", name: "Sam Altman", role: "AI Systems & Scaling" },
+  { handle: "levelsio", name: "Pieter Levels", role: "Indie Hacking & Bootstrapping" },
+  { handle: "karpathy", name: "Andrej Karpathy", role: "Deep Learning & AI Dev" },
+  { handle: "paulg", name: "Paul Graham", role: "Startups & Essayist" },
+];
+
+export default function WinnersCard({
+  data,
+  onPill,
+}: {
+  data?: WinnersData | null;
+  onPill?: (text: string) => void;
+}) {
+  const peers = data?.peers && data.peers.length > 0 ? data.peers : DEFAULT_PEERS;
+  const frameworks = data?.frameworks || [];
+  const posts = data?.posts || [];
+
+  // Pick default tab based on available data
+  const [tab, setTab] = useState<"frameworks" | "peers" | "posts">(() => {
+    if (frameworks.length > 0) return "frameworks";
+    if (peers.length > 0) return "peers";
+    return "posts";
+  });
+
+  return (
+    <div className={styles.wrap}>
+      <div className={styles.header}>
+        <div className={styles.titleGroup}>
+          <div className={styles.iconBadge}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+            </svg>
+          </div>
+          <span className={styles.title}>{data?.title || "Winners in the Space"}</span>
+        </div>
+        <span className={styles.liveBadge}>PEER BENCHMARK</span>
+      </div>
+
+      <div className={styles.tabs}>
+        {frameworks.length > 0 && (
+          <button
+            type="button"
+            className={`${styles.tabBtn} ${tab === "frameworks" ? styles.tabBtnActive : ""}`}
+            onClick={() => setTab("frameworks")}
+          >
+            Frameworks ({frameworks.length})
+          </button>
+        )}
+        <button
+          type="button"
+          className={`${styles.tabBtn} ${tab === "peers" ? styles.tabBtnActive : ""}`}
+          onClick={() => setTab("peers")}
+        >
+          Top Peers ({peers.length})
+        </button>
+        {posts.length > 0 && (
+          <button
+            type="button"
+            className={`${styles.tabBtn} ${tab === "posts" ? styles.tabBtnActive : ""}`}
+            onClick={() => setTab("posts")}
+          >
+            Viral Posts ({posts.length})
+          </button>
+        )}
+      </div>
+
+      <div className={styles.tabContent}>
+        {tab === "frameworks" && frameworks.length > 0 && (
+          <>
+            {frameworks.slice(0, 3).map((fw, i) => (
+              <div key={i} className={styles.frameworkCard}>
+                <div className={styles.frameworkHeader}>
+                  <span className={styles.frameworkName}>{fw.name}</span>
+                  {fw.pillar && <span className={styles.pillarTag}>{fw.pillar}</span>}
+                </div>
+                {fw.structure && (
+                  <div className={styles.structureBox}>
+                    <strong>Format: </strong>
+                    {fw.structure}
+                  </div>
+                )}
+                {fw.hook && (
+                  <div className={styles.hookBox}>
+                    <strong>Hook: </strong>"{fw.hook}"
+                  </div>
+                )}
+                {fw.whyItWorks && (
+                  <div className={styles.driverText}>
+                    <span>💡 {fw.whyItWorks}</span>
+                  </div>
+                )}
+                {onPill && (
+                  <div className={styles.actionRow}>
+                    <button
+                      type="button"
+                      className={styles.applyBtn}
+                      onClick={() => onPill(`Draft a post using "${fw.name}" framework`)}
+                    >
+                      Use framework ↗
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </>
+        )}
+
+        {tab === "peers" && (
+          <div className={styles.peerGrid}>
+            {peers.map((peer, i) => {
+              const clean = peer.handle.replace(/^@/, "");
+              return (
+                <a
+                  key={i}
+                  href={`https://x.com/${clean}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={styles.peerCard}
+                  title={`View @${clean} on X`}
+                >
+                  <div className={styles.avatar}>{clean.slice(0, 2).toUpperCase()}</div>
+                  <div className={styles.peerInfo}>
+                    <span className={styles.peerHandle}>@{clean}</span>
+                    <span className={styles.peerRole}>{peer.name || peer.role || "Niche Leader"}</span>
+                  </div>
+                </a>
+              );
+            })}
+          </div>
+        )}
+
+        {tab === "posts" && posts.length > 0 && (
+          <>
+            {posts.slice(0, 3).map((p, i) => (
+              <div key={i} className={styles.postCard}>
+                <div className={styles.postHeader}>
+                  <span className={styles.postAuthor}>@{p.author.replace(/^@/, "")}</span>
+                  <div className={styles.metrics}>
+                    {p.likes !== undefined && (
+                      <span className={styles.metricItem}>❤️ {p.likes.toLocaleString()}</span>
+                    )}
+                    {p.retweets !== undefined && (
+                      <span className={styles.metricItem}>🔁 {p.retweets.toLocaleString()}</span>
+                    )}
+                  </div>
+                </div>
+                <div className={styles.postText}>{p.caption}</div>
+                {p.url && (
+                  <a href={p.url} target="_blank" rel="noopener noreferrer" className={styles.postLink}>
+                    View on X ↗
+                  </a>
+                )}
+              </div>
+            ))}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}

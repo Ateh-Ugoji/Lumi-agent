@@ -113,7 +113,7 @@ class ConnectionsConfig:
             linkedin_client_secret=get("LINKEDIN_CLIENT_SECRET"),
             x_client_id=get("X_CLIENT_ID"),
             x_client_secret=get("X_CLIENT_SECRET"),
-            pfm_jwt_token=get("PFM_JWT_TOKEN"),
+            pfm_jwt_token=get("PFM_JWT_TOKEN") or get("PFM_API_KEY"),
             google_client_id=get("GOOGLE_OAUTH_CLIENT_ID"),
             google_client_secret=get("GOOGLE_OAUTH_CLIENT_SECRET"),
             google_redirect_uri=get("GOOGLE_OAUTH_REDIRECT_URI"),

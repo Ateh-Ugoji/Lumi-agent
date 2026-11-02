@@ -259,7 +259,10 @@ export default function SidebarNav({
   });
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const [menuChatId, setMenuChatId] = useState<string | null>(null);
+  // The chat menu is portaled to <body>: an inline dropdown is painted under the
+  // next chat row (both rows are stacking contexts at z-index 10), so clicks on
+  // "Delete chat" landed on the row below instead of the menu.
+  const [menuChat, setMenuChat] = useState<{ id: string; rect: DOMRect } | null>(null);
   const [avatarFailed, setAvatarFailed] = useState(false);
   const workspaceButtonRef = useRef<HTMLButtonElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -282,16 +285,24 @@ export default function SidebarNav({
   }, [avatarHandle]);
 
   useEffect(() => {
-    if (!menuChatId) return;
+    if (!menuChat) return;
     const close = (event: PointerEvent) => {
       const target = event.target as Element;
-      if (!target.closest("[data-chat-menu]")) {
-        setMenuChatId(null);
+      if (
+        !target.closest("[data-chat-menu-portal]") &&
+        !target.closest("[data-chat-menu-trigger]")
+      ) {
+        setMenuChat(null);
       }
     };
+    const closeOnScroll = () => setMenuChat(null);
     document.addEventListener("pointerdown", close);
-    return () => document.removeEventListener("pointerdown", close);
-  }, [menuChatId]);
+    window.addEventListener("scroll", closeOnScroll, true);
+    return () => {
+      document.removeEventListener("pointerdown", close);
+      window.removeEventListener("scroll", closeOnScroll, true);
+    };
+  }, [menuChat]);
 
   useEffect(() => {
     if (!workspaceOpen) return;
@@ -533,7 +544,7 @@ export default function SidebarNav({
           <GlideGroup>
             {visibleRecents.map((item) => {
               const active = item.label === selectedTitle;
-              const isMenuOpen = menuChatId === item.id;
+              const isMenuOpen = menuChat?.id === item.id;
               return (
                 <div
                   key={item.id}
@@ -564,10 +575,16 @@ export default function SidebarNav({
                   </button>
                   <button
                     type="button"
+                    data-chat-menu-trigger
                     aria-label="Chat options"
                     onClick={(e) => {
                       e.stopPropagation();
-                      setMenuChatId(isMenuOpen ? null : item.id);
+                      if (menuChat?.id === item.id) {
+                        setMenuChat(null);
+                      } else {
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        setMenuChat({ id: item.id, rect });
+                      }
                     }}
                     className={`${styles.chatMenuBtn} ${
                       isMenuOpen ? styles.chatMenuBtnOpen : ""
@@ -575,22 +592,6 @@ export default function SidebarNav({
                   >
                     <IconDots size={14} />
                   </button>
-                  {isMenuOpen && (
-                    <div className={styles.chatMenuDropdown}>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setMenuChatId(null);
-                          onDeleteChat?.(item.id);
-                        }}
-                        className={styles.chatMenuItemDelete}
-                      >
-                        <IconTrash size={14} />
-                        <span>Delete chat</span>
-                      </button>
-                    </div>
-                  )}
                 </div>
               );
             })}
@@ -627,6 +628,35 @@ export default function SidebarNav({
           </button>
         </div>
       </div>
+      {menuChat &&
+        createPortal(
+          <div
+            data-chat-menu-portal
+            className={styles.chatMenuDropdownPortal}
+            style={{
+              position: "fixed",
+              top: menuChat.rect.bottom + 4,
+              left: Math.max(8, menuChat.rect.right - 130),
+              zIndex: 99999,
+            }}
+          >
+            <button
+              type="button"
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                const chatId = menuChat.id;
+                setMenuChat(null);
+                onDeleteChat?.(chatId);
+              }}
+              className={styles.chatMenuItemDelete}
+            >
+              <IconTrash size={14} />
+              <span>Delete chat</span>
+            </button>
+          </div>,
+          document.body,
+        )}
     </aside>
   );
 }

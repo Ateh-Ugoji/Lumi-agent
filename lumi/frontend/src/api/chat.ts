@@ -90,7 +90,7 @@ export async function streamChatMessage(
   message: string,
   onEvent: (event: StreamEvent) => void,
   opts?: { signal?: AbortSignal; idleMs?: number },
-): Promise<{ content: string; tool_executions: ToolExecution[] }> {
+): Promise<{ content: string; tool_executions: ToolExecution[]; completed: boolean }> {
   const response = await openStream("/chat/stream", {
     method: "POST",
     body: { profile_id: profileId, message },
@@ -112,6 +112,9 @@ export async function streamChatMessage(
   let buffer = "";
   let finalResult = { content: "", tool_executions: [] as ToolExecution[] };
   let sawEnd = false;
+  // Only a `done` event means the agent finished the turn. A stream that
+  // closes without one was cut off (network drop, server restart).
+  let sawDone = false;
 
   const handle = (payload: string) => {
     let parsed: StreamEvent;
@@ -123,6 +126,7 @@ export async function streamChatMessage(
     onEvent(parsed);
     if (parsed.type === "done" || parsed.type === "error") sawEnd = true;
     if (parsed.type === "done") {
+      sawDone = true;
       finalResult = { content: parsed.content, tool_executions: parsed.tool_executions || [] };
     }
   };
@@ -151,14 +155,12 @@ export async function streamChatMessage(
     payloads.forEach(handle);
   }
   if (buffer.trim()) parseSseChunk(`${buffer}\n`).payloads.forEach(handle);
-  if (!sawEnd) {
-    throw new ApiError(
-      0,
-      "stream_incomplete",
-      "The agent's reply was cut off before it finished. Try again.",
-    );
+  if (!sawEnd && !sawDone) {
+    // Cut off mid-flight: hand back what arrived, flagged as incomplete, so the
+    // chat can say the agent was interrupted instead of retrying the whole turn.
+    return { ...finalResult, completed: false };
   }
-  return finalResult;
+  return { ...finalResult, completed: sawDone };
 }
 
 export type ChatHistoryMessage = { id: number; role: string; content: string; created_at: string };

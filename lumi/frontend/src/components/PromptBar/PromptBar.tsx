@@ -312,6 +312,8 @@ export default function PromptBar({
   text,
   onTextChange,
   busy = false,
+  history = [],
+  focusKey = 0,
 }: {
   variant?: string;
   demo?: boolean;
@@ -321,6 +323,10 @@ export default function PromptBar({
   text?: string;
   onTextChange?: (value: string) => void;
   busy?: boolean;
+  /** Messages already sent in this chat, oldest first — walked with ArrowUp. */
+  history?: string[];
+  /** Changing this focuses the composer (used by a message's Edit button). */
+  focusKey?: number;
 }) {
   const pill = variant === "Pill";
   const controlled = text !== undefined;
@@ -328,6 +334,9 @@ export default function PromptBar({
   const draft = controlled ? (text as string) : innerDraft;
   const draftRef = useRef(draft);
   draftRef.current = draft;
+  // ArrowUp / ArrowDown walk what was already sent; -1 is the live draft.
+  const [historyIdx, setHistoryIdx] = useState(-1);
+  const liveDraftRef = useRef("");
 
   const setDraft = (next: string | ((current: string) => string)) => {
     const value =
@@ -376,6 +385,13 @@ export default function PromptBar({
   const composerAnchorRef = useRef<HTMLDivElement>(null);
   const controlsRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  // Edit-from-message: take focus and forget the history position.
+  useEffect(() => {
+    if (!focusKey) return;
+    setHistoryIdx(-1);
+    inputRef.current?.focus();
+  }, [focusKey]);
   const measureRef = useRef<HTMLSpanElement>(null);
   const modelRef = useRef<HTMLButtonElement>(null);
   const rowRefs = useRef<(HTMLButtonElement | null)[]>([]);
@@ -712,6 +728,8 @@ export default function PromptBar({
     setDraft("");
     setAttachments([]);
     closeMenus();
+    setHistoryIdx(-1);
+    liveDraftRef.current = "";
   };
 
   // --- real voice capture ------------
@@ -1124,6 +1142,41 @@ export default function PromptBar({
                     pick(rows[Math.min(active, rows.length - 1)]);
                     return;
                   }
+                }
+                if (
+                  event.key === "ArrowUp" &&
+                  !event.shiftKey &&
+                  history.length > 0 &&
+                  (draft === "" ||
+                    (event.currentTarget.selectionStart === 0 &&
+                      event.currentTarget.selectionEnd === 0))
+                ) {
+                  event.preventDefault();
+                  if (historyIdx < 0) liveDraftRef.current = draft;
+                  const next = Math.min(historyIdx + 1, history.length - 1);
+                  const recalled = history[history.length - 1 - next];
+                  setHistoryIdx(next);
+                  setDraft(recalled);
+                  requestAnimationFrame(() => {
+                    const el = inputRef.current;
+                    el?.setSelectionRange(recalled.length, recalled.length);
+                  });
+                  return;
+                }
+                if (event.key === "ArrowDown" && historyIdx >= 0) {
+                  event.preventDefault();
+                  const next = historyIdx - 1;
+                  setHistoryIdx(next);
+                  const value =
+                    next < 0
+                      ? liveDraftRef.current
+                      : history[history.length - 1 - next];
+                  setDraft(value);
+                  requestAnimationFrame(() => {
+                    const el = inputRef.current;
+                    el?.setSelectionRange(value.length, value.length);
+                  });
+                  return;
                 }
                 if (event.key === "Escape") {
                   setDismissed(true);

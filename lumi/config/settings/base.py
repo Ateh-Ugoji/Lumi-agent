@@ -6,6 +6,15 @@ variables that already exist in the process environment. No value is ever writte
 
 from __future__ import annotations
 
+import os
+
+# Clamp multi-threaded memory-buffer allocation before any BLAS library loads
+# (NumPy/Chroma/ONNX arrive through lumi_ai). On Windows with many cores,
+# OpenBLAS otherwise dies with "memory allocation still failed after 10 retries".
+os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
+os.environ.setdefault("OMP_NUM_THREADS", "1")
+os.environ.setdefault("MKL_NUM_THREADS", "1")
+
 from pathlib import Path
 
 from corsheaders.defaults import default_headers

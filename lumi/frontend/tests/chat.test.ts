@@ -109,8 +109,11 @@ test("streamChatMessage refuses a 200 that is an HTML page, not the agent", asyn
 test("streamChatMessage reports a stream that ends without a final event", async () => {
   const restore = mockFetch(() => sse({ type: "tool_start", tool: "get_posts", arguments: {} }));
   try {
-    const err = await rejection(streamChatMessage(1, "hola", () => {}));
-    assert.equal(err.code, "stream_incomplete");
+    // A stream that closes before `done` is not an error: it resolves with
+    // completed=false so the chat can show the interrupted-turn notice.
+    const result = await streamChatMessage(1, "hola", () => {});
+    assert.equal(result.completed, false);
+    assert.equal(result.content, "");
   } finally {
     restore();
   }
