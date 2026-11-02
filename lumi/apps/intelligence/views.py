@@ -12,16 +12,28 @@ import time
 from typing import Any
 
 from asgiref.sync import async_to_sync
+from django.db import transaction
 from rest_framework import serializers, status
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.core.choices import IngestSource, Platform
 from apps.core.errors import ApiError
 from apps.core.permissions import IsProfileOwner
 from apps.core.throttles import ChatUserThrottle
+from apps.intelligence.models import (
+    Framework,
+    FrameworkEvidence,
+    NichePreference,
+    NicheReport,
+)
+from apps.intelligence.serializers import (
+    ActiveNichePreferenceSerializer,
+    NicheReportIngestSerializer,
+)
 from apps.intelligence.wiring import get_wiring
-from apps.profiles.models import Post, SocialProfile
+from apps.profiles.models import MetricSnapshot, Post, SocialHandle, SocialProfile
 from lumi_ai.generation.flow import GenerationFailed, GenerationResult
 from lumi_ai.generation.platforms import PLATFORMS
 from lumi_ai.generation.types import GenerationBrief
@@ -243,4 +255,152 @@ class TranscribeView(APIView):
                 "text": result.text,
                 "duration_ms": int((time.monotonic() - started) * 1000),
             }
+        )
+
+
+class ActiveNichePreferenceView(APIView):
+    """Retrieve active niche keywords and preferences for dynamic search."""
+
+    permission_classes = [IsProfileOwner]
+    throttle_classes = [ChatUserThrottle]
+
+    def get(self, request):
+        profile = getattr(request, "profile", None)
+        if profile is None:
+            profile = request.user.social_profiles.select_related("handle").first()
+            if not profile:
+                raise ApiError("not_found", "No hay perfiles configurados.")
+
+        platform = profile.handle.platform if profile.handle else "x"
+        pref = (
+            NichePreference.objects.filter(profile=profile, is_active=True)
+            .prefetch_related("keywords", "handles__handle")
+            .first()
+        )
+
+        if pref:
+            keywords = [k.keyword for k in pref.keywords.all()]
+            handles = [
+                h.handle.handle_display or h.handle.handle_normalized
+                for h in pref.handles.all()
+            ]
+            niche_key = pref.niche_key
+            title = pref.title
+        else:
+            niche_key = f"{platform}:global"
+            title = f"{platform.capitalize()} Creator"
+            keywords = ["marketing", "content creation", "growth"]
+            handles = []
+
+        resp_data = {
+            "profile_id": profile.pk,
+            "email": request.user.email,
+            "niche_key": niche_key,
+            "title": title,
+            "keywords": keywords,
+            "handles": handles,
+            "is_active": bool(pref),
+        }
+        serializer = ActiveNichePreferenceSerializer(data=resp_data)
+        serializer.is_valid(raise_exception=True)
+        return Response(serializer.data)
+
+
+class NicheReportIngestView(APIView):
+    """Ingest multi-platform winner posts, frameworks, and metrics from automation."""
+
+    permission_classes = [IsProfileOwner]
+    throttle_classes = [ChatUserThrottle]
+
+    @transaction.atomic
+    def post(self, request):
+        serializer = NicheReportIngestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        profile = getattr(request, "profile", None)
+        if profile is None:
+            raise ApiError("validation_error", "profile_id es obligatorio.")
+
+        report = NicheReport.objects.create(
+            profile=profile,
+            query=data["query"],
+            niche=data["niche"],
+            status=data["status"],
+            posts_analyzed=data["posts_analyzed"],
+            winner_count=data["winner_count"],
+            peers_analyzed=data["peers_analyzed"],
+            report=data.get("report") or {},
+            origin=data["origin"],
+        )
+
+        post_map: dict[str, Post] = {}
+        for post_data in data.get("posts", []):
+            platform = post_data["platform"].lower()
+            if platform in Platform.values:
+                raw_handle = post_data["author_handle"].lstrip("@").strip()
+                handle_norm = raw_handle.lower()
+                handle_obj, _ = SocialHandle.objects.get_or_create(
+                    platform=platform,
+                    handle_normalized=handle_norm,
+                    defaults={
+                        "handle_display": post_data["author_handle"],
+                        "display_name": post_data.get("author_display_name", "") or handle_norm,
+                        "avatar_url": post_data.get("author_avatar_url", "") or "",
+                    },
+                )
+                post_obj, _ = Post.objects.get_or_create(
+                    author=handle_obj,
+                    platform_post_id=post_data["platform_post_id"][:64],
+                    defaults={
+                        "caption": post_data.get("caption", ""),
+                        "url": post_data.get("url", ""),
+                        "published_at": post_data.get("published_at"),
+                        "source": IngestSource.XPOZ,
+                    },
+                )
+                post_map[post_data["platform_post_id"]] = post_obj
+
+                if any(
+                    post_data.get(k) is not None
+                    for k in ("likes", "comments", "reposts", "views")
+                ):
+                    MetricSnapshot.objects.create(
+                        post=post_obj,
+                        source=IngestSource.XPOZ,
+                        likes=post_data.get("likes"),
+                        comments=post_data.get("comments"),
+                        shares=post_data.get("reposts"),
+                        views=post_data.get("views"),
+                    )
+
+        created_frameworks = []
+        for fw_data in data.get("frameworks", []):
+            fw_obj = Framework.objects.create(
+                report=report,
+                name=fw_data["name"][:160],
+                description=fw_data.get("description", ""),
+                lift=fw_data.get("lift"),
+                confidence=fw_data.get("confidence"),
+                payload=fw_data.get("payload") or {},
+                ordinal=fw_data.get("ordinal", 0),
+            )
+            created_frameworks.append(fw_obj)
+
+            for pid in fw_data.get("evidence_platform_post_ids", []):
+                post_rec = post_map.get(pid)
+                if post_rec:
+                    FrameworkEvidence.objects.get_or_create(
+                        framework=fw_obj,
+                        post=post_rec,
+                    )
+
+        return Response(
+            {
+                "ok": True,
+                "report_id": report.pk,
+                "frameworks_count": len(created_frameworks),
+                "posts_saved": len(post_map),
+            },
+            status=status.HTTP_201_CREATED,
         )
