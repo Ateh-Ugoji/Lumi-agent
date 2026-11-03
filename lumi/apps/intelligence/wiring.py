@@ -151,6 +151,7 @@ class Wiring:
     retriever: Retriever
     posts: repos.PostRepo
     post_sync: OwnPostSync
+    competitors: CompetitorServices | None = None
 
 
 @functools.lru_cache(maxsize=1)
@@ -275,4 +276,5 @@ def get_wiring() -> Wiring:
         retriever,
         posts,
         post_sync,
+        competitors=competitors,
     )

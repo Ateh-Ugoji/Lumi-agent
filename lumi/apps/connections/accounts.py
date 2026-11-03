@@ -24,6 +24,7 @@ from django.db import DatabaseError, IntegrityError, connection, transaction
 from apps.core.errors import ApiError
 from apps.core.fields import TokenDecryptError, decrypt_value
 from apps.core.permissions import get_owned_profile
+from apps.profiles.models import SocialProfile
 from apps.profiles.services import get_or_create_profile, update_profile_avatar
 
 from .clients.pfm import PfmClient
@@ -356,7 +357,9 @@ def store_accounts(
     return len(infos)
 
 
-def _lock_account(provider: str, external_id: str, user_id: int) -> ConnectedAccount:
+def _lock_account(
+    provider: str, external_id: str, user_id: int
+) -> tuple[ConnectedAccount, bool]:
     """The row for (provider, external id), locked, created first when it is missing.
 
     Two requests can race to create the same account (React renders twice, a double click on
@@ -369,16 +372,18 @@ def _lock_account(provider: str, external_id: str, user_id: int) -> ConnectedAcc
         .filter(provider=provider, external_account_id=external_id)
     )
     row = rows.first()
+    is_new = False
     if row is None:
         try:
             with transaction.atomic():
                 ConnectedAccount.objects.create(
                     user_id=user_id, provider=provider, external_account_id=external_id
                 )
+                is_new = True
         except IntegrityError:
             pass
         row = rows.get()
-    return row
+    return row, is_new
 
 
 def _upsert(
@@ -392,7 +397,7 @@ def _upsert(
     own_token = (
         info.access_token is not None and info.access_token != tokens.access_token
     )
-    row = _lock_account(provider, info.external_id, user_id)
+    row, _ = _lock_account(provider, info.external_id, user_id)
     if row.user_id != user_id:
         raise AccountTaken
     row.platform = getattr(adapter, "platform", provider)
@@ -597,7 +602,7 @@ def sync_pfm_accounts(user) -> int:
     with transaction.atomic():
         for acc in remote:
             seen.add(acc.id)
-            row = _lock_account("pfm", acc.id, user.pk)
+            row, is_new = _lock_account("pfm", acc.id, user.pk)
             if row.user_id != user.pk:
                 continue
             row.platform = acc.platform[:20]
@@ -609,7 +614,8 @@ def sync_pfm_accounts(user) -> int:
                 else AccountStatus.REVOKED
             )
             if (
-                row.status == AccountStatus.ACTIVE
+                is_new
+                and row.status == AccountStatus.ACTIVE
                 and not row.social_profile_id
                 and row.handle
                 and row.platform in ("x", "linkedin", "facebook", "instagram", "tiktok")
@@ -627,6 +633,16 @@ def sync_pfm_accounts(user) -> int:
                 update_profile_avatar(
                     row.social_profile_id, acc.profile_photo_url, username=acc.username
                 )
+                prof = SocialProfile.objects.filter(pk=row.social_profile_id).first()
+                if prof and prof.bootstrapped_at is None:
+                    from apps.core import jobs
+
+                    jobs.enqueue(
+                        user.pk,
+                        "profile.bootstrap",
+                        profile_id=row.social_profile_id,
+                        dedupe_key=f"profile.bootstrap:{row.social_profile_id}",
+                    )
         ConnectedAccount.objects.filter(user=user, provider="pfm").exclude(
             external_account_id__in=seen
         ).update(status=AccountStatus.REVOKED)

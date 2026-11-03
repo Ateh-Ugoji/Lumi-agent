@@ -88,6 +88,15 @@ def link_account(user, provider: str, *, account_id: str, profile) -> dict[str, 
             social_profile=locked, updated_at=now
         )
         target.social_profile_id = locked.pk
+        if target.status == AccountStatus.ACTIVE and locked.bootstrapped_at is None:
+            from apps.core import jobs
+
+            jobs.enqueue(
+                user.pk,
+                "profile.bootstrap",
+                profile_id=locked.pk,
+                dedupe_key=f"profile.bootstrap:{locked.pk}",
+            )
         return _body(
             provider,
             locked.pk,
