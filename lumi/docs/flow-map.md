@@ -82,14 +82,20 @@ flowchart TD
     Bootstrap -->|3. _ensure_own_analysis: baseline + lift + pending tags| OwnAn
     Posts -->|final metrics (nearest 72h)| OwnAn
 
-    %% Peer winners → frameworks (baseline-relative pipeline, live 2026-10-26)
-    Bootstrap -->|check_niche_trends| XPOZ
-    XPOZ -->|viral posts| Matches
-    Bootstrap -->|discover handles + fetch ~60 posts/account| XPOZ
+    %% Peer winners → frameworks (baseline-relative pipeline)
+    Bootstrap -->|4. auto-infer niche from own posts/bio| NichePref[(niche_preferences + keywords)]
+    NichePref -->|search niche posts -> rank authors| XPOZ
+    XPOZ -->|top discovered competitor handles (excl own)| CompHandles[Discovered Competitor Handles]
+    CompHandles -->|fetch ~60 posts/account| XPOZ
     Tools -->|discover_and_extract_niche_frameworks: search → handles| XPOZ
     XPOZ -->|posts for baseline + outlier scores| FW
-    FW -->|report JSON| PeerRep[(niche_framework_reports<br/>+ post_taggings)]
-    FW -->|report-derived bridge payload| PeerFW
+    FW -->|report JSON| PeerRep[(niche_reports + frameworks<br/>+ framework_evidence + posts)]
+    
+    %% Niche Radar & Email Alerts Ingestion
+    NichePref -->|GET /api/v1/intelligence/niche-preferences/active| Radar[Niche Radar Automation]
+    Radar -->|live search X / TikTok / IG / Reddit| XPOZ
+    Radar -->|POST /api/v1/intelligence/niche-reports/ingest| PeerRep
+    Radar -->|send HTML briefing| EmailAlert[User Email Digest / Alerts]
 
     %% Chat
     Chat -->|SSE| ChatRT
