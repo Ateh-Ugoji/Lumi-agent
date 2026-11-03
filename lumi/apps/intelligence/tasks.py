@@ -76,6 +76,10 @@ def bootstrap_profile(ctx: JobContext) -> dict[str, Any]:
             "voice.learn_failed",
             "No se pudo aprender tu voz. Se puede reintentar más tarde.",
         )
+    if refreshed.status == "needs_style_questions":
+        inherited = _inherit_anchor_voice_if_available(profile_id)
+        if inherited:
+            refreshed = inherited
 
     niche_info = async_to_sync(_ensure_niche_and_competitors)(wiring, profile_id, posts)
 
@@ -175,6 +179,52 @@ async def _infer_niche(
     return title, keywords[:5]
 
 
+def _inherit_anchor_voice_if_available(profile_id: int) -> Any | None:
+    from types import SimpleNamespace
+
+    from django.db import transaction
+
+    from apps.intelligence.models import GENERAL, VoiceProfile, VoiceSource
+    from apps.profiles.models import SocialProfile
+
+    prof = SocialProfile.objects.select_related("user").filter(pk=profile_id).first()
+    if not prof:
+        return None
+    anchor = (
+        VoiceProfile.objects.filter(
+            profile__user_id=prof.user_id,
+            is_current=True,
+            source=VoiceSource.POSTS,
+        )
+        .exclude(profile_id=profile_id)
+        .order_by("-created_at")
+        .first()
+    )
+    if not anchor:
+        return None
+
+    with transaction.atomic():
+        VoiceProfile.objects.filter(
+            profile_id=profile_id, platform=GENERAL
+        ).update(is_current=False)
+        clone = VoiceProfile.objects.create(
+            profile_id=profile_id,
+            platform=GENERAL,
+            version=1,
+            is_current=True,
+            source=VoiceSource.POSTS,
+            payload=anchor.payload,
+            model=anchor.model,
+            prompt_version=anchor.prompt_version,
+        )
+    return SimpleNamespace(
+        status="inherited",
+        voice=clone,
+        posts_found=anchor.examples.count(),
+        reason=f"inherited from anchor profile {anchor.profile_id}",
+    )
+
+
 async def _ensure_niche_and_competitors(
     wiring: Any,
     profile_id: int,
@@ -212,81 +262,152 @@ async def _ensure_niche_and_competitors(
     )()
     display_name = acc.display_name if acc else handle_str
 
+    MIN_POSTS_FOR_INDEPENDENT_PERSONA = 5
+    has_sufficient_volume = len(posts) >= MIN_POSTS_FOR_INDEPENDENT_PERSONA
+
     pref = await aio(
         lambda: NichePreference.objects.filter(
             profile_id=profile_id, is_active=True
         ).first()
     )()
     if pref is None:
-        title, keywords = await _infer_niche(
-            wiring,
-            handle=handle_str,
-            display_name=display_name,
-            platform=platform,
-            posts=posts,
-        )
-        try:
-            niche_key = make_niche_key(title)
-        except ValueError:
-            slug = slugify(handle_str) or "creator"
-            niche_key = f"{slug}:global"
+        # If low volume on this connection (e.g. LinkedIn with only 4 posts),
+        # inherit the niche from the user's primary/richer profile instead of guessing!
+        primary_pref = None
+        if not has_sufficient_volume:
 
-        def _save_pref() -> NichePreference:
-            p, _ = NichePreference.objects.update_or_create(
-                profile_id=profile_id,
-                is_active=True,
-                defaults={
-                    "niche_key": niche_key,
-                    "title": title[:200],
-                    "source": NicheSource.INFERRED,
-                },
-            )
-            for kw in keywords[:5]:
-                clean_kw = kw.strip().lower()[:100]
-                if clean_kw:
+            def _find_primary_pref() -> NichePreference | None:
+                from django.db.models import Count
+
+                ranked = (
+                    SocialProfile.objects.filter(
+                        user_id=profile.user_id,
+                        niche_preferences__is_active=True,
+                    )
+                    .exclude(pk=profile_id)
+                    .annotate(post_count=Count("handle__posts"))
+                    .order_by("-post_count")
+                    .first()
+                )
+                if ranked:
+                    return NichePreference.objects.filter(
+                        profile=ranked, is_active=True
+                    ).first()
+                return None
+
+            primary_pref = await aio(_find_primary_pref)()
+
+        if primary_pref is not None:
+
+            def _adopt_primary_pref() -> NichePreference:
+                p, _ = NichePreference.objects.update_or_create(
+                    profile_id=profile_id,
+                    is_active=True,
+                    defaults={
+                        "niche_key": primary_pref.niche_key,
+                        "title": primary_pref.title,
+                        "source": NicheSource.INFERRED,
+                    },
+                )
+                for kw in primary_pref.keywords.all():
                     NichePreferenceKeyword.objects.get_or_create(
                         preference=p,
-                        keyword=clean_kw,
+                        keyword=kw.keyword,
                     )
-            return p
+                return p
 
-        pref = await aio(_save_pref)()
+            pref = await aio(_adopt_primary_pref)()
+        else:
+            title, keywords = await _infer_niche(
+                wiring,
+                handle=handle_str,
+                display_name=display_name,
+                platform=platform,
+                posts=posts,
+            )
+            try:
+                niche_key = make_niche_key(title)
+            except ValueError:
+                slug = slugify(handle_str) or "creator"
+                niche_key = f"{slug}:global"
+
+            def _save_pref() -> NichePreference:
+                p, _ = NichePreference.objects.update_or_create(
+                    profile_id=profile_id,
+                    is_active=True,
+                    defaults={
+                        "niche_key": niche_key,
+                        "title": title[:200],
+                        "source": NicheSource.INFERRED,
+                    },
+                )
+                for kw in keywords[:5]:
+                    clean_kw = kw.strip().lower()[:100]
+                    if clean_kw:
+                        NichePreferenceKeyword.objects.get_or_create(
+                            preference=p,
+                            keyword=clean_kw,
+                        )
+                return p
+
+            pref = await aio(_save_pref)()
 
     has_handles = await aio(
         lambda: NichePreferenceHandle.objects.filter(preference=pref).exists()
     )()
     chosen_handles: list[str] = []
     if not has_handles and getattr(wiring, "competitors", None) is not None:
-        kw_list = await aio(
-            lambda: list(pref.keywords.values_list("keyword", flat=True))
-        )()
-        search_query = kw_list[0] if kw_list else pref.title
-        try:
-            cfg = wiring.config
-            found = await wiring.competitors.pipeline.social.search_posts(
-                platform, search_query, cfg.peer_discovery_posts
-            )
-            chosen_handles = _rank_authors(
-                found, exclude=own_clean, limit=cfg.peer_max_accounts
-            )
-
-            def _save_handles() -> None:
-                for ch in chosen_handles:
-                    hid = services.get_or_create_handle(
-                        platform, ch, origin=HandleOrigin.NICHE
+        if platform not in ("x", "instagram", "tiktok"):
+            # Networks like LinkedIn do not support keyword search; copy peer handles from primary profile
+            def _copy_primary_handles() -> list[str]:
+                copied = []
+                other_handles = (
+                    NichePreferenceHandle.objects.filter(
+                        preference__profile__user_id=profile.user_id
                     )
+                    .exclude(preference=pref)
+                    .select_related("handle")
+                )
+                for oh in other_handles:
                     NichePreferenceHandle.objects.get_or_create(
                         preference=pref,
-                        handle_id=hid,
+                        handle=oh.handle,
                     )
+                    copied.append(oh.handle.handle_normalized)
+                return copied
 
-            await aio(_save_handles)()
-        except Exception as exc:  # noqa: BLE001 - third-party social search failure must not crash bootstrap
-            log.warning(
-                "Competitor discovery search failed for profile %s: %s",
-                profile_id,
-                exc,
-            )
+            chosen_handles = await aio(_copy_primary_handles)()
+        else:
+            kw_list = await aio(
+                lambda: list(pref.keywords.values_list("keyword", flat=True))
+            )()
+            search_query = kw_list[0] if kw_list else pref.title
+            try:
+                cfg = wiring.config
+                found = await wiring.competitors.pipeline.social.search_posts(
+                    platform, search_query, cfg.peer_discovery_posts
+                )
+                chosen_handles = _rank_authors(
+                    found, exclude=own_clean, limit=cfg.peer_max_accounts
+                )
+
+                def _save_handles() -> None:
+                    for ch in chosen_handles:
+                        hid = services.get_or_create_handle(
+                            platform, ch, origin=HandleOrigin.NICHE
+                        )
+                        NichePreferenceHandle.objects.get_or_create(
+                            preference=pref,
+                            handle_id=hid,
+                        )
+
+                await aio(_save_handles)()
+            except Exception as exc:  # noqa: BLE001 - third-party social search failure must not crash bootstrap
+                log.warning(
+                    "Competitor discovery search failed for profile %s: %s",
+                    profile_id,
+                    exc,
+                )
     else:
         chosen_handles = await aio(
             lambda: list(
@@ -297,7 +418,11 @@ async def _ensure_niche_and_competitors(
         )()
 
     report_id = None
-    if chosen_handles and getattr(wiring, "competitors", None) is not None:
+    if (
+        chosen_handles
+        and getattr(wiring, "competitors", None) is not None
+        and platform in ("x", "instagram", "tiktok")
+    ):
         try:
             res = await run_peer_pipeline(
                 wiring.competitors.pipeline,

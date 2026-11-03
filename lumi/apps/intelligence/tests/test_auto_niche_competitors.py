@@ -225,3 +225,97 @@ class TestAutoTriggerOnAccountConnect:
             kind=BOOTSTRAP_KIND,
         ).first()
         assert job is not None
+
+
+@pytest.mark.django_db
+class TestCrossNetworkAnchorPersonaAndNicheInheritance:
+    def test_sparse_connection_inherits_primary_niche_and_voice(self, owner, make_profile):
+        from unittest.mock import MagicMock
+
+        from apps.intelligence.models import (
+            NicheReport,
+            ReportOrigin,
+            ReportStatus,
+            VoiceProfile,
+            VoiceSource,
+        )
+        from apps.intelligence.repos.reports import ReportRepo
+        from apps.intelligence.tasks import _inherit_anchor_voice_if_available
+
+        # 1. User has a rich profile on X (e.g. 50 posts) with an active voice and niche
+        profile_x = make_profile(owner, handle="atehofficial", platform="x")
+        VoiceProfile.objects.create(
+            profile=profile_x,
+            platform="x",
+            version=1,
+            is_current=True,
+            source=VoiceSource.POSTS,
+            payload={"tone": "punchy, analytical, authoritative", "rules": ["lead with a strong hook"]},
+        )
+        pref_x = NichePreference.objects.create(
+            profile=profile_x,
+            niche_key="ai-agents:global",
+            title="AI & Agentic Automation",
+            source=NicheSource.INFERRED,
+            is_active=True,
+        )
+        NichePreferenceKeyword.objects.create(preference=pref_x, keyword="ai agents")
+        NichePreferenceKeyword.objects.create(preference=pref_x, keyword="automation")
+
+        # And a validated niche report on X
+        report_x = NicheReport.objects.create(
+            profile=profile_x,
+            query="AI & Agentic Automation",
+            niche="ai-agents:global",
+            status=ReportStatus.OK,
+            posts_analyzed=30,
+            winner_count=5,
+            peers_analyzed=3,
+            report={"frameworks": [{"title": "Problem-Agitate-Solve"}]},
+            origin=ReportOrigin.PIPELINE,
+        )
+
+        # 2. User now connects LinkedIn, which has only 4 posts
+        profile_linkedin = make_profile(owner, handle="atehofficial", platform="linkedin")
+        sparse_posts = [
+            DummyPost("Excited to join LinkedIn!"),
+            DummyPost("Working on some tech projects."),
+            DummyPost("Happy Monday everyone."),
+            DummyPost("Great meeting today."),
+        ]
+
+        wiring = SimpleNamespace(
+            competitors=SimpleNamespace(
+                pipeline=SimpleNamespace(social=MagicMock(), config=AIConfig()),
+            ),
+            chain=None,
+            config=AIConfig(),
+        )
+
+        # Run niche & competitor discovery on LinkedIn
+        res = async_to_sync(_ensure_niche_and_competitors)(wiring, profile_linkedin.pk, sparse_posts)
+
+        # A) Must NOT rewrite the persona or create a random niche: it inherits the primary niche!
+        assert res["niche"] == "AI & Agentic Automation"
+        assert res["niche_key"] == "ai-agents:global"
+
+        pref_linkedin = NichePreference.objects.filter(profile=profile_linkedin, is_active=True).first()
+        assert pref_linkedin is not None
+        assert pref_linkedin.title == "AI & Agentic Automation"
+        assert NichePreferenceKeyword.objects.filter(preference=pref_linkedin).count() == 2
+
+        # B) Voice inheritance: when bootstrap runs on the sparse profile, it inherits anchor voice
+        inherited = _inherit_anchor_voice_if_available(profile_linkedin.pk)
+        assert inherited is not None
+        assert inherited.status == "inherited"
+
+        linkedin_voice = VoiceProfile.objects.filter(profile=profile_linkedin, is_current=True).first()
+        assert linkedin_voice is not None
+        assert linkedin_voice.payload["tone"] == "punchy, analytical, authoritative"
+
+        # C) Cross-network report fallback: ReportRepo.latest_report for LinkedIn returns the rich X report!
+        repo = ReportRepo()
+        latest = async_to_sync(repo.latest_report)(profile_linkedin.pk)
+        assert latest is not None
+        assert latest.id == report_x.pk
+        assert latest.query == "AI & Agentic Automation"

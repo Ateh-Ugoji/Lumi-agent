@@ -168,6 +168,22 @@ class ReportRepo:
             .order_by("-created_at", "-id")
             .first()
         )
+        if row is None:
+            from apps.profiles.models import SocialProfile
+
+            user_id = (
+                SocialProfile.objects.filter(pk=profile_id)
+                .values_list("user_id", flat=True)
+                .first()
+            )
+            if user_id:
+                row = (
+                    NicheReport.objects.filter(
+                        profile__user_id=user_id, status=ReportStatus.OK
+                    )
+                    .order_by("-created_at", "-id")
+                    .first()
+                )
         return _report_out(row) if row else None
 
     @aio
