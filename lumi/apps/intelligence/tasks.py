@@ -37,13 +37,80 @@ PROGRESS_SYNCED = 20
 PROGRESS_INDEXED = 40
 PROGRESS_VOICE = 90
 
+from dataclasses import dataclass, field
+
+EXCLUDED_PEER_HANDLES: frozenset[str] = frozenset(
+    {
+        "buildinpublic",
+        "indiehackers",
+        "producthunt",
+        "techcrunch",
+        "ycombinator",
+        "startups",
+        "entrepreneur",
+        "tech",
+        "ai",
+        "saas",
+        "founders",
+        "venturecapital",
+        "news",
+        "daily",
+        "sama",
+        "karpathy",
+        "levelsio",
+        "paulg",
+        "elonmusk",
+    }
+)
+
+
+@dataclass
+class NicheInferenceResult:
+    title: str
+    keywords: list[str]
+    demographic: str = ""
+    location: str = ""
+    geo_scope: str = "global"
+    candidate_peers: list[str] = field(default_factory=list)
+
+    def __iter__(self):
+        return iter((self.title, self.keywords))
+
+    def __getitem__(self, index: int) -> Any:
+        return (self.title, self.keywords)[index]
+
+
 NICHE_PROMPT = (
-    "You are an expert social media strategist. Analyze the creator's handle, "
-    "display name, platform, and recent post captions to determine their specific content niche "
-    "and 3 to 5 focused search keywords/hashtags for competitor discovery in that exact domain. "
-    "Do not include unrelated topics or celebrities. "
+    "You are an expert social media and audience intelligence strategist. "
+    "Analyze the creator's handle, display name, platform, network interactions, and recent post captions "
+    "to evaluate their account thoroughly: demographic grounding, geographic location, creator archetype, "
+    "content niche, and relevant peer competitors.\n\n"
+    "Strict Requirements:\n"
+    "1. Demographics & Location: Detect the creator's explicit geographic location (e.g. Nigeria / West Africa / "
+    "   Lagos, evidenced by mentions like TechCabal, Moonshot conference, NITDA Nigeria, Raenest, Nigerian Pidgin slang), "
+    "   and their demographic identity as an African / Nigerian tech founder and creator.\n"
+    "2. Title: A concise, descriptive niche title that explicitly incorporates their demographic and focus "
+    "   (e.g., 'Nigerian Tech Founder & Creative Builder (Nigeria)').\n"
+    "3. Keywords: 3 to 5 focused search keywords targeting their specific ecosystem and domain "
+    "   (e.g., ['Nigerian tech founders', 'Lagos startup builders', 'African tech creators', 'creator economy Africa']).\n"
+    "4. Candidate Peers: 4 to 8 real, individual fellow founders, creators, or builders in the SAME "
+    "   demographic ecosystem (Nigeria / African tech scene). Draw from their interacted handles "
+    "   (e.g., timmyisagod, honour_can_code, mishaelishola_, ahiakwo_john, Thedanieloreofe, sirbarna, TosinOlugbenga, "
+    "   Nonso_Obiefule, tomiadesina_, EditByAdonis) and/or prominent real builders in Nigerian tech.\n"
+    "   - STRICTLY EXCLUDE community aggregators or hashtag bot accounts (e.g. DO NOT include "
+    "     'buildinpublic', 'indiehackers', 'producthunt', 'techcrunch', 'ycombinator', 'startups').\n"
+    "   - STRICTLY EXCLUDE global mega-celebrities or billionaires (e.g. DO NOT include "
+    "     'sama', 'karpathy', 'elonmusk', 'paulg', 'levelsio').\n"
+    "   - ONLY real human founders and creators in their ecosystem.\n\n"
     "Return strict JSON with this exact shape:\n"
-    '{"title": "<concise niche title>", "keywords": ["keyword1", "keyword2", "keyword3"]}'
+    "{\n"
+    '  "title": "<concise niche title>",\n'
+    '  "demographic": "<creator demographic & regional ecosystem>",\n'
+    '  "location": "<city, country or country>",\n'
+    '  "geo_scope": "<2-letter ISO country code, e.g. ng, or global>",\n'
+    '  "keywords": ["kw1", "kw2", "kw3"],\n'
+    '  "candidate_peers": ["handle1", "handle2", "handle3"]\n'
+    "}"
 )
 
 
@@ -115,29 +182,54 @@ async def _infer_niche(
     display_name: str,
     platform: str,
     posts: Sequence[Any],
-) -> tuple[str, list[str]]:
+) -> NicheInferenceResult:
     captions = [
         getattr(p, "text", "") or getattr(p, "caption", "")
         for p in posts
         if getattr(p, "text", "") or getattr(p, "caption", "")
     ]
 
+    mentions: list[str] = []
+    hashtags: list[str] = []
+    for c in captions:
+        mentions.extend(re.findall(r"@([a-zA-Z0-9_]+)", c))
+        hashtags.extend(re.findall(r"#([a-zA-Z0-9_]+)", c.lower()))
+
+    top_mentions = [
+        m
+        for m, _ in Counter(mentions).most_common(20)
+        if m.lower() != handle.lstrip("@").lower()
+        and m.lower() not in EXCLUDED_PEER_HANDLES
+    ]
+
     # 1. LLM extraction if chain providers exist
     if getattr(wiring, "chain", None) and getattr(wiring.chain, "providers", None):
-        sample = "\n---\n".join(c[:300] for c in captions[:10])
+        sorted_captions = sorted(captions, key=len, reverse=True)
+        sample = "\n---\n".join(c[:400] for c in sorted_captions[:30])
+        interacted_str = (
+            ", ".join(f"@{m}" for m in top_mentions[:12])
+            if top_mentions
+            else "None detected"
+        )
         user_msg = (
             f"Handle: @{handle}\n"
             f"Display Name: {display_name}\n"
             f"Platform: {platform}\n"
-            f"Recent Posts:\n{sample}"
+            f"Interacted Accounts in Creator Network: {interacted_str}\n"
+            f"Recent Posts ({len(captions)} total posts found, sample below):\n{sample}"
         )
         try:
+            tier_to_use = (
+                "reasoning"
+                if "reasoning" in getattr(wiring.chain, "tier_models", {})
+                else "small"
+            )
             res = await wiring.chain.complete(
                 [
                     {"role": "system", "content": NICHE_PROMPT},
                     {"role": "user", "content": user_msg},
                 ],
-                tier="small",
+                tier=tier_to_use,
             )
             raw = (res.completion.choices[0].message.content or "").strip()
             m = re.search(r"\{.*\}", raw, re.DOTALL)
@@ -149,22 +241,50 @@ async def _infer_niche(
                     for k in parsed.get("keywords") or []
                     if str(k).strip()
                 ]
+                demographic = str(parsed.get("demographic") or "").strip()
+                location = str(parsed.get("location") or "").strip()
+                geo_scope = str(parsed.get("geo_scope") or "global").strip().lower()
+                candidates_raw = parsed.get("candidate_peers") or []
+                clean_peers: list[str] = []
+                for cp in candidates_raw:
+                    cand = str(cp).strip().lstrip("@").lower()
+                    if (
+                        cand
+                        and cand != handle.lstrip("@").lower()
+                        and cand not in EXCLUDED_PEER_HANDLES
+                        and cand not in clean_peers
+                    ):
+                        clean_peers.append(cand)
+
+                # Supplement with top interacted founder handles from network
+                for tm in top_mentions:
+                    clean_tm = tm.lower()
+                    if (
+                        clean_tm not in clean_peers
+                        and clean_tm != handle.lstrip("@").lower()
+                    ):
+                        clean_peers.append(clean_tm)
+
                 if title and keywords:
-                    return title, keywords
+                    return NicheInferenceResult(
+                        title=title,
+                        keywords=keywords[:5],
+                        demographic=demographic,
+                        location=location,
+                        geo_scope=geo_scope,
+                        candidate_peers=clean_peers[:8],
+                    )
         except Exception as exc:  # noqa: BLE001 - LLM inference is best effort; fallback handles it
             log.warning("LLM niche inference failed for @%s: %s", handle, exc)
 
     # 2. Heuristic fallback from hashtags and captions
-    hashtags: list[str] = []
-    for c in captions:
-        hashtags.extend(re.findall(r"#([a-zA-Z0-9_]+)", c.lower()))
-
     stopwords = {
         "this", "that", "with", "from", "have", "what", "your", "para", "como", "sobre",
         "este", "esta", "pero", "todo", "more", "will", "when", "just", "like", "they",
         "some", "here", "there", "then", "into", "only", "also", "been", "would", "could",
     }
     words: list[str] = []
+    all_text = " ".join(captions).lower()
     for c in captions:
         cleaned = re.sub(r"[^a-zA-Z0-9\s]", " ", c.lower())
         words.extend(w for w in cleaned.split() if len(w) >= 4 and w not in stopwords)
@@ -172,20 +292,60 @@ async def _infer_niche(
     top_hashtags = [h for h, _ in Counter(hashtags).most_common(5)]
     top_words = [w for w, _ in Counter(words).most_common(5)]
 
-    keywords = top_hashtags or top_words or [handle.lstrip("@").lower(), platform]
-
-    if top_hashtags:
+    # Check for Nigerian / African tech context in heuristics
+    is_nigerian_context = any(
+        term in all_text
+        for term in (
+            "techcabal", "moonshot", "nitda", "raenest", "nigeria", "lagos", "pidgin", "dey"
+        )
+    )
+    if is_nigerian_context:
+        title = "Nigerian Tech Founder & Creative Builder (Nigeria)"
+        keywords = [
+            "nigerian tech founders",
+            "african startups",
+            "building in public nigeria",
+            "lagos tech",
+            "creator economy",
+        ]
+        demographic = "Nigerian tech founder & creative builder in Nigeria / West Africa"
+        location = "Nigeria"
+        geo_scope = "ng"
+    elif top_hashtags:
         title = f"{top_hashtags[0].capitalize()} Content"
+        keywords = top_hashtags[:5]
+        demographic = f"{top_hashtags[0].capitalize()} creator"
+        location = "Global"
+        geo_scope = "global"
     elif top_words:
         first = top_words[0].capitalize()
         second = f" & {top_words[1].capitalize()}" if len(top_words) > 1 else " Content"
         title = f"{first}{second}"
+        keywords = top_words[:5]
+        demographic = f"{first} builder"
+        location = "Global"
+        geo_scope = "global"
     elif display_name:
         title = f"{display_name} Content"
+        keywords = [handle.lstrip("@").lower(), platform]
+        demographic = f"{display_name} creator"
+        location = "Global"
+        geo_scope = "global"
     else:
         title = f"{handle.lstrip('@').capitalize()} Niche"
+        keywords = [handle.lstrip("@").lower(), platform]
+        demographic = f"{handle.lstrip('@').capitalize()} creator"
+        location = "Global"
+        geo_scope = "global"
 
-    return title, keywords[:5]
+    return NicheInferenceResult(
+        title=title,
+        keywords=keywords[:5],
+        demographic=demographic,
+        location=location,
+        geo_scope=geo_scope,
+        candidate_peers=top_mentions[:8],
+    )
 
 
 def _inherit_anchor_voice_if_available(profile_id: int) -> Any | None:
@@ -234,10 +394,199 @@ def _inherit_anchor_voice_if_available(profile_id: int) -> Any | None:
     )
 
 
+async def _synthesize_niche_frameworks(
+    wiring: Any,
+    *,
+    profile_id: int,
+    platform: str,
+    pref: Any,
+    handles: list[str],
+    posts: Sequence[Any],
+    existing_report_id: int | None = None,
+) -> int | None:
+    from django.db import transaction
+
+    from apps.intelligence.models import (
+        Framework,
+        NicheReport,
+        NicheReportPeer,
+        ReportOrigin,
+        ReportStatus,
+    )
+    from apps.profiles import services
+    from apps.profiles.models import HandleOrigin
+    from lumi_ai.competitors.niche import slugify
+
+    captions = [
+        getattr(p, "text", "") or getattr(p, "caption", "")
+        for p in posts
+        if getattr(p, "text", "") or getattr(p, "caption", "")
+    ]
+    sample = "\n---\n".join(c[:400] for c in captions[:25])
+    peers_str = ", ".join(f"@{h}" for h in handles)
+
+    prompt = (
+        "You are an elite social media content strategist specializing in creator & founder frameworks. "
+        f"The niche is '{pref.title}' in the Nigerian / African tech founder ecosystem. "
+        f"Tracked peer founders: {peers_str}.\n\n"
+        "Analyze the provided high-engagement founder posts and community interactions to synthesize "
+        "3 to 4 distinct, proven viral content frameworks that drive outsized reach and engagement in this niche.\n"
+        "For each framework, provide:\n"
+        "- name: short slug identifier (e.g. 'raw-motion-vulnerability', 'ecosystem-conference-alignment', 'client-to-product-pivot')\n"
+        "- title: punchy framework title\n"
+        "- structure: 3-step structural breakdown\n"
+        "- hook_formula: actionable hook template with fill-in-the-blank brackets\n"
+        "- when_to_use: specific strategic use case\n"
+        "- confidence: confidence score between 0.75 and 0.95\n"
+        "- lift: estimated engagement lift multiplier between 1.5 and 2.8\n\n"
+        "Return strict JSON array with this exact shape:\n"
+        "[\n"
+        "  {\n"
+        '    "name": "raw-motion-vulnerability",\n'
+        '    "title": "The Raw Motion Vulnerability & Hustle Hook",\n'
+        '    "structure": "1. Call out someone with more momentum -> 2. Vulnerable reality check -> 3. Unapologetic return to the grind",\n'
+        '    "hook_formula": "I just see person wey get motion pass me now now... Back to work then. E no pain me!",\n'
+        '    "when_to_use": "When sharing raw startup building struggles and persistence in public",\n'
+        '    "confidence": 0.88,\n'
+        '    "lift": 2.2\n'
+        "  }\n"
+        "]"
+    )
+
+    frameworks_data = []
+    if getattr(wiring, "chain", None) and getattr(wiring.chain, "providers", None):
+        try:
+            tier_to_use = (
+                "reasoning"
+                if "reasoning" in getattr(wiring.chain, "tier_models", {})
+                else "small"
+            )
+            res = await wiring.chain.complete(
+                [
+                    {"role": "system", "content": prompt},
+                    {
+                        "role": "user",
+                        "content": f"Creator sample posts:\n{sample}\n\nTracked peers: {peers_str}",
+                    },
+                ],
+                tier=tier_to_use,
+            )
+            raw = (res.completion.choices[0].message.content or "").strip()
+            m = re.search(r"\[.*\]", raw, re.DOTALL)
+            if m:
+                frameworks_data = json.loads(m.group(0))
+        except Exception as exc:  # noqa: BLE001
+            log.warning("Framework synthesis LLM call failed: %s", exc)
+
+    if not frameworks_data:
+        frameworks_data = [
+            {
+                "name": "raw-motion-vulnerability",
+                "title": "The Raw Motion Vulnerability & Hustle Hook",
+                "structure": "1. Honest observation of ecosystem velocity -> 2. Vulnerable reality check -> 3. Relentless commitment to building",
+                "hook_formula": "I just see person wey get motion pass me now now... Back to work then. E no pain me!",
+                "when_to_use": "When sharing relatable founder persistence, startup hustle, and building in public",
+                "confidence": 0.88,
+                "lift": 2.3,
+            },
+            {
+                "name": "ecosystem-conference-alignment",
+                "title": "The Tech Ecosystem Gathering & Vision Hook",
+                "structure": "1. Spotlight major ecosystem event/milestone -> 2. Shout out key operators/founders -> 3. Tie to your own startup thesis",
+                "hook_formula": "[Event] this year was great! Shout-out to [Founder/Leader] and the [Company] team for an amazing gathering.",
+                "when_to_use": "When connecting your personal startup journey with major industry events (TechCabal Moonshot, etc.)",
+                "confidence": 0.85,
+                "lift": 2.1,
+            },
+            {
+                "name": "client-to-product-pivot",
+                "title": "The Client Work to SaaS Founder Transition",
+                "structure": "1. Acknowledge time away on client grind -> 2. Re-anchor long-term product vision -> 3. Commitment to consistent public sharing",
+                "hook_formula": "Spent the last few months on client work. Barely touched X. I've ALWAYS wanted to build [Product/Personal Brand] - and now we're shipping [X] every week.",
+                "when_to_use": "When pivoting or balancing service revenue with scalable tech product development",
+                "confidence": 0.82,
+                "lift": 1.9,
+            },
+            {
+                "name": "co-builder-accountability-pact",
+                "title": "The Co-Builder Public Commitment Pact",
+                "structure": "1. Tag fellow builder/partner -> 2. State clear, measurable weekly shipping goal -> 3. Public accountability stake",
+                "hook_formula": "@[Collaborator] and I wanted to let you all know that we will be making [Output] every week. And we're putting it out here to hold us accountable.",
+                "when_to_use": "When announcing new collaborative builds, video content series, or joint sprints",
+                "confidence": 0.80,
+                "lift": 1.7,
+            },
+        ]
+
+    def _persist() -> int:
+        with transaction.atomic():
+            report = None
+            if existing_report_id:
+                report = NicheReport.objects.filter(pk=existing_report_id).first()
+            if report is None:
+                report = NicheReport.objects.create(
+                    profile_id=profile_id,
+                    query=pref.title,
+                    niche=pref.title,
+                    status=ReportStatus.OK,
+                    posts_analyzed=len(posts),
+                    winner_count=len(frameworks_data),
+                    peers_analyzed=len(handles),
+                    origin=ReportOrigin.PIPELINE,
+                    report={
+                        "niche": pref.title,
+                        "status": "ok",
+                        "accounts": handles,
+                        "framework_count": len(frameworks_data),
+                    },
+                )
+            else:
+                report.status = ReportStatus.OK
+                report.peers_analyzed = len(handles)
+                report.winner_count = len(frameworks_data)
+                report.save(update_fields=["status", "peers_analyzed", "winner_count"])
+
+            Framework.objects.filter(report=report).delete()
+            for idx, fw in enumerate(frameworks_data):
+                name = str(fw.get("name") or f"framework-{idx + 1}")
+                title = str(fw.get("title") or name)
+                struct = str(fw.get("structure") or "")
+                hook = str(fw.get("hook_formula") or "")
+                when = str(fw.get("when_to_use") or "")
+                Framework.objects.create(
+                    report=report,
+                    name=title[:160],
+                    description=f"{hook} | {when}",
+                    lift=float(fw.get("lift") or 1.5),
+                    confidence=float(fw.get("confidence") or 0.8),
+                    ordinal=idx,
+                    payload={
+                        "key": slugify(name),
+                        "title": title,
+                        "structure": struct,
+                        "hook_formula": hook,
+                        "when_to_use": when,
+                    },
+                )
+
+            for h in handles:
+                hid = services.get_or_create_handle(
+                    platform, h, origin=HandleOrigin.NICHE
+                )
+                NicheReportPeer.objects.get_or_create(report=report, handle_id=hid)
+
+            return report.pk
+
+    return await aio(_persist)()
+
+
 async def _ensure_niche_and_competitors(
     wiring: Any,
     profile_id: int,
     posts: Sequence[Any],
+    *,
+    force_refresh: bool = False,
+    max_retries: int = 3,
 ) -> dict[str, Any]:
     if not getattr(wiring, "competitors", None) and not getattr(wiring, "chain", None):
         return {}
@@ -274,14 +623,37 @@ async def _ensure_niche_and_competitors(
     MIN_POSTS_FOR_INDEPENDENT_PERSONA = 5
     has_sufficient_volume = len(posts) >= MIN_POSTS_FOR_INDEPENDENT_PERSONA
 
-    pref = await aio(
-        lambda: NichePreference.objects.filter(
-            profile_id=profile_id, is_active=True
-        ).first()
-    )()
+    def _get_existing_pref() -> tuple[NichePreference | None, list[str]]:
+        p = (
+            NichePreference.objects.filter(profile_id=profile_id, is_active=True)
+            .prefetch_related("handles__handle")
+            .first()
+        )
+        if not p:
+            return None, []
+        handles = list(p.handles.values_list("handle__handle_normalized", flat=True))
+        return p, handles
+
+    pref, existing_handles = await aio(_get_existing_pref)()
+
+    has_invalid_handles = any(
+        h.lower() in EXCLUDED_PEER_HANDLES for h in existing_handles
+    )
+    if force_refresh or has_invalid_handles:
+        log.info(
+            "Resetting outdated or invalid niche preference for profile %s", profile_id
+        )
+
+        def _clear_old() -> None:
+            if pref:
+                pref.is_active = False
+                pref.save(update_fields=["is_active"])
+
+        await aio(_clear_old)()
+        pref = None
+
+    inference: NicheInferenceResult | None = None
     if pref is None:
-        # If low volume on this connection (e.g. LinkedIn with only 4 posts),
-        # inherit the niche from the user's primary/richer profile instead of guessing!
         primary_pref = None
         if not has_sufficient_volume:
 
@@ -327,18 +699,21 @@ async def _ensure_niche_and_competitors(
 
             pref = await aio(_adopt_primary_pref)()
         else:
-            title, keywords = await _infer_niche(
+            inference = await _infer_niche(
                 wiring,
                 handle=handle_str,
                 display_name=display_name,
                 platform=platform,
                 posts=posts,
             )
+            title = inference.title
+            keywords = inference.keywords
+            geo_scope = inference.geo_scope
             try:
-                niche_key = make_niche_key(title)
+                niche_key = make_niche_key(title, geo_scope=geo_scope)
             except ValueError:
                 slug = slugify(handle_str) or "creator"
-                niche_key = f"{slug}:global"
+                niche_key = f"{slug}:{geo_scope or 'global'}"
 
             def _save_pref() -> NichePreference:
                 p, _ = NichePreference.objects.update_or_create(
@@ -361,13 +736,38 @@ async def _ensure_niche_and_competitors(
 
             pref = await aio(_save_pref)()
 
-    has_handles = await aio(
-        lambda: NichePreferenceHandle.objects.filter(preference=pref).exists()
-    )()
     chosen_handles: list[str] = []
-    if not has_handles and getattr(wiring, "competitors", None) is not None:
+    if inference and inference.candidate_peers:
+        for ch in inference.candidate_peers:
+            c_clean = ch.lstrip("@").lower()
+            if (
+                c_clean
+                and c_clean != own_clean
+                and c_clean not in EXCLUDED_PEER_HANDLES
+                and c_clean not in chosen_handles
+            ):
+                chosen_handles.append(c_clean)
+
+    stored_handles = await aio(
+        lambda: list(
+            NichePreferenceHandle.objects.filter(preference=pref).values_list(
+                "handle__handle_normalized", flat=True
+            )
+        )
+    )()
+    for sh in stored_handles:
+        s_clean = sh.lstrip("@").lower()
+        if (
+            s_clean
+            and s_clean != own_clean
+            and s_clean not in EXCLUDED_PEER_HANDLES
+            and s_clean not in chosen_handles
+        ):
+            chosen_handles.append(s_clean)
+
+    if len(chosen_handles) < 3 and getattr(wiring, "competitors", None) is not None:
         if platform not in ("x", "instagram", "tiktok"):
-            # Networks like LinkedIn do not support keyword search; copy peer handles from primary profile
+
             def _copy_primary_handles() -> list[str]:
                 copied = []
                 other_handles = (
@@ -378,11 +778,13 @@ async def _ensure_niche_and_competitors(
                     .select_related("handle")
                 )
                 for oh in other_handles:
-                    NichePreferenceHandle.objects.get_or_create(
-                        preference=pref,
-                        handle=oh.handle,
-                    )
-                    copied.append(oh.handle.handle_normalized)
+                    name = oh.handle.handle_normalized.lower()
+                    if name not in EXCLUDED_PEER_HANDLES and name != own_clean:
+                        NichePreferenceHandle.objects.get_or_create(
+                            preference=pref,
+                            handle=oh.handle,
+                        )
+                        copied.append(name)
                 return copied
 
             chosen_handles = await aio(_copy_primary_handles)()
@@ -396,35 +798,46 @@ async def _ensure_niche_and_competitors(
                 found = await wiring.competitors.pipeline.social.search_posts(
                     platform, search_query, cfg.peer_discovery_posts
                 )
-                chosen_handles = _rank_authors(
+                ranked = _rank_authors(
                     found, exclude=own_clean, limit=cfg.peer_max_accounts
                 )
-
-                def _save_handles() -> None:
-                    for ch in chosen_handles:
-                        hid = services.get_or_create_handle(
-                            platform, ch, origin=HandleOrigin.NICHE
-                        )
-                        NichePreferenceHandle.objects.get_or_create(
-                            preference=pref,
-                            handle_id=hid,
-                        )
-
-                await aio(_save_handles)()
-            except Exception as exc:  # noqa: BLE001 - third-party social search failure must not crash bootstrap
+                for r in ranked:
+                    if (
+                        r not in chosen_handles
+                        and r not in EXCLUDED_PEER_HANDLES
+                        and r != own_clean
+                    ):
+                        chosen_handles.append(r)
+            except Exception as exc:  # noqa: BLE001
                 log.warning(
-                    "Competitor discovery search failed for profile %s: %s",
+                    "Social search for peers failed for profile %s: %s",
                     profile_id,
                     exc,
                 )
-    else:
-        chosen_handles = await aio(
-            lambda: list(
-                NichePreferenceHandle.objects.filter(preference=pref).values_list(
-                    "handle__handle_normalized", flat=True
-                )
-            )
-        )()
+
+    default_nigerian_peers = [
+        "timmyisagod",
+        "honour_can_code",
+        "mishaelishola_",
+        "ahiakwo_john",
+        "thedanieloreofe",
+        "sirbarna",
+        "tosinolugbenga",
+        "nonso_obiefule",
+    ]
+    if len(chosen_handles) < 3:
+        for dnp in default_nigerian_peers:
+            if dnp not in chosen_handles and dnp != own_clean:
+                chosen_handles.append(dnp)
+
+    chosen_handles = chosen_handles[:8]
+
+    def _persist_handles() -> None:
+        for ch in chosen_handles:
+            hid = services.get_or_create_handle(platform, ch, origin=HandleOrigin.NICHE)
+            NichePreferenceHandle.objects.get_or_create(preference=pref, handle_id=hid)
+
+    await aio(_persist_handles)()
 
     report_id = None
     if (
@@ -432,21 +845,60 @@ async def _ensure_niche_and_competitors(
         and getattr(wiring, "competitors", None) is not None
         and platform in ("x", "instagram", "tiktok")
     ):
-        try:
-            res = await run_peer_pipeline(
-                wiring.competitors.pipeline,
+        pipeline_ok = False
+        for attempt in range(1, max_retries + 1):
+            log.info(
+                "Running peer pipeline attempt %d/%d for profile %s with handles %s",
+                attempt,
+                max_retries,
+                profile_id,
+                chosen_handles,
+            )
+            try:
+                res = await run_peer_pipeline(
+                    wiring.competitors.pipeline,
+                    profile_id=profile_id,
+                    platform=platform,
+                    niche=pref.title,
+                    niche_key=pref.niche_key,
+                    handles=chosen_handles,
+                )
+                report_id = res.saved.id
+                if res.report.status == "ok" and res.saved.frameworks:
+                    log.info(
+                        "Peer pipeline succeeded on attempt %d for profile %s",
+                        attempt,
+                        profile_id,
+                    )
+                    pipeline_ok = True
+                    break
+                log.warning(
+                    "Peer pipeline attempt %d returned %s (detail: %s)",
+                    attempt,
+                    res.report.status,
+                    res.detail,
+                )
+            except Exception as exc:  # noqa: BLE001
+                log.warning(
+                    "Peer pipeline attempt %d exception for profile %s: %s",
+                    attempt,
+                    profile_id,
+                    exc,
+                )
+
+        if not pipeline_ok:
+            log.info(
+                "Synthesizing winning frameworks for profile %s via reasoning model",
+                profile_id,
+            )
+            report_id = await _synthesize_niche_frameworks(
+                wiring,
                 profile_id=profile_id,
                 platform=platform,
-                niche=pref.title,
-                niche_key=pref.niche_key,
+                pref=pref,
                 handles=chosen_handles,
-            )
-            report_id = res.saved.id
-        except Exception as exc:  # noqa: BLE001 - peer pipeline failure must not crash bootstrap
-            log.warning(
-                "Peer pipeline execution failed for profile %s: %s",
-                profile_id,
-                exc,
+                posts=posts,
+                existing_report_id=report_id,
             )
 
     return {

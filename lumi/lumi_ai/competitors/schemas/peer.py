@@ -17,7 +17,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 # --------------------------------------------------------------------------
@@ -324,6 +324,22 @@ class VoiceAnalysis(BaseModel):
     formality: int = Field(ge=1, le=5)
     humor: int = Field(ge=0, le=3)
     signature_phrases: list[str] = Field(default_factory=list, max_length=5)
+
+    @field_validator("humor", mode="before")
+    @classmethod
+    def _clamp_humor(cls, v: object) -> int:
+        try:
+            return max(0, min(3, int(v)))  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            return 0
+
+    @field_validator("formality", mode="before")
+    @classmethod
+    def _clamp_formality(cls, v: object) -> int:
+        try:
+            return max(1, min(5, int(v)))  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            return 3
 
 
 class StrategyAnalysis(BaseModel):

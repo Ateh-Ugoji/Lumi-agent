@@ -107,7 +107,7 @@ def _clean_handles(raw: Any) -> list[str]:
     seen: dict[str, None] = {}
     for h in raw or []:
         name = str(h).strip().lstrip("@").lower()
-        if name:
+        if name and name not in EXCLUDED_PEER_HANDLES:
             seen.setdefault(name)
     return list(seen)
 
@@ -276,24 +276,27 @@ def build(services: CompetitorServices) -> list[ToolSpec]:
                 views = [_framework_view(f, score) for f, score in ranked]
         examples: list[dict[str, Any]] = []
         if s.retriever is not None and topic.strip():
-            for hit in await s.retriever.similar_peer_posts(
-                ctx.profile_id,
-                topic,
-                limit,
-                platform=platform,
-                niche_key=report.niche_key,
-            ):
-                p = hit.item
-                examples.append(
-                    {
-                        "author": p.author_handle,
-                        "text": p.text[:EXAMPLE_TEXT_CHARS],
-                        "url": p.url,
-                        "views": p.metrics.views,
-                        "likes": p.metrics.likes,
-                        "distance": round(hit.distance, 3),
-                    }
-                )
+            try:
+                for hit in await s.retriever.similar_peer_posts(
+                    ctx.profile_id,
+                    topic,
+                    limit,
+                    platform=platform,
+                    niche_key=report.niche_key,
+                ):
+                    p = hit.item
+                    examples.append(
+                        {
+                            "author": p.author_handle,
+                            "text": p.text[:EXAMPLE_TEXT_CHARS],
+                            "url": p.url,
+                            "views": p.metrics.views,
+                            "likes": p.metrics.likes,
+                            "distance": round(hit.distance, 3),
+                        }
+                    )
+            except Exception as exc:  # noqa: BLE001
+                log.warning("similar_peer_posts failed: %s", exc)
         return {**head, "frameworks": views[:limit], "examples": examples}
 
     # -- analyze_pasted_post ------------------------------------------------
@@ -808,12 +811,38 @@ def _peer_post(post: PostIn, handle: str, niche_key: str | None) -> PeerPostIn:
     )
 
 
+EXCLUDED_PEER_HANDLES: frozenset[str] = frozenset(
+    {
+        "buildinpublic",
+        "indiehackers",
+        "producthunt",
+        "techcrunch",
+        "ycombinator",
+        "startups",
+        "entrepreneur",
+        "tech",
+        "ai",
+        "saas",
+        "founders",
+        "venturecapital",
+        "news",
+        "daily",
+        "sama",
+        "karpathy",
+        "levelsio",
+        "paulg",
+        "elonmusk",
+    }
+)
+
+
 def _rank_authors(posts: list[PostIn], *, exclude: str, limit: int) -> list[str]:
-    """Authors a search surfaced, most posts first, then most likes. The user's own handle is out."""
+    """Authors a search surfaced, most posts first, then most likes. The user's own handle and aggregator bots are out."""
     stats: dict[str, list[int]] = {}
+    exclude_clean = exclude.lstrip("@").lower()
     for p in posts:
         name = (p.author_handle or "").lstrip("@").lower()
-        if not name or name == exclude:
+        if not name or name == exclude_clean or name in EXCLUDED_PEER_HANDLES:
             continue
         row = stats.setdefault(name, [0, 0])
         row[0] += 1

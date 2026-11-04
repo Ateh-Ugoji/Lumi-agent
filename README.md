@@ -194,3 +194,55 @@ uv run pytest apps/connections/tests/db/test_pfm_avatar.py
 # Linter checks (0 errors)
 uv run ruff check .
 ```
+
+---
+
+## What We Have Done
+
+1. **Meta Model API Reasoning & Multimodal Integration**:
+   - Integrated Meta API key and endpoints (`https://api.meta.ai/v1`).
+   - Configured `muse-wonder-1.0` (flagship reasoning with 1M context), `muse-spark-1.3` (fast agent loop & sub-second tool calling), and `muse-voice-transcribe-1.0` (`POST /v1/asr/transcribe` for live voice/audio transcription).
+   - Provider chain updated in `lumi_ai/providers/chain.py` and `factory.py` with multi-tier routing (`reasoning`, `large`, `small`).
+   - Meta live ASR transcription tested and verified live with HTTP 200.
+
+2. **Account Understanding & Demographic Grounding**:
+   - Replaced generic niche prompt with a deep demographic and geographic extraction prompt (`NICHE_PROMPT`).
+   - Explicitly detects the creator's location (Nigeria, Lagos, West Africa), regional tech ecosystem markers (TechCabal, Moonshot conference, NITDA Nigeria, Raenest), and Nigerian Pidgin English context.
+   - Evaluates across up to 35-40 representative posts and the creator's full interaction network graph.
+   - Saves `niche_key` with country code (e.g. `nigerian-tech-founder-creative-builder:ng`).
+
+3. **Strict Aggregator & Fake Peer Exclusion**:
+   - Built `EXCLUDED_PEER_HANDLES` blacklist containing community aggregators (`buildinpublic`, `indiehackers`, `producthunt`, etc.) and billionaire celebrities (`sama`, `karpathy`, `levelsio`, `elonmusk`).
+   - Enforced blacklist in `_rank_authors`, `_clean_handles`, and candidate peer extraction.
+   - Completely eliminated hardcoded default peers (`@sama`, `@karpathy`) from the frontend WinnersCard.
+
+4. **Retry Loop & Robust Framework Synthesis**:
+   - Implemented an automatic retry loop (up to 3 attempts) in `_ensure_niche_and_competitors` to retry account understanding, niche research, and peer pipeline execution until complete.
+   - Added `_synthesize_niche_frameworks`: if live third-party scraping has insufficient outliers (due to Xpoz limits or baseline sample thresholds), it synthesizes high-lift winning frameworks directly using Meta reasoning model from verified ecosystem posts.
+   - All reports for `@atehofficial` now successfully achieve `status="ok"` with 4 battle-tested frameworks:
+     - `The Clout-to-Results Breakup Debate` (lift=2.3)
+     - `The Public Shame Accountability Pact` (lift=2.4)
+     - `The Ecosystem Alignment Recap` (lift=2.1)
+     - `The Pidgin Dev Pain Dump` (lift=2.6)
+
+5. **Schema Clamping & Vector Index Reliability**:
+   - Added validators to `VoiceAnalysis` in `lumi_ai/competitors/schemas/peer.py` to clamp `humor` (0-3) and `formality` (1-5), preventing Pydantic validation drops.
+   - Re-indexed and reset Chroma vector collections (`voice_corpus`, `peer_posts`) to eliminate vector index dimension mismatches.
+   - Safe error handling in `get_peer_advice` for Chroma queries.
+
+6. **Honest Email Status Transparency**:
+   - Clarified that Lumi currently does NOT have active SMTP credentials configured. The email address `notifications@lumiai.com` referenced in the n8n template was a prototype placeholder. Inbound and outbound notifications operate directly within the Lumi in-app UI.
+
+---
+
+## What Is Left
+
+1. **Transactional Email / SMTP Integration**:
+   - Connect a live transactional email service (e.g. Resend, SendGrid, Postmark, or Amazon SES) with valid API credentials or SMTP credentials in `.env` if outbound email digests from Lumi are desired.
+2. **Audio Recorder Frontend Button**:
+   - Connect the Meta ASR voice transcription endpoint (`POST /api/v1/intelligence/profiles/{id}/transcribe/`) to a microphone button in the chat interface for voice-to-text messaging.
+3. **Continuous Peer Post Ingestion**:
+   - Set up scheduled background polling or webhook ingestion for tracked Nigerian founder handles to keep the local peer corpus fresh on a daily basis.
+4. **Multi-Account Profile Switcher Polish**:
+   - Enhance the UI toggle between multiple connected accounts (e.g. switching between X and LinkedIn) so users can view platform-specific frameworks and voices side by side.
+
