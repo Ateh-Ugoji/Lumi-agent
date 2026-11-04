@@ -66,6 +66,8 @@ class ProviderSpec:
     #: another provider earlier in the same turn has none. Google documents this placeholder for
     #: history it did not produce; the provider then skips the check for those calls.
     tool_call_signature: str | None = None
+    #: Optional mapping of abstract tiers ("small", "large", "reasoning") to provider-specific model IDs.
+    tier_models: Mapping[str, str] | None = None
 
 
 def _with_tool_call_signature(
@@ -208,11 +210,13 @@ class LLMChain:
         return self._providers
 
     def tier_model(self, tier: str) -> str:
-        """Model id for a tier (``small`` or ``large``), from configuration."""
+        """Model id for a tier (``small``, ``large``, or ``reasoning``), from configuration."""
         if tier == "small":
             return self._config.groq_model_small
         if tier == "large":
             return self._config.groq_model_large
+        if tier == "reasoning":
+            return self._config.meta_reasoning_model
         raise ValueError(f"unknown tier {tier!r}")
 
     def is_resting(self, provider: str, model: str) -> bool:
@@ -235,16 +239,23 @@ class LLMChain:
         """
         if not self._providers:
             raise NoProviderConfigured("no LLM provider has an API key")
-        pinned = model or (self.tier_model(tier) if tier else None)
 
         candidates: list[tuple[ProviderSpec, str]] = []
         attempts: list[Attempt] = []
         for spec in self._providers:
-            if pinned and not spec.accepts_pinned_model:
-                continue
-            candidates.extend(
-                (spec, name) for name in ([pinned] if pinned else spec.models)
-            )
+            if model:
+                if not spec.accepts_pinned_model and model not in spec.models:
+                    continue
+                candidates.append((spec, model))
+            elif tier:
+                if spec.tier_models and tier in spec.tier_models:
+                    candidates.append((spec, spec.tier_models[tier]))
+                elif spec.accepts_pinned_model:
+                    candidates.append((spec, self.tier_model(tier)))
+                elif not spec.accepts_pinned_model:
+                    continue
+            else:
+                candidates.extend((spec, name) for name in spec.models)
         if not candidates:
             raise NoProviderConfigured("no provider can serve the requested model")
 

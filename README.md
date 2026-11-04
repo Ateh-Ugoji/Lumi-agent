@@ -36,10 +36,17 @@ Lumi solves the multi-account persona problem gracefully:
 - **Workflow**: Production 16-node n8n workflow located in [`automations/lumi_niche_radar_workflow.json`](./automations/lumi_niche_radar_workflow.json).
 - **Multi-Platform Search**: Queries Xpoz across X, TikTok, Instagram, and Reddit concurrently using dynamic niche keywords.
 - **Post Classification**: Detects 6 hook types (Contrarian, Curiosity Gap, Stat Shock, Pain Callout, Result Claim, How-To) and 6 cognitive frameworks (PAS, AIDA, BAB, Story Arc, Listicle, Tutorial).
-- **Email Digest**: Dispatches responsive dark-mode HTML email briefings with engagement metrics and 1-click remix links.
+- **Email Digest**: Dispatches responsive dark-mode HTML email briefings with engagement metrics and 1-click remix links from `notifications@lumiai.com` to the user's registered account email (`request.user.email`).
 - **Backend Ingestion**: Discovered outliers and frameworks sync back into PostgreSQL via:
   - `GET /api/v1/intelligence/niche-preferences/active`
   - `POST /api/v1/intelligence/niche-reports/ingest`
+
+### 6. Meta Model API Reasoning & Multimodal Engine
+Lumi uses Meta's Model API (`https://api.meta.ai/v1`) as its primary reasoning engine and voice pipeline:
+- **Flagship Reasoning (`muse-wonder-1.0`)**: 1M context window model executing deep analytical extraction, outlier post diagnosis, and cognitive framework extraction.
+- **Fast Agent Loop (`muse-spark-1.3`)**: Sub-second reasoning and tool-calling engine driving the conversational agent loop.
+- **Voice Transcription (`muse-voice-transcribe-1.0`)**: Direct audio perception endpoint (`POST /v1/asr/transcribe`) delivering real-time STT for voice memos and chat input.
+- **Tier Routing**: Abstract tiers (`reasoning`, `large`, `small`) mapped cleanly across providers with automatic fallback to Groq (`openai/gpt-oss-120b`, `openai/gpt-oss-20b`), Gemini, and OpenRouter.
 
 ---
 

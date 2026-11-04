@@ -22,11 +22,16 @@ ENV_FIELDS: tuple[str, ...] = (
     "openrouter_model",
     "gemini_model",
     "openlux_model",
+    "meta_reasoning_model",
+    "meta_fast_model",
+    "meta_voice_model",
     "whisper_model",
     "groq_api_key",
     "openrouter_api_key",
     "gemini_api_key",
     "openlux_api_key",
+    "meta_api_key",
+    "meta_base_url",
     "typesafe_api_key",
     "neatlogs_api_key",
     "chroma_api_key",
@@ -77,6 +82,10 @@ class AIConfig:
     openrouter_model: str = "meta-llama/llama-3.3-70b-instruct"
     gemini_model: str = "gemini-3.5-flash-lite"  # free-tier chat fallback behind Groq
     openlux_model: str = "qwen3.8-27b"
+    meta_reasoning_model: str = "muse-wonder-1.0"
+    meta_fast_model: str = "muse-spark-1.3"
+    meta_voice_model: str = "muse-voice-transcribe-1.0"
+    meta_base_url: str = "https://api.meta.ai/v1"
     whisper_model: str = "whisper-large-v3-turbo"
 
     # --- keys (None = absent; the callers decide whether that is fatal) ---
@@ -84,6 +93,7 @@ class AIConfig:
     openrouter_api_key: str | None = None
     gemini_api_key: str | None = None
     openlux_api_key: str | None = None
+    meta_api_key: str | None = None
     typesafe_api_key: str | None = None
     neatlogs_api_key: str | None = None
     chroma_api_key: str | None = None

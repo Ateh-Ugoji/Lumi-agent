@@ -15,6 +15,7 @@ from lumi_ai.providers.chain import LLMChain, ProviderSpec, UsageSink
 from lumi_ai.providers.urls import (
     GEMINI_OPENAI_BASE_URL,
     GROQ_BASE_URL,
+    META_BASE_URL,
     OPENLUX_BASE_URL,
     OPENROUTER_BASE_URL,
 )
@@ -89,10 +90,26 @@ def build_provider_specs(
         accepts_pinned_model=False,
     )
     add(
+        "meta",
+        config.meta_api_key,
+        config.meta_base_url or META_BASE_URL,
+        (config.meta_reasoning_model, config.meta_fast_model),
+        tier_models={
+            "reasoning": config.meta_reasoning_model,
+            "large": config.meta_reasoning_model,
+            "small": config.meta_fast_model,
+        },
+    )
+    add(
         "groq",
         config.groq_api_key,
         GROQ_BASE_URL,
         (config.groq_model_large, config.groq_model_fallback),
+        tier_models={
+            "reasoning": config.groq_model_large,
+            "large": config.groq_model_large,
+            "small": config.groq_model_small,
+        },
     )
     add(
         "gemini",
@@ -100,12 +117,22 @@ def build_provider_specs(
         GEMINI_OPENAI_BASE_URL,
         (config.gemini_model,),
         tool_call_signature="skip_thought_signature_validator",
+        tier_models={
+            "reasoning": config.gemini_model,
+            "large": config.gemini_model,
+            "small": config.gemini_model,
+        },
     )
     add(
         "openrouter",
         config.openrouter_api_key,
         OPENROUTER_BASE_URL,
         (config.openrouter_model,),
+        tier_models={
+            "reasoning": config.openrouter_model,
+            "large": config.openrouter_model,
+            "small": config.openrouter_model,
+        },
     )
     return specs
 

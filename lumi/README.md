@@ -56,7 +56,27 @@ Whenever an account connects or links via PFM, a `profile.bootstrap` job is queu
 
 ---
 
-## 4. Key API Endpoints
+## 4. Meta Reasoning Engine & Multimodal Capabilities
+
+Lumi integrates Meta's Model API (`https://api.meta.ai/v1`) as its primary reasoning and intelligence provider:
+
+### Model Allocation Matrix
+| Capability | Model | Provider / Endpoint | Fallback |
+| :--- | :--- | :--- | :--- |
+| **Deep Reasoning & Frameworks** | `muse-wonder-1.0` | Meta (`POST /v1/chat/completions`) | `openai/gpt-oss-120b` (Groq) |
+| **Fast Tool-Calling Agent Loop** | `muse-spark-1.3` | Meta (`POST /v1/chat/completions`) | `openai/gpt-oss-20b` (Groq) |
+| **Voice / Audio Transcription** | `muse-voice-transcribe-1.0` | Meta (`POST /v1/asr/transcribe`) | `whisper-large-v3-turbo` (Groq) |
+| **Visual Media Analysis (Planned)** | `sam-3.1` / `muse-image-1.0` | Meta Vision API | Gemini 3.5 Flash |
+
+### Multi-Tier Architecture
+- **Tier `reasoning` / `large`**: Dispatched to `muse-wonder-1.0` for competitor framework discovery, rubric evaluations, style extraction, and complex content generation.
+- **Tier `small`**: Dispatched to `muse-spark-1.3` for sub-second agent tool iterations and RAG extraction.
+- **Voice STT**: Native `Transcriber` uploads user voice audio directly to Meta's `/v1/asr/transcribe` with automatic fallback to Groq Whisper.
+- **Fault-Tolerant Fallback Chain**: `Meta` $\rightarrow$ `Groq` $\rightarrow$ `Gemini` $\rightarrow$ `OpenRouter`.
+
+---
+
+## 5. Key API Endpoints
 
 ### Intelligence & Niche Radar
 - `GET /api/v1/intelligence/niche-preferences/active`
