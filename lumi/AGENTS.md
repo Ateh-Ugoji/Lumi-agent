@@ -1,4 +1,4 @@
-﻿# Lumi — Agent Guide
+# Lumi — Agent Guide
 
 > **Nota de rutas:** el backend FastAPI que describe este archivo (`app/`, `alembic/`, `alembic.ini`, sus 5 scripts y `tests/`) se movió a `lumi/legacy/` como referencia: no se despliega ni se mantiene (ver `legacy/README.md`). El backend actual es Django (`apps/`, `config/`, `manage.py`, `lumi_ai/`). Donde este archivo diga `app/`, `alembic/` o `tests/` sin más, léelo como `legacy/app/`, `legacy/alembic/` y `legacy/tests/`.
 
@@ -19,6 +19,14 @@ Unless the user explicitly says "don't plan" for a given task:
 4. **Then execute the plan**, verifying at each step (lint: `uv run ruff check .`, tests: `uv run pytest`, and the production smoke test when touching startup/routes).
 5. **Default is ALWAYS plan-first for coding tasks.** No drive-by edits, no "just one quick change."
 6. **Big/serious changes must be synced in the same task.** Anything that adds or changes a pipeline, schema/table, tool, data flow, or provider requires updating, in the same change: this file, `docs/flow-map.md`, and `docs/flow-map.html`. Stale docs are treated as bugs — the flow map is the contract.
+7. **Always log progress and completed work thoroughly.**
+   - In every turn and upon task completion, explicitly log how far you have gone and what you have done in detail.
+   - Document:
+     - Exact files created or edited and the architectural decisions behind them.
+     - Specific tests executed, test counts, pass/fail status, and lint results.
+     - Active background daemons (Postgres, Uvicorn, Vite) and database ports.
+     - What was validated, any edge cases considered, and next steps.
+   - Never provide one-line vague answers or omit what was changed under the hood.
 
 ## LANGUAGE RULE
 

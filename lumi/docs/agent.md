@@ -43,3 +43,11 @@ Passing `model=` pins a single model per provider — repurpose tiering relies o
 - **`CURRENT PROFILE CONTEXT`** — `profile_id`, `handle`, `name` for this request.
 
 `connect_account` tool descriptions reference this prompt: they return `already_connected` for the seeded account and a real `[Connect X](<url>)` string for new connects — no example.com or fabricated URLs.
+
+## Logging & Execution Traceability
+
+Every agent execution and task implementation must maintain thorough progress logging:
+1. **Milestones & State**: Log how far the execution has progressed (e.g. Ingestion → Voice Extraction → Niche Discovery → Validation → Sync).
+2. **Detailed Itemization**: Document the exact files modified, database records created, and design trade-offs made.
+3. **Verification Audit**: Include test results, assertion counts, linter output, and live service health.
+4. **Email & Alert Routing**: Track which notification emails were sent, the sender configuration, and the dynamic recipient email resolved from `request.user.email`.
