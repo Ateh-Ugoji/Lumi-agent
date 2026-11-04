@@ -33,13 +33,6 @@ export type WinnersData = {
   posts?: WinnerPost[];
 };
 
-const DEFAULT_PEERS: WinnerPeer[] = [
-  { handle: "sama", name: "Sam Altman", role: "AI Systems & Scaling" },
-  { handle: "levelsio", name: "Pieter Levels", role: "Indie Hacking & Bootstrapping" },
-  { handle: "karpathy", name: "Andrej Karpathy", role: "Deep Learning & AI Dev" },
-  { handle: "paulg", name: "Paul Graham", role: "Startups & Essayist" },
-];
-
 export default function WinnersCard({
   data,
   onPill,
@@ -47,7 +40,7 @@ export default function WinnersCard({
   data?: WinnersData | null;
   onPill?: (text: string) => void;
 }) {
-  const peers = data?.peers && data.peers.length > 0 ? data.peers : DEFAULT_PEERS;
+  const peers = data?.peers || [];
   const frameworks = data?.frameworks || [];
   const posts = data?.posts || [];
 
@@ -142,27 +135,33 @@ export default function WinnersCard({
         )}
 
         {tab === "peers" && (
-          <div className={styles.peerGrid}>
-            {peers.map((peer, i) => {
-              const clean = peer.handle.replace(/^@/, "");
-              return (
-                <a
-                  key={i}
-                  href={`https://x.com/${clean}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={styles.peerCard}
-                  title={`View @${clean} on X`}
-                >
-                  <div className={styles.avatar}>{clean.slice(0, 2).toUpperCase()}</div>
-                  <div className={styles.peerInfo}>
-                    <span className={styles.peerHandle}>@{clean}</span>
-                    <span className={styles.peerRole}>{peer.name || peer.role || "Niche Leader"}</span>
-                  </div>
-                </a>
-              );
-            })}
-          </div>
+          peers.length > 0 ? (
+            <div className={styles.peerGrid}>
+              {peers.map((peer, i) => {
+                const clean = peer.handle.replace(/^@/, "");
+                return (
+                  <a
+                    key={i}
+                    href={`https://x.com/${clean}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={styles.peerCard}
+                    title={`View @${clean} on X`}
+                  >
+                    <div className={styles.avatar}>{clean.slice(0, 2).toUpperCase()}</div>
+                    <div className={styles.peerInfo}>
+                      <span className={styles.peerHandle}>@{clean}</span>
+                      <span className={styles.peerRole}>{peer.name || peer.role || "Niche Leader"}</span>
+                    </div>
+                  </a>
+                );
+              })}
+            </div>
+          ) : (
+            <div style={{ padding: "16px", color: "#9ca3af", fontSize: "13px" }}>
+              No peers discovered yet. Run a niche discovery scan to populate your real competitor benchmarks.
+            </div>
+          )
         )}
 
         {tab === "posts" && posts.length > 0 && (

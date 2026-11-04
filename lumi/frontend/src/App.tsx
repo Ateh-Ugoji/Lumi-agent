@@ -340,11 +340,22 @@ function extractWinnersData(toolResult: any, query: string, reply: string): Winn
       });
     }
 
-    if (Array.isArray(toolResult.source_handles)) {
-      data.peers = toolResult.source_handles.map((h: string) => ({
-        handle: h.replace(/^@/, ""),
-        role: "Niche Peer Leader",
-      }));
+    const rawPeers =
+      (Array.isArray(toolResult.peers) && toolResult.peers.length > 0)
+        ? toolResult.peers
+        : (Array.isArray(toolResult.competitors) && toolResult.competitors.length > 0)
+        ? toolResult.competitors
+        : (Array.isArray(toolResult.source_handles) ? toolResult.source_handles : []);
+
+    if (rawPeers.length > 0) {
+      data.peers = rawPeers.map((h: any) => {
+        const handleStr = typeof h === "string" ? h : (h.handle || "");
+        return {
+          handle: handleStr.replace(/^@/, ""),
+          name: typeof h === "object" ? h.name : undefined,
+          role: typeof h === "object" ? (h.role || "Competitor Peer") : "Competitor Peer",
+        };
+      });
     }
 
     const rawPosts = toolResult.peer_posts || toolResult.viral_posts || [];

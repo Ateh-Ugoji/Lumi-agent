@@ -216,8 +216,35 @@ def build(services: CompetitorServices) -> list[ToolSpec]:
     async def advice(
         ctx: ToolContext, topic: str, platform: str | None = None
     ) -> dict[str, Any]:
+        from apps.intelligence.models import NichePreference
+        from apps.intelligence.repos.aio import aio
+
+        pref = await aio(
+            lambda: NichePreference.objects.filter(
+                profile_id=ctx.profile_id, is_active=True
+            ).first()
+        )()
+        tracked_peers: list[str] = []
+        niche_title = ""
+        if pref:
+            niche_title = pref.title
+            tracked_peers = await aio(
+                lambda: list(
+                    pref.handles.values_list("handle__handle_normalized", flat=True)
+                )
+            )()
+
         report = await reports.latest_report(ctx.profile_id)
         if report is None:
+            if tracked_peers:
+                return {
+                    "niche": niche_title,
+                    "niche_key": pref.niche_key if pref else "",
+                    "source_handles": tracked_peers,
+                    "peers": tracked_peers,
+                    "competitors": tracked_peers,
+                    "message": f"Niche '{niche_title}' tracked with peers: {', '.join(tracked_peers)}. Framework extraction can be run via discover_and_extract_niche_frameworks.",
+                }
             return {
                 "error": "no niche analysis yet. Run discover_and_extract_niche_frameworks first.",
             }
@@ -226,16 +253,20 @@ def build(services: CompetitorServices) -> list[ToolSpec]:
             "status": report.status,
             "query": report.query,
             "niche_key": report.niche_key,
+            "niche_title": niche_title or report.niche_key,
             "peers_analyzed": report.peers_analyzed,
+            "source_handles": tracked_peers,
+            "peers": tracked_peers,
+            "competitors": tracked_peers,
             "analyzed_at": report.created_at.isoformat(),
         }
         if report.status != "ok":
             return {
                 **head,
-                "detail": report.detail,
+                "detail": report.detail or f"Niche '{niche_title}' has tracked peers: {', '.join(tracked_peers)}",
                 "frameworks": [],
                 "examples": [],
-                "error": f"the last niche analysis is {report.status}; there is no advice to give from it",
+                "message": f"Tracked peers for {niche_title}: {', '.join(tracked_peers)}",
             }
         limit = ctx.config.peer_advice_max_items
         views = [_framework_view(f, None) for f in report.frameworks]

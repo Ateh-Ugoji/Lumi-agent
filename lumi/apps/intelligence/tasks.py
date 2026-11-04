@@ -63,7 +63,16 @@ def bootstrap_profile(ctx: JobContext) -> dict[str, Any]:
     posts = async_to_sync(wiring.posts.list_posts)(
         profile_id, limit=wiring.config.voice_corpus_limit
     )
-    indexed = wiring.indexer.index_posts(posts)
+    try:
+        indexed = wiring.indexer.index_posts(posts)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("post indexing failed: %s; attempting reset of voice_corpus and retrying", exc)
+        try:
+            wiring.vectors.reset("voice_corpus")
+            indexed = wiring.indexer.index_posts(posts)
+        except Exception as retry_exc:  # noqa: BLE001
+            log.warning("retry post indexing failed: %s", retry_exc)
+            indexed = 0
     jobs.set_progress(ctx.id, PROGRESS_INDEXED)
 
     refreshed = async_to_sync(wiring.style.ensure_voice)(profile_id)
