@@ -71,6 +71,7 @@ class WinnerSelection:
     status: Literal["ok", "insufficient_data"]
     winners: list[PostStats]
     baselines: dict[str, AccountBaseline]
+    data_tier: Literal["high", "moderate", "sparse"] = "high"
     excluded: dict[str, int] = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)
 
@@ -80,7 +81,7 @@ class WinnerSelection:
             return None
         return (
             f"only {len(self.winners)} winners found "
-            f"(need {PeerConfig.MIN_WINNERS_FOR_REPORT}); thresholds were not lowered"
+            f"(need at least 3 for moderate tier, {PeerConfig.MIN_WINNERS_FOR_REPORT} for high); thresholds were not lowered"
         )
 
 
@@ -282,12 +283,25 @@ def select_winners(
     if len(eligible) > PeerConfig.TOP_N_WINNERS:
         _drop("top_n_cap", len(eligible) - PeerConfig.TOP_N_WINNERS)
 
+    num_winners = len(winners)
+    if num_winners >= PeerConfig.MIN_WINNERS_FOR_REPORT:
+        status: Literal["ok", "insufficient_data"] = "ok"
+        data_tier: Literal["high", "moderate", "sparse"] = "high"
+    elif num_winners >= 3:
+        status = "ok"
+        data_tier = "moderate"
+        warnings.append(
+            f"Report based on moderate sample of {num_winners} winners (data_tier=moderate)"
+        )
+    else:
+        status = "insufficient_data"
+        data_tier = "sparse"
+
     return WinnerSelection(
-        status="ok"
-        if len(winners) >= PeerConfig.MIN_WINNERS_FOR_REPORT
-        else "insufficient_data",
+        status=status,
         winners=winners,
         baselines={h: b for h, b in baselines.items()},
+        data_tier=data_tier,
         excluded=excluded,
         warnings=warnings,
     )

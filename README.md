@@ -48,6 +48,23 @@ Lumi uses Meta's Model API (`https://api.meta.ai/v1`) as its primary reasoning e
 - **Voice Transcription (`muse-voice-transcribe-1.0`)**: Direct audio perception endpoint (`POST /v1/asr/transcribe`) delivering real-time STT for voice memos and chat input.
 - **Tier Routing**: Abstract tiers (`reasoning`, `large`, `small`) mapped cleanly across providers with automatic fallback to Groq (`openai/gpt-oss-120b`, `openai/gpt-oss-20b`), Gemini, and OpenRouter.
 
+### 7. Continuous Peer Post Ingestion & Celery Sync
+- **Scheduled Background Job (`peer.sync`)**: Continuously monitors tracked ecosystem founder handles and active niche preferences.
+- **Fresh Post Ingestion**: Automatically pulls new public posts via `SocialData.fetch_user_posts`, deduplicates, and persists them to PostgreSQL through `PeerPostRepo`.
+- **Automatic Vector Indexing**: Immediately embeds and indexes fresh peer posts into Chroma `peer_posts` collection using `onnx-minilm-l6-v2`.
+- **Celery Task Registration**: Registered `@shared_task(name="intelligence.sync_peer_posts")` for Celery Beat and worker orchestration.
+
+### 8. Soft-Tiering Resilience Engine for Winner Selection
+- **Tri-Tier Degradation**: Replaces rigid hard floors with progressive degradation:
+  - **Tier A ($\ge 8$ Winners)**: Full statistical outlier analysis, baseline-relative z-scores, IQR filtering.
+  - **Tier B (3–7 Winners)**: Preserves verified winners and synthesizes frameworks with moderate confidence tiering rather than collapsing into `insufficient_data`.
+  - **Tier C ($< 3$ Winners)**: Activates reasoning model framework synthesis fallback (`_synthesize_niche_frameworks`) grounded in ecosystem posts and network interaction history.
+
+### 9. Semantic Competitor Badges & Multi-Account Switching
+- **Role Badges in `WinnersCard`**: Exposes semantic badges for Direct Competitors (blue), Parallel Founders (emerald), Aspirational Leaders (purple), and Co-Builders (amber) with match grading scores (`85% Match`) and ecosystem alignment tags (`🇳🇬 NG`).
+- **Side-by-Side Account Switcher**: Sidebar includes 1-click pill buttons for switching between connected accounts (e.g. `[ 𝕏 @atehofficial ] [ in @ateh ]`) with synchronized active profile states.
+- **Audio Voice Recorder**: Built-in chat composer microphone with real-time waveform animation and Meta ASR speech transcription.
+
 ---
 
 ## System Architecture

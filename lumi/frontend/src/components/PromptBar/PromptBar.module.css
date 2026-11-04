@@ -540,6 +540,26 @@
   background: currentColor;
 }
 
+.micTranscribing {
+  opacity: 0.8;
+  cursor: wait;
+}
+
+.micSpinner {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  border-top-color: var(--text);
+  animation: spin 700ms linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 /* ── Send button — original reference: tactile square ── */
 .sendBtn {
   grid-column: 5;

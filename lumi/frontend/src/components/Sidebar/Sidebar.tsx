@@ -6,6 +6,7 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
+import { type ProfileSummary } from "../../api";
 import { useLightMode } from "../../hooks/useLightMode";
 import GlideMenu from "./GlideMenu";
 import {
@@ -65,6 +66,9 @@ type SidebarNavProps = {
   onSignOut?: () => void;
   recents?: SidebarRecent[];
   userProfile?: { name: string; handle: string } | null;
+  profiles?: ProfileSummary[];
+  activeProfileId?: number | null;
+  onSelectProfile?: (id: number) => void;
 };
 
 
@@ -136,11 +140,17 @@ function RailButton({
 
 function WorkspaceMenu({
   position,
+  profiles,
+  activeProfileId,
+  onSelectProfile,
   onClose,
   onOpenSettings,
   onSignOut,
 }: {
   position: { top: number; left: number };
+  profiles?: ProfileSummary[];
+  activeProfileId?: number | null;
+  onSelectProfile?: (id: number) => void;
   onClose: () => void;
   onOpenSettings?: (section: string) => void;
   onSignOut?: () => void;
@@ -186,6 +196,45 @@ function WorkspaceMenu({
           </span>
         </button>
         <div className={styles.menuDivider} />
+
+        {profiles && profiles.length > 0 && (
+          <>
+            <div className={styles.menuSectionHeader}>Connected Accounts</div>
+            {profiles.map((p) => {
+              const isActive = p.id === activeProfileId;
+              const clean = p.handle.replace(/^@/, "");
+              return (
+                <button
+                  key={p.id}
+                  data-menu-row
+                  type="button"
+                  onClick={() => {
+                    onSelectProfile?.(p.id);
+                    onClose();
+                  }}
+                  className={`${styles.menuRow} ${isActive ? styles.menuRowActive : ""}`}
+                >
+                  <span className={styles.platformBadge}>
+                    {p.platform === "x" ? "𝕏" : p.platform === "linkedin" ? "in" : p.platform.slice(0, 2).toUpperCase()}
+                  </span>
+                  <div className={styles.menuProfileInfo}>
+                    <span className={styles.menuProfileHandle}>@{clean}</span>
+                    {p.name && p.name !== clean && (
+                      <span className={styles.menuProfileName}>{p.name}</span>
+                    )}
+                  </div>
+                  {isActive && (
+                    <span className={styles.menuCheck}>
+                      <IconCheckmarkSmall size={18} />
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+            <div className={styles.menuDivider} />
+          </>
+        )}
+
         {rows.map((item) => (
           <button
             key={item.label}
@@ -238,6 +287,9 @@ export default function SidebarNav({
   onSignOut,
   recents = [],
   userProfile = null,
+  profiles = [],
+  activeProfileId = null,
+  onSelectProfile,
 }: SidebarNavProps) {
   const [collapsed, setCollapsed] = useState(
     () => typeof window !== "undefined" && window.innerWidth < 900,
@@ -419,6 +471,9 @@ export default function SidebarNav({
           {workspaceOpen && (
             <WorkspaceMenu
               position={workspacePosition}
+              profiles={profiles}
+              activeProfileId={activeProfileId}
+              onSelectProfile={onSelectProfile}
               onClose={() => setWorkspaceOpen(false)}
               onOpenSettings={onOpenSettings}
               onSignOut={onSignOut}
@@ -446,6 +501,31 @@ export default function SidebarNav({
             <IconSidebarLeftArrow size={18} className={styles.rotate180} />
           </button>
         </div>
+
+        {profiles && profiles.length > 1 && !collapsed && (
+          <div className={styles.profileSwitcherBar}>
+            {profiles.map((p) => {
+              const isActive = p.id === activeProfileId;
+              const clean = p.handle.replace(/^@/, "");
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  title={`Switch to @${clean} (${p.platform.toUpperCase()})`}
+                  onClick={() => onSelectProfile?.(p.id)}
+                  className={`${styles.profileSwitcherPill} ${
+                    isActive ? styles.profileSwitcherPillActive : ""
+                  }`}
+                >
+                  <span className={styles.pillPlatformIcon}>
+                    {p.platform === "x" ? "𝕏" : p.platform === "linkedin" ? "in" : p.platform.slice(0, 2).toUpperCase()}
+                  </span>
+                  <span className={styles.pillHandle}>@{clean}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
 
         <GlideGroup>
           <RailButton

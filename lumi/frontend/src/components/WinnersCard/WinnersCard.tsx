@@ -6,7 +6,23 @@ export type WinnerPeer = {
   name?: string;
   avatarUrl?: string;
   role?: string;
+  peerRole?: "direct_competitor" | "parallel_founder" | "aspirational_leader" | "co_builder" | string;
+  gradingScore?: number;
+  relevance?: {
+    geo_alignment?: number;
+    icp_overlap?: number;
+  };
 };
+
+function formatPeerRole(role?: string): { label: string; kind: string } {
+  if (!role) return { label: "Niche Leader", kind: "default" };
+  const r = role.toLowerCase().replace(/[\s-]+/g, "_");
+  if (r.includes("direct") || r === "direct_competitor") return { label: "Direct Competitor", kind: "direct" };
+  if (r.includes("parallel") || r === "parallel_founder") return { label: "Parallel Founder", kind: "parallel" };
+  if (r.includes("aspiration") || r === "aspirational_leader") return { label: "Aspirational Leader", kind: "leader" };
+  if (r.includes("co_builder") || r.includes("cobuilder") || r === "collaborator") return { label: "Co-Builder", kind: "cobuilder" };
+  return { label: role, kind: "default" };
+}
 
 export type WinnerFramework = {
   name: string;
@@ -139,6 +155,7 @@ export default function WinnersCard({
             <div className={styles.peerGrid}>
               {peers.map((peer, i) => {
                 const clean = peer.handle.replace(/^@/, "");
+                const roleInfo = formatPeerRole(peer.peerRole || peer.role);
                 return (
                   <a
                     key={i}
@@ -148,10 +165,29 @@ export default function WinnersCard({
                     className={styles.peerCard}
                     title={`View @${clean} on X`}
                   >
-                    <div className={styles.avatar}>{clean.slice(0, 2).toUpperCase()}</div>
-                    <div className={styles.peerInfo}>
-                      <span className={styles.peerHandle}>@{clean}</span>
-                      <span className={styles.peerRole}>{peer.name || peer.role || "Niche Leader"}</span>
+                    <div className={styles.peerCardTop}>
+                      <div className={styles.peerCardLeft}>
+                        {peer.avatarUrl ? (
+                          <img src={peer.avatarUrl} alt={clean} className={styles.avatarImg} />
+                        ) : (
+                          <div className={styles.avatar}>{clean.slice(0, 2).toUpperCase()}</div>
+                        )}
+                        <div className={styles.peerInfo}>
+                          <span className={styles.peerHandle}>@{clean}</span>
+                          {peer.name && <span className={styles.peerName}>{peer.name}</span>}
+                        </div>
+                      </div>
+                      {peer.gradingScore !== undefined && (
+                        <span className={styles.matchBadge}>{Math.round(peer.gradingScore)}% Match</span>
+                      )}
+                    </div>
+                    <div className={styles.peerCardBottom}>
+                      <span className={`${styles.rolePill} ${styles[`role_${roleInfo.kind}`] || styles.role_default}`}>
+                        {roleInfo.label}
+                      </span>
+                      {peer.relevance?.geo_alignment && peer.relevance.geo_alignment >= 0.8 && (
+                        <span className={styles.geoPill}>🇳🇬 NG</span>
+                      )}
                     </div>
                   </a>
                 );

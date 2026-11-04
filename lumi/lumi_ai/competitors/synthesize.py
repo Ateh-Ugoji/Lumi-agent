@@ -197,17 +197,25 @@ def build_report(
     if selection.status == "insufficient_data":
         status = "insufficient_data"
         synthesis: SynthesisOutput | None = None
+        confidence_tier = "provisional"
     elif not tagged_ok:
         status = "failed"
         synthesis = None
+        confidence_tier = "provisional"
     else:
         status = "ok"
         synthesis = build_synthesis(lift_rows, taggings, winner_post_ids)
+        confidence_tier = (
+            "high"
+            if getattr(selection, "data_tier", None) == "high"
+            else ("moderate" if getattr(selection, "data_tier", None) == "moderate" else "provisional")
+        )
 
     return NicheFrameworkReport(
         niche=niche,
         generated_at=now,
         status=status,  # type: ignore[arg-type]
+        confidence_tier=confidence_tier,  # type: ignore[arg-type]
         accounts=accounts,
         winner_post_ids=winner_post_ids,
         posts_analyzed=len(tagged_ok),

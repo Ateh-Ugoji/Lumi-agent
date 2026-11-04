@@ -203,7 +203,33 @@ def test_enough_winners_is_ok() -> None:
         _post(chr(ord("a") + i), views=1500 + i, post_id=f"w{i}")
         for i in range(PeerConfig.MIN_WINNERS_FOR_REPORT)
     ]
-    assert _select(posts).status == "ok"
+    selection = _select(posts)
+    assert selection.status == "ok"
+    assert selection.data_tier == "high"
+
+
+def test_soft_tier_moderate_sample_3_to_7_winners() -> None:
+    # 4 winners -> status="ok", data_tier="moderate"
+    posts = [
+        _post(chr(ord("a") + i), views=1600 + i, post_id=f"mod_{i}")
+        for i in range(4)
+    ]
+    selection = _select(posts)
+    assert selection.status == "ok"
+    assert selection.data_tier == "moderate"
+    assert any("moderate sample of 4 winners" in w for w in selection.warnings)
+
+
+def test_soft_tier_sparse_sample_under_3_winners() -> None:
+    # 2 winners -> status="insufficient_data", data_tier="sparse"
+    posts = [
+        _post("a", views=2000, post_id="w1"),
+        _post("b", views=2500, post_id="w2"),
+    ]
+    selection = _select(posts)
+    assert selection.status == "insufficient_data"
+    assert selection.data_tier == "sparse"
+    assert "need at least 3 for moderate tier" in (selection.insufficient_reason or "")
 
 
 def test_unreliable_or_missing_baseline_excludes_the_account_with_a_warning() -> None:

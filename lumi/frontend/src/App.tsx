@@ -1347,6 +1347,10 @@ export default function App() {
           }}
           activeTitle={activeChat ? activeChat.title || null : null}
 
+          profiles={profiles}
+          activeProfileId={activeProfileId}
+          onSelectProfile={selectProfile}
+
           recents={recents}
           userProfile={
             activeProfile ? { name: activeProfile.name, handle: activeProfile.handle } : null

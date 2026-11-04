@@ -22,6 +22,7 @@ from collections.abc import Sequence
 from typing import Any
 
 from asgiref.sync import async_to_sync
+from celery import shared_task
 
 from apps.core import jobs
 from apps.core.jobs import JobContext, JobError
@@ -33,6 +34,7 @@ log = logging.getLogger(__name__)
 
 BOOTSTRAP_KIND = "profile.bootstrap"
 REFRESH_KIND = "profile.refresh"
+PEER_SYNC_KIND = "peer.sync"
 PROGRESS_SYNCED = 20
 PROGRESS_INDEXED = 40
 PROGRESS_VOICE = 90
@@ -948,3 +950,136 @@ def _sync(wiring: Any, profile_id: int) -> dict[str, Any] | None:
             exc,
         )
         return None
+
+
+@jobs.register(PEER_SYNC_KIND)
+def sync_peer_posts(ctx: JobContext) -> dict[str, Any]:
+    """Background job to continuously ingest and index fresh posts from tracked peer handles."""
+    from datetime import UTC, datetime, timedelta
+
+    from apps.intelligence.models import NichePreference
+    from apps.intelligence.wiring import begin_run, get_wiring
+    from apps.profiles.models import SocialProfile
+    from lumi_ai import ports
+    from lumi_ai.competitors.schemas.peer import PeerConfig
+
+    wiring = get_wiring()
+    target_profile_id = ctx.profile_id
+    if target_profile_id is not None:
+        begin_run(target_profile_id)
+        profiles = list(SocialProfile.objects.filter(pk=target_profile_id))
+    else:
+        profiles = list(
+            SocialProfile.objects.filter(niche_preferences__is_active=True).distinct()
+        )
+
+    total_handles_scanned = 0
+    total_posts_saved = 0
+    total_posts_indexed = 0
+
+    now = datetime.now(UTC)
+    since = now - timedelta(days=getattr(PeerConfig, "LOOKBACK_DAYS", 28))
+
+    for prof in profiles:
+        pref = (
+            NichePreference.objects.filter(profile=prof, is_active=True)
+            .prefetch_related("handles__handle")
+            .first()
+        )
+        if not pref:
+            continue
+
+        handles = list(
+            pref.handles.values_list("handle__handle_normalized", flat=True)
+        )
+        if not handles:
+            continue
+
+        platform = prof.handle.platform
+        own_clean = (prof.handle.handle_normalized or "").lstrip("@").lower()
+
+        posts_to_save: list[ports.PeerPostIn] = []
+
+        for h in handles:
+            h_clean = h.lstrip("@").lower()
+            if not h_clean or h_clean == own_clean or h_clean in EXCLUDED_PEER_HANDLES:
+                continue
+
+            total_handles_scanned += 1
+            if getattr(wiring, "competitors", None) and getattr(
+                wiring.competitors, "pipeline", None
+            ):
+                social = getattr(wiring.competitors.pipeline, "social", None)
+                if social and hasattr(social, "fetch_user_posts"):
+                    try:
+                        fetched = async_to_sync(social.fetch_user_posts)(
+                            platform,
+                            h_clean,
+                            since,
+                            getattr(PeerConfig, "SCAN_POSTS_PER_ACCOUNT", 20),
+                        )
+                        for p in fetched:
+                            text = p.text or getattr(p, "caption", "")
+                            if not text:
+                                continue
+                            posts_to_save.append(
+                                ports.PeerPostIn(
+                                    platform=p.platform,
+                                    external_id=p.external_id,
+                                    author_handle=h_clean,
+                                    text=text,
+                                    published_at=p.published_at,
+                                    url=p.url,
+                                    metrics=p.metrics,
+                                    media=p.media,
+                                    author_avatar_url=p.author_avatar_url,
+                                    niche_key=pref.niche_key,
+                                )
+                            )
+                    except Exception as exc:  # noqa: BLE001
+                        log.warning(
+                            "Failed fetching peer posts for @%s: %s", h_clean, exc
+                        )
+
+        if posts_to_save and getattr(wiring, "peers", None):
+            try:
+                saved = async_to_sync(wiring.peers.save_peer_posts)(
+                    prof.pk, posts_to_save
+                )
+                total_posts_saved += len(saved)
+                if getattr(wiring, "indexer", None) and hasattr(
+                    wiring.indexer, "index_peer_posts"
+                ):
+                    indexed_count = wiring.indexer.index_peer_posts(saved)
+                    total_posts_indexed += indexed_count
+            except Exception as exc:  # noqa: BLE001
+                log.warning(
+                    "Failed saving/indexing peer posts for profile %s: %s",
+                    prof.pk,
+                    exc,
+                )
+
+    return {
+        "handles_scanned": total_handles_scanned,
+        "posts_saved": total_posts_saved,
+        "posts_indexed": total_posts_indexed,
+    }
+
+
+@shared_task(name="intelligence.sync_peer_posts")
+def sync_peer_posts_task(profile_id: int | None = None) -> dict[str, Any]:
+    from apps.core import jobs
+    from apps.profiles.models import SocialProfile
+
+    user_id = 1
+    if profile_id is not None:
+        prof = SocialProfile.objects.filter(pk=profile_id).first()
+        if prof:
+            user_id = prof.user_id
+    job_id, _ = jobs.enqueue(
+        user_id=user_id,
+        kind=PEER_SYNC_KIND,
+        profile_id=profile_id,
+        params={"scheduled": True},
+    )
+    return {"job_id": str(job_id)}

@@ -1236,7 +1236,7 @@ export default function PromptBar({
               onClick={toggleVoice}
               className={`${styles.iconBtn} ${styles.micBtn} ${
                 listening ? styles.micActive : ""
-              }`}
+              } ${voiceState === "transcribing" ? styles.micTranscribing : ""}`}
             >
               {listening ? (
                 <span className={styles.eqBars}>
@@ -1252,6 +1252,8 @@ export default function PromptBar({
                     />
                   ))}
                 </span>
+              ) : voiceState === "transcribing" ? (
+                <span className={styles.micSpinner} />
               ) : (
                 <Icon size={15} strokeWidth={2}>
                   <g>

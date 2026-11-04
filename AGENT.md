@@ -61,18 +61,63 @@ This document logs progress, architecture, implemented capabilities, and what re
 - `notifications@lumiai.com` referenced in the n8n template was an unconfigured prototype placeholder.
 - Notifications and updates currently operate in-app.
 
+### 7. Continuous Peer Post Ingestion
+- Registered `PEER_SYNC_KIND = "peer.sync"` on `apps.core.jobs`.
+- Implemented `sync_peer_posts(ctx: JobContext)`:
+  - Iterates active `NichePreference`s and tracked peer founder handles.
+  - Fetches fresh public posts via `social.fetch_user_posts(platform, handle, since, limit)`.
+  - Persists new posts into PostgreSQL through `PeerPostRepo().save_peer_posts()`.
+  - Embeds and indexes fresh posts into Chroma `peer_posts` collection via `indexer.index_peer_posts()`.
+- Registered Celery `@shared_task(name="intelligence.sync_peer_posts")` for periodic Celery Beat / daemon execution.
+- Verified with targeted test suite `apps/intelligence/tests/test_peer_sync_task.py` (2 passed).
+
+### 8. Phase 4: Soft-Tiering Winner Selection
+- Replaced brittle hard floor (`< 8` winners causing immediate `insufficient_data` collapse) with graceful tri-tier degradation in `lumi_ai/competitors/winners.py`:
+  - **Tier A ($\ge 8$ Winners)**: `status="ok"`, `data_tier="high"`, `confidence_tier="high"`.
+  - **Tier B (3–7 Winners)**: `status="ok"`, `data_tier="moderate"`, `confidence_tier="moderate"`, records warning `"Report based on moderate sample of N winners (data_tier=moderate)"` without discarding valid winners.
+  - **Tier C ($< 3$ Winners)**: `status="insufficient_data"`, `data_tier="sparse"`, `confidence_tier="provisional"`, activates reasoning LLM synthesis fallback (`_synthesize_niche_frameworks`) so the user is never left without frameworks.
+- Extended schemas in `schemas/peer.py`: `confidence_tier` in `NicheFrameworkReport`, `data_tier` in `WinnerSelection`.
+- Verified with 14 unit tests in `lumi_ai/tests/competitors/test_winners.py` (all passed).
+
+### 9. Phase 5: Synthesis Enhancements & Frontend WinnersCard Badges
+- Enhanced `WinnerPeer` in `lumi/frontend/src/components/WinnersCard/WinnersCard.tsx`:
+  - Added `peerRole`, `gradingScore`, `relevance` fields.
+  - Implemented visual role pills with distinct semantic badge tokens:
+    - `direct_competitor` -> "Direct Competitor" (blue pill).
+    - `parallel_founder` -> "Parallel Founder" (emerald/green pill).
+    - `aspirational_leader` -> "Aspirational Leader" (purple pill).
+    - `co_builder` -> "Co-Builder" (amber pill).
+  - Implemented match percentage score badge (`92% Match`).
+  - Added ecosystem geo alignment tag (`🇳🇬 NG`).
+  - Added avatar image with initials fallback.
+- Added comprehensive responsive styles in `WinnersCard.module.css`.
+
+### 10. Multi-Account Profile Switcher
+- Added instant 1-click account switching in `lumi/frontend/src/components/Sidebar/Sidebar.tsx`:
+  - `profileSwitcherBar`: Horizontal rail pill buttons (e.g. `[ 𝕏 @atehofficial ] [ in @ateh ]`) displaying side-by-side connected platforms with active highlight.
+  - `WorkspaceMenu`: Dedicated "Connected Accounts" section displaying each connected profile with platform badges (`𝕏`, `in`) and active checkmarks.
+  - Connected `profiles`, `activeProfileId`, and `onSelectProfile={selectProfile}` in `App.tsx`.
+- Typechecked and built cleanly with Vite in 134ms.
+
+### 11. Audio Recorder Button in Chat Composer
+- Enhanced microphone recorder in `lumi/frontend/src/components/PromptBar/PromptBar.tsx`:
+  - Real-time animated equalizer bars (`eqBars`) during active audio capture.
+  - Bouncing spinner during transcribing state (`micSpinner`).
+  - Integrated with Meta ASR / Groq endpoint `POST /api/v1/voice/transcribe`.
+  - Clean stop-and-send or draft auto-population.
+  - Verified with 23 backend transcription tests and 79 frontend unit tests passing.
+
 ---
 
 ## 2. What Is Left to Do
 
-1. **Transactional Email / SMTP Integration**:
-   - If outbound email notifications are required, wire a real provider (e.g. Resend, SendGrid, Amazon SES) in `apps/core/` and configure valid credentials in `.env`.
-2. **Audio Recorder Button in Chat UI**:
-   - Wire a microphone recording button in the frontend chat to send recorded voice memos directly to `POST /api/v1/intelligence/profiles/{id}/transcribe/`.
-3. **Continuous Peer Post Ingestion**:
-   - Establish scheduled background polling for tracked Nigerian founder handles to keep the peer post corpus fresh on a daily basis.
-4. **Multi-Account Profile Switcher Polish**:
-   - Enhance the UI toggle between multiple connected accounts (e.g. switching between X and LinkedIn) so users can view platform-specific frameworks and voices side by side.
+### Open Action (Immediately Actionable Next Tasks)
+1. **Celery Beat Recurring Schedule**: Add periodic crontab schedule entry (e.g. every 12 or 24 hours) in celery config to invoke `intelligence.sync_peer_posts` automatically in production.
+2. **Transactional Outbound Email Provider**: Connect real SMTP or transactional API provider (Resend, SendGrid, Amazon SES) in `apps/core/` for the n8n Niche Radar notification alerts.
+
+### Planned (Architectural Roadmap & Future Enhancements)
+1. **Multi-Platform Scrape Adapter Expansion**: When official APIs become available for LinkedIn / Instagram competitor public feeds, expand `ports.SocialData` to support multi-network peer post ingestion beyond X and TikTok.
+2. **Extended Video Audio OCR & Visual Framing**: Add deeper frame-by-frame visual analysis for TikTok / Reels competitor winning posts.
 
 ---
 

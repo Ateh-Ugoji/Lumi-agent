@@ -431,6 +431,7 @@ class NicheFrameworkReport(BaseModel):
     niche: str
     generated_at: datetime
     status: Literal["ok", "insufficient_data", "failed"]
+    confidence_tier: Literal["high", "moderate", "provisional"] = "high"
     accounts: list[AccountBaseline]
     winner_post_ids: list[str]
     posts_analyzed: int
