@@ -246,3 +246,291 @@ uv run ruff check .
 4. **Multi-Account Profile Switcher Polish**:
    - Enhance the UI toggle between multiple connected accounts (e.g. switching between X and LinkedIn) so users can view platform-specific frameworks and voices side by side.
 
+---
+
+## Next-Gen Peer Schema & Competitor Grading Architecture (Architectural Plan)
+
+> [!IMPORTANT]
+> **Status: Planned — DO NOT ACT YET.**
+> This section details the architectural specification for grading competitors, eliminating brittle statistical cutoffs, and expanding multi-dimensional performance lift. Implementation will commence upon user approval.
+
+### 1. The Core Challenge: The Direct Competitor Scarcity Dilemma
+In emerging technology hubs and creator-founder niches (e.g., Nigerian and African tech founders, bootstrapped creative tool builders, independent motion designers), finding an exact **1:1 direct SaaS competitor** (e.g. another founder in Lagos building the exact same video workflow automation tool for the identical target persona) is extremely rare.
+
+Treating competitor discovery as a binary classification (*"is an exact competitor"* vs. *"not a competitor"*) produces severe pathological failure modes:
+1. **Candidate Starvation**: The system rejects 98% of relevant ecosystem creators and founders because they don't sell the exact same tool, leaving an empty candidate pool.
+2. **Distorted Global Baselines**: The system falls back to global celebrity mega-accounts (`@levelsio`, `@sama`, `@levelsio`) whose metrics, audience dynamics, and distribution algorithms share zero statistical or cultural baseline with local founders.
+3. **Missed Creative Cross-Pollination**: Founders do not only learn from direct product clones; they learn from how peer founders in their geographic and cultural ecosystem navigate infrastructure, capture audience attention, structure pain points, and monetize.
+
+### 2. Upgrade 1: Multi-Tier Competitor Grading Spectrum & Entity Models
+
+To solve this, Lumi will coin and grade competitors across a **4-Tier Competitor Spectrum** rather than a flat list of handles. Each tracked peer handle is assigned a **`peer_role`** and a composite **`grading_score` (0.00 – 1.00)**.
+
+#### A. The 4-Tier Spectrum
+```mermaid
+flowchart TD
+    Founder["Anchor Creator (@atehofficial)<br/>Nigerian Tech Founder & Creative Builder"]
+    
+    subgraph Tier1 ["Tier 1: Direct Product Competitors (Weight: 1.0)"]
+        T1["Direct SaaS / Tool Alternatives<br/>Competing for identical creator workflows and budget"]
+    end
+    
+    subgraph Tier2 ["Tier 2: Parallel Founder Peers (Weight: 0.85)"]
+        T2["Ecosystem Builders at Similar Stage<br/>Nigerian/African tech founders facing identical currency, infrastructure, and market constraints<br/>e.g., @editbyadonis, @ifeanyi_maulepe, @ahiakwo_john"]
+    end
+    
+    subgraph Tier3 ["Tier 3: Aspirational Category Leaders (Weight: 0.70)"]
+        T3["Founders 1-2 Stages Ahead<br/>Regional leaders setting tone, institutional credibility, and high-engagement benchmarks"]
+    end
+    
+    subgraph Tier4 ["Tier 4: Co-Builders & Network Graph (Weight: 0.60)"]
+        T4["Collaborators & Mutual Accountability Partners<br/>Creators engaging directly in replies, build-in-public pacts, and technical debates"]
+    end
+
+    Founder --> Tier1
+    Founder --> Tier2
+    Founder --> Tier3
+    Founder --> Tier4
+```
+
+- **Tier 1: Direct Product Competitors**
+  - *Definition*: Creators building direct tool/software alternatives targeting the exact same customer jobs-to-be-done.
+  - *Strategic Value*: Benchmarking feature announcements, pricing friction, and specific product objection handling.
+- **Tier 2: Parallel Founder Peers (Core Focus)**
+  - *Definition*: Founders building tech products within the same regional ecosystem (e.g., Nigeria / West Africa) at a comparable growth stage (pre-seed, seed, bootstrap).
+  - *Strategic Value*: They face identical macro dynamics (fx rates, payment gateways, local tech conferences, hiring, internet resilience) and their winning engagement patterns reflect what local and international audiences actually respond to.
+- **Tier 3: Aspirational Category Leaders**
+  - *Definition*: Respected ecosystem founders or senior tech leaders who are 1–2 stages ahead (e.g., funded Series A founders, recognized agency owners scaling to SaaS).
+  - *Strategic Value*: Setting the benchmark for high-credibility narrative arcs, investor-facing thought leadership, and macro ecosystem commentary.
+- **Tier 4: Co-Builders & Network Graph**
+  - *Definition*: Frequent reply partners, mutual cheerleaders, accountability pact peers, and co-conspirators extracted directly from the user's interaction graph.
+  - *Strategic Value*: Real-time peer accountability formats, meme culture, and organic virality loops driven by creator comment sections.
+
+#### B. Pydantic & Database Schema Specifications
+
+```python
+# lumi/lumi_ai/competitors/schemas/peer.py
+
+PeerRole = Literal[
+    "direct_competitor",      # Tier 1
+    "parallel_founder",       # Tier 2
+    "aspirational_leader",    # Tier 3
+    "co_builder",             # Tier 4
+]
+
+class RelevanceBreakdown(BaseModel):
+    geo_alignment: float = Field(ge=0.0, le=1.0, description="Regional & cultural proximity (e.g., Nigeria/Lagos vs global)")
+    icp_overlap: float = Field(ge=0.0, le=1.0, description="Target audience and follower archetype overlap")
+    content_resonance: float = Field(ge=0.0, le=1.0, description="Style, tone, and media format relevance")
+    stage_comparability: float = Field(ge=0.0, le=1.0, description="Stage comparability (bootstrap/early vs enterprise)")
+
+class PeerGrading(BaseModel):
+    handle: str
+    peer_role: PeerRole
+    grading_score: float = Field(ge=0.0, le=1.0, description="Weighted composite grading score")
+    relevance: RelevanceBreakdown
+    ecosystem_tags: list[str] = Field(default_factory=list, description="e.g. ['lagos_tech', 'motion_ui', 'bootstrap']")
+    rationale: str = Field(description="Explanation of why this peer was selected and graded at this tier")
+```
+
+```python
+# lumi/apps/intelligence/models.py (Django Model Migration)
+
+class PeerRoleChoice(models.TextChoices):
+    DIRECT_COMPETITOR = "direct_competitor", "Direct Product Competitor"
+    PARALLEL_FOUNDER = "parallel_founder", "Parallel Founder Peer"
+    ASPIRATIONAL_LEADER = "aspirational_leader", "Aspirational Category Leader"
+    CO_BUILDER = "co_builder", "Co-Builder & Network Graph"
+
+class NichePreferenceHandle(models.Model):
+    preference = models.ForeignKey(NichePreference, on_delete=models.CASCADE, related_name="handles")
+    handle = models.ForeignKey("profiles.SocialHandle", on_delete=models.CASCADE, related_name="niche_preferences")
+    peer_role = models.CharField(max_length=24, choices=PeerRoleChoice.choices, db_default=PeerRoleChoice.PARALLEL_FOUNDER)
+    grading_score = models.FloatField(db_default=0.80)
+    relevance_breakdown = models.JSONField(default=dict, blank=True)
+    ecosystem_tags = ArrayField(models.CharField(max_length=50), default=list, blank=True)
+    rationale = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(db_default=Now(), editable=False)
+
+    class Meta:
+        db_table = "niche_preference_handles"
+        constraints = [
+            models.UniqueConstraint(fields=["preference", "handle"], name="uq_niche_handles_handle"),
+            models.CheckConstraint(condition=Q(grading_score__gte=0.0) & Q(grading_score__lte=1.0), name="ck_peer_grading_score_range"),
+        ]
+```
+
+---
+
+### 3. Upgrade 2: Soft Tiering & Resilience Engine for Winner Selection (`MIN_WINNERS_FOR_REPORT`)
+
+#### A. The Flaw of Binary Gating
+Currently in `lumi_ai/competitors/winners.py`:
+```python
+# Hardcoded binary collapse:
+return WinnerSelection(
+    status="ok" if len(winners) >= PeerConfig.MIN_WINNERS_FOR_REPORT else "insufficient_data",
+    winners=winners,
+    baselines={h: b for h, b in baselines.items()},
+)
+```
+Where `MIN_WINNERS_FOR_REPORT = 8`.
+- If an account has 7 high-performing viral outliers that generated massive engagement, the entire pipeline discards all 7 posts, outputs `status="insufficient_data"`, and returns zero frameworks.
+- This creates an extreme all-or-nothing threshold that breaks in early-stage niches or when rate limits restrict the scan to 30 posts per handle.
+
+#### B. The 3-Tier Graceful Degradation Engine
+
+We replace the hard floor with a **Tri-Tier Volumetric Degradation Architecture**:
+
+| Volume Tier | Winner Count | Execution Strategy | Resulting Report Status |
+| :--- | :--- | :--- | :--- |
+| **Tier A: High Confidence** | $\ge 8$ Winners | **Full Deterministic Outlier Engine**: Computes strict z-score and IQR percentile math against 4-week account medians. Blind LLM tagging over complete batch. Exact mathematical lift table across all dimensions. | `status="ok"`<br/>`confidence="high"` |
+| **Tier B: Moderate Confidence** | $3 \le N \le 7$ Winners | **Hybrid Statistical & Synthesis Engine**: Calculates empirical lift on available verified winners. Suppressed dimensions ($N < 3$) marked as `insufficient_data`. Blind tagging extracts primary frameworks. LLM fills structural whitespace with explicit confidence flags. | `status="ok"`<br/>`confidence="moderate"`<br/>*(Warning attached: "Report based on moderate sample of N winners")* |
+| **Tier C: Sparse / Cold-Start** | $< 3$ Winners | **Network & Anchor Synthesis Engine**: Uses available peer posts combined with the creator's own top-performing posts and interaction network graph. Synthesizes high-lift frameworks grounded in demographic context. | `status="ok"` (or `provisional_ok`)<br/>`confidence="provisional"`<br/>*(Never collapses into empty/failed report)* |
+
+```mermaid
+flowchart TD
+    Scrape["Scraped Peer Posts & Baselines"] --> Filter["Apply Outlier Bar (>= 1.5x 4-Week Median)"]
+    Filter --> Count{"How many winners isolated?"}
+    
+    Count -->|>= 8 Winners| TierA["Tier A: High-Confidence Statistical Pipeline<br/>• Strict Lift Table<br/>• Full Cognitive Batch Tagging<br/>• High-Confidence Winning Frameworks"]
+    Count -->|3 to 7 Winners| TierB["Tier B: Hybrid Statistical Baseline<br/>• Compute empirical lift where N >= 3<br/>• Synthesize frameworks from available winners<br/>• Attach moderate confidence badge"]
+    Count -->|< 3 Winners| TierC["Tier C: Network & Anchor Synthesis Engine<br/>• Mine top posts + interaction network<br/>• Meta Reasoning model synthesizes ecosystem frameworks<br/>• Status remains OK (provisional)"]
+
+    TierA --> Report["NicheFrameworkReport (Persisted to PostgreSQL)"]
+    TierB --> Report
+    TierC --> Report
+```
+
+#### C. Code Architecture Plan
+1. **`lumi_ai/competitors/schemas/peer.py`**:
+   - Update `WinnerSelection` to include `data_tier: Literal["high", "moderate", "sparse"]`.
+   - Update `NicheFrameworkReport` to support `confidence_tier: Literal["high", "moderate", "provisional"]`.
+2. **`lumi_ai/competitors/winners.py`**:
+   - `select_winners` returns `status="ok"` whenever $\ge 3$ winners exist (marking `data_tier="moderate"` when $< 8$).
+   - When $< 3$ winners exist, returns `status="sparse_data"` with partial candidates rather than aborting.
+3. **`lumi_ai/competitors/pipeline.py`**:
+   - Instead of branching directly to empty failure on `insufficient_data`, route Tier C through the fallback synthesis engine `_synthesize_niche_frameworks` to ensure the user always receives actionable, grounded creative frameworks.
+
+---
+
+### 4. Upgrade 3: Multidimensional Lift Table Schema (`LiftRow`)
+
+#### A. Why Standard Dimensions Are Insufficient
+The existing `LiftRow.dimension` supports only:
+`"primary_framework"`, `"hook_type"`, `"format"`, `"cta_type"`, `"funnel_stage"`, `"content_pillar"`, `"hook_modality"`.
+
+In modern creator ecosystems (specifically founder ecosystems in Nigeria and emerging tech markets), engagement variance is driven heavily by three untapped dimensions:
+1. **`language_register`**: The precise blend of Nigerian Pidgin, colloquial slang, formal executive pitch, and deep technical prose.
+2. **`media_style`**: The visual execution format (e.g. motion design video, screen recording demo, metric dashboard screenshot, talking head, text-only).
+3. **`ecosystem_context`**: The thematic macro context (e.g., local tech conferences like Moonshot/Lagos Tech Fest, currency/FX struggles, client-to-product transitions, public accountability pacts).
+
+#### B. Upgraded `LiftRow` & Dimension Schemas
+
+```python
+# lumi/lumi_ai/competitors/schemas/peer.py
+
+LanguageRegister = Literal[
+    "nigerian_pidgin",          # Heavy or blended Nigerian Pidgin ("e no easy", "my eye see shege")
+    "nigerian_colloquial",      # Informal tech/founder Nigerian English ("let's cook", "wahala", "omo")
+    "formal_business",          # Traditional executive / investor / corporate English
+    "technical_deep_dive",      # Code snippets, API architecture, high-density engineering jargon
+    "blended_casual",           # Conversational international English
+]
+
+MediaStyle = Literal[
+    "motion_design_video",      # Custom After Effects / motion UI animation showing product workflows
+    "screen_recording_demo",    # Raw loom/OBS screen capture demonstrating features
+    "talking_head_video",       # Direct-to-camera founder monologue or reaction
+    "screenshot_metric",        # Stripe dashboard, user growth graph, conversion proof
+    "screenshot_code",          # Formatted syntax-highlighted code editor or terminal
+    "photo_behind_the_scenes",  # Workspace, team, event photo
+    "text_only_punchy",         # Short < 280-char bold claim or punchy hot take
+    "text_only_thread",         # Multi-part numbered educational or storytelling breakdown
+]
+
+EcosystemContext = Literal[
+    "local_summit_conference",   # Moonshot by TechCabal, Lagos Tech Fest, NITDA, local developer meetups
+    "builder_infrastructure",    # Power/NEPA, FX devaluation, international payment gateways, banking APIs
+    "client_to_saas_pivot",      # Transitioning from agency/freelancing to building scalable software
+    "public_accountability",     # Shipping streaks, daily metrics, public commitments, failure post-mortems
+    "founder_debate_rant",       # Contrarian critique of hype, fake metrics, or influencer culture
+    "general_educational",       # Universal tips and tutorials not tied to a specific local event
+]
+
+# Extended Dimension Enum
+LiftDimension = Literal[
+    "primary_framework",
+    "hook_type",
+    "format",
+    "cta_type",
+    "funnel_stage",
+    "content_pillar",
+    "hook_modality",
+    "language_register",       # NEW
+    "media_style",             # NEW
+    "ecosystem_context",       # NEW
+]
+
+class LiftRow(BaseModel):
+    dimension: LiftDimension
+    value: str
+    n_winners: int
+    n_baseline: int
+    winner_share: float
+    baseline_share: float
+    lift: float | None = None  # winner_share / baseline_share
+    avg_outlier_views: float | None = None
+    status: Literal["reported", "insufficient_data"]
+```
+
+#### C. Cognitive Post Analysis Extension
+
+```python
+# lumi/lumi_ai/competitors/schemas/peer.py
+
+class PostAnalysis(BaseModel):
+    post_id: str
+    hook: HookAnalysis
+    body: BodyAnalysis
+    cta: CTAAnalysis
+    voice: VoiceAnalysis
+    strategy: StrategyAnalysis
+    # NEW MULTIDIMENSIONAL CLASSIFIERS:
+    language_register: LanguageRegister = Field(description="Dominant linguistic style and vernacular")
+    media_style: MediaStyle = Field(description="Visual media execution format")
+    ecosystem_context: EcosystemContext = Field(description="Thematic local or macro founder context")
+```
+
+#### D. Extraction & Synthesis Impact
+With these new dimensions:
+- The blind tagging prompt (`TAGGING_PROMPT` in `extract.py`) instructs the Meta reasoning model to classify `language_register`, `media_style`, and `ecosystem_context`.
+- `lift_attributes()` collects these dimensions for every winner and baseline post.
+- `build_lift_table()` computes mathematical lift ratios for each dimension value.
+- The synthesis model (`muse-wonder-1.0`) produces concrete, actionable insights such as:
+  > *"Posts utilizing `language_register='nigerian_pidgin'` paired with `media_style='motion_design_video'` demonstrate a **2.6x engagement lift** over formal business English text in this founder niche."*
+
+---
+
+### 5. Implementation Roadmap & Milestones
+
+1. **Phase 1: Schemas & Domain Types (`peer.py`)**:
+   - Add `PeerRole`, `RelevanceBreakdown`, `PeerGrading`.
+   - Extend `LiftDimension` with `language_register`, `media_style`, `ecosystem_context`.
+   - Update `PostAnalysis`, `LiftRow`, and `WinnerSelection` with soft-tiering attributes.
+2. **Phase 2: Database Models & Migrations (`apps/intelligence/models.py`)**:
+   - Update `NichePreferenceHandle` with `peer_role`, `grading_score`, `relevance_breakdown`, and `ecosystem_tags`.
+   - Run `makemigrations` and `migrate` on PostgreSQL.
+3. **Phase 3: Cognitive Extraction & Tagging Prompt (`extract.py`)**:
+   - Update `TAGGING_PROMPT` to output `language_register`, `media_style`, and `ecosystem_context`.
+   - Update `lift_attributes()` to index the new dimensions into `LiftItem`.
+4. **Phase 4: Soft-Tiered Winner Selection & Pipeline Graceful Fallback (`winners.py`, `pipeline.py`)**:
+   - Refactor `select_winners()` to support Tier A ($\ge 8$), Tier B (3–7), and Tier C ($< 3$).
+   - Prevent `insufficient_data` collapse when moderate or sparse winners exist.
+5. **Phase 5: Synthesis & UI Rendering**:
+   - Enhance `synthesize.py` to highlight cross-dimensional winning combinations (e.g., Register + Media Style).
+   - Update `WinnersCard.tsx` on the frontend to render peer badges with their assigned peer role (`Parallel Founder`, `Direct Competitor`, etc.) and grading score.
+6. **Phase 6: Automated Verification**:
+   - Write pytest unit tests covering the new schemas, soft-tiering branches, and multi-dimensional lift calculations.
+
+

@@ -10,8 +10,11 @@ with what it actually read: a missing report, a refused provider or a thin sampl
 from __future__ import annotations
 
 import hashlib
+import logging
 from dataclasses import dataclass, replace
 from typing import Any, get_args
+
+log = logging.getLogger(__name__)
 
 from lumi_ai.competitors.extract import post_ref, tag_posts
 from lumi_ai.competitors.handles import (

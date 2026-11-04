@@ -73,3 +73,43 @@ This document logs progress, architecture, implemented capabilities, and what re
    - Establish scheduled background polling for tracked Nigerian founder handles to keep the peer post corpus fresh on a daily basis.
 4. **Multi-Account Profile Switcher Polish**:
    - Enhance the UI toggle between multiple connected accounts (e.g. switching between X and LinkedIn) so users can view platform-specific frameworks and voices side by side.
+
+---
+
+## 3. Next-Gen Peer Schema & Competitor Grading Architecture (Architectural Plan)
+
+> **CRITICAL DIRECTIVE: DO NOT ACT YET.**
+> This section logs the architectural plan for grading competitors across a spectrum, removing brittle winner gates, and adding multi-dimensional lift. Do not make code changes until explicit user authorization.
+
+### Key Architectural Pillars Planned
+
+#### 1. Competitor Grading Spectrum & Entity Model (`NichePreferenceHandle` & `PeerProfile`)
+- **Direct Competitor Scarcity Problem**: Exact 1:1 direct SaaS competitors are scarce in early-stage niche founder communities (e.g. Nigerian tech founders / creative builders). Treating peers as a binary "is direct competitor" or "not" causes candidate starvation or falls back to irrelevant global celebrity accounts.
+- **The 4-Tier Grading Spectrum**:
+  - `direct_competitor` (Tier 1, Weight 1.0): Direct SaaS/tool alternatives.
+  - `parallel_founder` (Tier 2, Weight 0.85): Builders at similar stage in the same geographic/demographic ecosystem facing identical infrastructure, currency, and market realities.
+  - `aspirational_leader` (Tier 3, Weight 0.70): Founders 1-2 stages ahead who set content cadence and high-engagement benchmarks.
+  - `co_builder` (Tier 4, Weight 0.60): Network graph collaborators with joint accountability pacts.
+- **Fields to Add**:
+  - Pydantic: `PeerRole`, `RelevanceBreakdown` (`geo_alignment`, `icp_overlap`, `content_resonance`, `stage_comparability`), `PeerGrading`.
+  - Django Model: `NichePreferenceHandle` receives `peer_role`, `grading_score`, `relevance_breakdown`, `ecosystem_tags`, and `rationale`.
+
+#### 2. Soft Tiering & Resilience Engine for Winner Selection (`MIN_WINNERS_FOR_REPORT`)
+- **Problem**: The hard floor `MIN_WINNERS_FOR_REPORT = 8` collapses the entire report into `insufficient_data` if an account has 3–7 viral winner posts.
+- **Tri-Tier Volumetric Degradation**:
+  - **Tier A ($\ge 8$ Winners)**: Pure statistical outlier engine (z-score > 1.5 against 4-week median), strict IQR percentile math, full lift table.
+  - **Tier B (3–7 Winners)**: Hybrid statistical baseline + LLM synthesis. Computes lift on available winners, tags cognitive frameworks, produces actionable report with moderate confidence flag.
+  - **Tier C ($< 3$ Winners)**: Synthesis engine derived from available peer posts + user interaction graph + founder niche anchor. Status remains `ok` (provisional), never empty.
+
+#### 3. Multidimensional Lift Table Schema (`LiftRow`)
+- **Problem**: Format and topic alone do not capture what causes posts to blow up in founder ecosystems.
+- **Dimensions to Add to `LiftRow.dimension`**:
+  - `language_register`: `nigerian_pidgin`, `nigerian_colloquial`, `formal_business`, `technical_deep_dive`, `blended_casual`.
+  - `media_style`: `motion_design_video`, `screen_recording_demo`, `talking_head_video`, `screenshot_metric`, `screenshot_code`, `text_only_punchy`, `text_only_thread`.
+  - `ecosystem_context`: `local_summit_conference`, `builder_infrastructure`, `client_to_saas_pivot`, `public_accountability`, `founder_debate_rant`, `general_educational`.
+- **Pipeline Integration**:
+  - `TAGGING_PROMPT` in `extract.py` extracts these 3 dimensions per post.
+  - `PostAnalysis` in `peer.py` holds typed fields.
+  - `lift_attributes()` and `build_lift_table()` compute lift ratios for each dimension.
+  - Synthesizer surfaces key insights (e.g. *"Nigerian Pidgin + Motion Design Video demonstrates 2.6x lift over formal English text"*).
+
