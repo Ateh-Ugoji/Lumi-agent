@@ -387,6 +387,11 @@ def build(services: CompetitorServices) -> list[ToolSpec]:
             out["author"] = author_from_url
         if tagging.framework_guess:
             out["framework_guess"] = tagging.framework_guess
+        if plat == "x":
+            from dataclasses import asdict
+            from lumi_ai.evaluation.x_algorithm import audit_x_post
+
+            out["x_algorithm_audit"] = asdict(audit_x_post(body))
         report = await reports.latest_report(ctx.profile_id)
         if report is None or report.status != "ok":
             out["niche_comparison"] = (
@@ -406,6 +411,83 @@ def build(services: CompetitorServices) -> list[ToolSpec]:
             "niche_frameworks": [framework_key(f) for f in report.frameworks],
         }
         return out
+
+    # -- tweepcred health audit ---------------------------------------------
+
+    async def tweepcred_audit(
+        ctx: ToolContext,
+        followers: int | None = None,
+        following: int | None = None,
+        handle: str | None = None,
+    ) -> dict[str, Any]:
+        """Audit an X account's follower ratio against X's official TweepCred algorithm."""
+        from lumi_ai.competitors.metrics import calculate_tweepcred_ratio_health
+
+        target_handle = (handle or "").lstrip("@").strip()
+        fol = followers
+        fng = following
+
+        # If not provided, try to resolve from user's profile handle snapshots
+        if (fol is None or fng is None) and not target_handle:
+            try:
+                from apps.intelligence.repos.aio import aio
+                from apps.profiles.models import HandleSnapshot
+
+                snapshot = await aio(
+                    lambda: HandleSnapshot.objects.filter(
+                        handle__profile_id=ctx.profile_id, handle__platform="x"
+                    )
+                    .order_by("-captured_at")
+                    .first()
+                )()
+                if snapshot:
+                    fol = fol if fol is not None else snapshot.followers
+                    fng = fng if fng is not None else snapshot.following
+                    target_handle = target_handle or snapshot.handle.handle_normalized
+            except Exception:
+                pass
+
+        if fol is None or fng is None:
+            return {
+                "handle": target_handle or "your_account",
+                "status": "awaiting_input",
+                "message": (
+                    "Please provide your followers and following counts (e.g. followers=1200, following=450) "
+                    "to compute your exact TweepCred PageRank reach penalty."
+                ),
+                "thresholds": {
+                    "max_following_threshold": 2500,
+                    "target_following_to_follower_ratio": "<= 0.60",
+                    "max_reach_penalty": "50x division if ratio > 0.60 and following > 2,500",
+                },
+            }
+
+        health = calculate_tweepcred_ratio_health(fol, fng)
+        return {
+            "handle": target_handle or "account",
+            "followers": fol,
+            "following": fng,
+            **health,
+            "formula_source": "the-algorithm/src/scala/com/twitter/graph/batch/job/tweepcred/Reputation.scala",
+            "explanation": (
+                f"Your following-to-follower ratio is {health['following_to_followers_ratio']}. "
+                + (
+                    f"⚠️ Warning: You follow >2,500 accounts and your ratio exceeds 0.60. "
+                    f"X's TweepCred engine is dividing your account PageRank by {health['division_factor']}x, "
+                    f"cutting your timeline reach by {health['reach_loss_percentage']}%. "
+                    f"Unfollow at least {health['unfollow_target_to_fix']} accounts to restore full reach."
+                    if health["is_penalized"]
+                    else (
+                        "✅ Healthy: Your account is not suffering from TweepCred follow-ratio reach penalties. "
+                        + (
+                            f"Keep following under {int(fol * 0.6)} to stay safely under the 0.60 threshold."
+                            if fng > 2500
+                            else "You follow under 2,500 accounts, so the ratio penalty is currently bypassed."
+                        )
+                    )
+                )
+            ),
+        }
 
     # -- own lift -----------------------------------------------------------
 
@@ -745,6 +827,33 @@ def build(services: CompetitorServices) -> list[ToolSpec]:
             handler=analyze_pasted,
             cost="llm",
             cache_ttl=0,  # the comparison depends on the niche report, which can change between calls
+        ),
+        ToolSpec(
+            name="audit_x_tweepcred",
+            description=(
+                "Audit an X account's follower and following counts against X's official TweepCred PageRank algorithm. "
+                "Detects whether the account triggers the 50x reach penalty for following >2,500 people with ratio >0.60."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "followers": {
+                        "type": "integer",
+                        "description": "Number of followers on X.",
+                    },
+                    "following": {
+                        "type": "integer",
+                        "description": "Number of accounts followed on X.",
+                    },
+                    "handle": {
+                        "type": "string",
+                        "description": "Account handle without @ (optional).",
+                    },
+                },
+                "required": [],
+            },
+            handler=tweepcred_audit,
+            cost="free",
         ),
     ]
     if s.posts is not None:

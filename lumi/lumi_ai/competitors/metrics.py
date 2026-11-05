@@ -7,9 +7,11 @@ Ported from ``lumi/legacy/app/analysis/metrics.py``; the snapshot/DB parts stay 
 
 from __future__ import annotations
 
+import math
 import statistics
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from lumi_ai.competitors.schemas.peer import PeerConfig
 
@@ -102,3 +104,83 @@ def engagement_total(
     """Sum of the counters that were reported. ``None`` when none was (never a fake 0)."""
     present = [v for v in (likes, comments, shares, quotes, bookmarks) if v is not None]
     return int(sum(present)) if present else None
+
+
+def x_algorithm_weighted_engagement(
+    likes: int | None,
+    comments: int | None,
+    shares: int | None,
+    quotes: int | None = None,
+    bookmarks: int | None = None,
+) -> float | None:
+    """Weights interactions using X Heavy Ranker's reverse-engineered importance.
+
+    Weights:
+    - Replies/Comments: 13.5x (highest conversational driver)
+    - Retweets/Shares: 1.0x
+    - Likes: 1.0x (standard passive signal)
+    - Quotes: 3.0x (opinionated amplification)
+    - Bookmarks: 2.0x (high save-intent signal)
+    """
+    present = [v for v in (likes, comments, shares, quotes, bookmarks) if v is not None]
+    if not present:
+        return None
+    l = float(likes or 0)
+    c = float(comments or 0)
+    s = float(shares or 0)
+    q = float(quotes or 0)
+    b = float(bookmarks or 0)
+    return round((1.0 * l) + (13.5 * c) + (1.0 * s) + (3.0 * q) + (2.0 * b), 2)
+
+
+def calculate_tweepcred_ratio_health(
+    followers_count: int, following_count: int
+) -> dict[str, Any]:
+    """Evaluates an account's following-to-follower ratio against TweepCred algorithms.
+
+    Source: twitter/the-algorithm/src/scala/com/twitter/graph/batch/job/tweepcred/Reputation.scala
+    If numFollowings > 2,500 and ratio > 0.6:
+      divFactor = exp(3.0 * (ratio - 0.6) * ln(ln(numFollowings))) capped at 50x.
+    """
+    followers = max(0, int(followers_count))
+    following = max(0, int(following_count))
+    ratio = (1.0 + following) / (1.0 + followers)
+
+    thresh_friends = 2500
+    thresh_ratio = 0.6
+    max_div_factor = 50.0
+
+    if following > thresh_friends and ratio > thresh_ratio:
+        log_log_friends = math.log(math.log(following))
+        exponent = 3.0 * (ratio - thresh_ratio) * log_log_friends
+        div_factor = min(max_div_factor, max(1.0, math.exp(exponent)))
+        is_penalized = True
+    else:
+        div_factor = 1.0
+        is_penalized = False
+
+    reach_retention = 1.0 / div_factor
+    reach_penalty_pct = round((1.0 - reach_retention) * 100.0, 1)
+
+    if div_factor >= 10.0:
+        status = "critical"
+    elif div_factor > 1.05:
+        status = "warning"
+    else:
+        status = "healthy"
+
+    # Advice calculation: how many accounts must be unfollowed to get ratio <= 0.6
+    unfollow_target = 0
+    if is_penalized:
+        max_allowed_following = int(math.floor(0.6 * followers))
+        unfollow_target = max(0, following - max_allowed_following)
+
+    return {
+        "following_to_followers_ratio": round(ratio, 3),
+        "is_penalized": is_penalized,
+        "division_factor": round(div_factor, 2),
+        "reach_loss_percentage": reach_penalty_pct,
+        "status": status,
+        "unfollow_target_to_fix": unfollow_target,
+    }
+
