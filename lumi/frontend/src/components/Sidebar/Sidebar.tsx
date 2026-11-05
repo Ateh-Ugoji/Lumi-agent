@@ -13,6 +13,7 @@ import {
   IconArrowBoxLeft,
   IconCheckmarkSmall,
   IconChevronDownSmall,
+  IconCompetitors,
   IconCrossSmall,
   IconDots,
   IconEditBig,
@@ -39,6 +40,7 @@ const NAV_ITEMS: {
 }[] = [
   { key: "home", label: "Home", icon: <IconHome size={18} /> },
   { key: "chronic", label: "Chronic Online", icon: <IconRadar size={18} /> },
+  { key: "competitors", label: "Competitors", icon: <IconCompetitors size={18} /> },
   { key: "publish", label: "Publish", icon: <IconEditBig size={18} /> },
   { key: "settings", label: "Settings", icon: <IconSettingsGear size={18} /> },
 ];

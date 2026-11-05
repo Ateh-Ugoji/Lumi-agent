@@ -999,15 +999,17 @@ async def _ensure_niche_and_competitors(
         from apps.intelligence.models import Framework
 
         fw_objs = await aio(lambda: list(Framework.objects.filter(report_id=report_id)))()
-        frameworks_list = [
-            {
-                "name": fw.name,
-                "title": fw.title or fw.name,
-                "hook_formula": fw.hook_formula or "",
-                "lift": float(fw.lift) if fw.lift else 1.8,
-            }
-            for fw in fw_objs
-        ]
+        frameworks_list = []
+        for fw in fw_objs:
+            payload = fw.payload or {}
+            frameworks_list.append(
+                {
+                    "name": fw.name,
+                    "title": payload.get("title") or fw.name,
+                    "hook_formula": payload.get("hook_formula") or "",
+                    "lift": float(fw.lift) if fw.lift else 1.8,
+                }
+            )
 
     return {
         "niche": pref.title,

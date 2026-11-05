@@ -8,3 +8,4 @@ export * from "./connections";
 export * from "./publish";
 export * from "./voice";
 export * from "./jobs";
+export * from "./competitors";

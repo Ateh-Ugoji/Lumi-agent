@@ -404,3 +404,164 @@ class NicheReportIngestView(APIView):
             },
             status=status.HTTP_201_CREATED,
         )
+
+
+class CompetitorOverviewView(APIView):
+    """Returns structured competitor profiles, winning framework breakdowns, and links to top posts."""
+
+    permission_classes = [IsProfileOwner]
+    throttle_classes = [ChatUserThrottle]
+
+    def get(self, request):
+        profile = getattr(request, "profile", None)
+        if profile is None:
+            profile = request.user.social_profiles.select_related("handle").first()
+            if not profile:
+                raise ApiError("not_found", "No profiles configured.")
+
+        pref = (
+            NichePreference.objects.filter(profile=profile, is_active=True)
+            .prefetch_related("keywords", "handles__handle")
+            .first()
+        )
+        report = (
+            NicheReport.objects.filter(profile=profile)
+            .order_by("-created_at")
+            .first()
+        )
+
+        niche_title = (
+            pref.title
+            if pref and pref.title
+            else (report.niche if report and report.niche else "Niche Creator")
+        )
+        niche_key = (
+            pref.niche_key
+            if pref
+            else (report.niche if report else "general")
+        )
+
+        peer_handles: list[SocialHandle] = []
+        if pref:
+            for ph in pref.handles.all().select_related("handle"):
+                peer_handles.append(ph.handle)
+        elif report:
+            for rp in report.peers.all().select_related("handle"):
+                peer_handles.append(rp.handle)
+
+        from lumi_ai.competitors.metrics import (
+            calculate_tweepcred_ratio_health,
+            x_algorithm_weighted_engagement,
+        )
+
+        frameworks_list = []
+        if report:
+            for fw in report.frameworks.all().order_by("ordinal"):
+                payload = fw.payload or {}
+                frameworks_list.append({
+                    "id": fw.pk,
+                    "name": fw.name,
+                    "title": payload.get("title") or fw.name,
+                    "structure": payload.get("structure") or fw.description,
+                    "hook_formula": payload.get("hook_formula") or "",
+                    "when_to_use": payload.get("when_to_use") or "",
+                    "why_it_works": payload.get("why_it_works") or "Triggers high reply dwell and conversational velocity in the algorithm.",
+                    "lift": fw.lift,
+                    "confidence": fw.confidence or 0.85,
+                })
+
+        competitors_data = []
+        for h in peer_handles:
+            handle_norm = h.handle_normalized
+            plat = h.platform or "x"
+            profile_url = (
+                f"https://x.com/{handle_norm}"
+                if plat == "x"
+                else f"https://linkedin.com/in/{handle_norm}"
+                if plat == "linkedin"
+                else f"https://{plat}.com/{handle_norm}"
+            )
+            tweepcred = (
+                calculate_tweepcred_ratio_health(h.follower_count or 0, 0)
+                if plat == "x"
+                else None
+            )
+
+            author_posts = (
+                Post.objects.filter(author=h)
+                .prefetch_related("metric_snapshots")
+                .order_by("-published_at")[:10]
+            )
+            best_posts = []
+            for p in author_posts:
+                latest_snap = p.metric_snapshots.order_by("-captured_at").first()
+                likes = latest_snap.likes if latest_snap else 0
+                comments = latest_snap.comments if latest_snap else 0
+                shares = latest_snap.shares if latest_snap else 0
+                views = latest_snap.views if latest_snap else None
+                weighted_score = x_algorithm_weighted_engagement(
+                    likes=likes, comments=comments, shares=shares
+                )
+                best_posts.append({
+                    "id": p.pk,
+                    "caption": p.caption,
+                    "url": p.url or f"{profile_url}/status/{p.platform_post_id}",
+                    "published_at": p.published_at.isoformat() if p.published_at else None,
+                    "likes": likes,
+                    "replies": comments,
+                    "shares": shares,
+                    "views": views,
+                    "weighted_score": weighted_score,
+                })
+
+            competitors_data.append({
+                "handle": handle_norm,
+                "display_name": h.handle_display or handle_norm,
+                "platform": plat,
+                "avatar_url": h.avatar_url or "",
+                "follower_count": h.follower_count,
+                "profile_url": profile_url,
+                "role": "Direct Competitor",
+                "tweepcred": tweepcred,
+                "frameworks": frameworks_list,
+                "best_posts": best_posts,
+            })
+
+        own_posts_data = []
+        if profile.handle:
+            own_posts = (
+                Post.objects.filter(author=profile.handle)
+                .prefetch_related("metric_snapshots")
+                .order_by("-published_at")[:10]
+            )
+            for p in own_posts:
+                latest_snap = p.metric_snapshots.order_by("-captured_at").first()
+                likes = latest_snap.likes if latest_snap else 0
+                comments = latest_snap.comments if latest_snap else 0
+                shares = latest_snap.shares if latest_snap else 0
+                views = latest_snap.views if latest_snap else None
+                own_posts_data.append({
+                    "id": p.pk,
+                    "caption": p.caption,
+                    "url": p.url or f"https://x.com/{profile.handle.handle_normalized}/status/{p.platform_post_id}",
+                    "published_at": p.published_at.isoformat() if p.published_at else None,
+                    "likes": likes,
+                    "replies": comments,
+                    "shares": shares,
+                    "views": views,
+                    "weighted_score": x_algorithm_weighted_engagement(
+                        likes=likes, comments=comments, shares=shares
+                    ),
+                })
+
+        return Response({
+            "profile_id": profile.pk,
+            "niche": niche_title,
+            "niche_key": niche_key,
+            "keywords": [k.keyword for k in pref.keywords.all()] if pref else [],
+            "competitors_count": len(competitors_data),
+            "competitors": competitors_data,
+            "frameworks": frameworks_list,
+            "own_top_posts": own_posts_data,
+        })
+

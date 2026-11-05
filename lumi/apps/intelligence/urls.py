@@ -25,4 +25,14 @@ urlpatterns = [
         views.NicheReportIngestView.as_view(),
         name="niche-report-ingest-direct",
     ),
+    path(
+        "intelligence/competitors",
+        views.CompetitorOverviewView.as_view(),
+        name="competitors-overview",
+    ),
+    path(
+        "competitors",
+        views.CompetitorOverviewView.as_view(),
+        name="competitors-overview-direct",
+    ),
 ]

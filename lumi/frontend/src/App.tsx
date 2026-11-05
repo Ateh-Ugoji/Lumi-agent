@@ -17,6 +17,7 @@ import Settings, { type SettingsSection } from "./components/Settings/Settings";
 import ConnectSocialsModal from "./components/ConnectSocialsModal/ConnectSocialsModal";
 import AccountUnderstandingModal from "./components/AccountUnderstandingModal/AccountUnderstandingModal";
 import ChronicOnline from "./components/ChronicOnline/ChronicOnline";
+import CompetitorsView from "./components/Competitors/CompetitorsView";
 import SidebarNav from "./components/Sidebar/Sidebar";
 import ThinkingState from "./components/ThinkingState/ThinkingState";
 import AgentThinking from "./components/AgentThinking/AgentThinking";
@@ -530,7 +531,7 @@ export default function App() {
   const [pills, setPills] = useState<string[]>(pickPills);
   const [subline, setSubline] = useState<string | null>(null);
   const [sublineShown, setSublineShown] = useState(false);
-  const [view, setView] = useState<"chat" | "chronic" | "publish" | "settings">("chat");
+  const [view, setView] = useState<"chat" | "chronic" | "publish" | "settings" | "competitors">("chat");
   const [settingsSection, setSettingsSection] =
     useState<SettingsSection>("profile");
   const { user, logout } = useAuth();
@@ -1494,12 +1495,15 @@ export default function App() {
                 ? "chronic"
                 : view === "publish"
                   ? "publish"
-                  : "home"
+                  : view === "competitors"
+                    ? "competitors"
+                    : "home"
           }
           onNavigate={(key) => {
             if (key === "settings") setView("settings");
             else if (key === "chronic") setView("chronic");
             else if (key === "publish") setView("publish");
+            else if (key === "competitors") setView("competitors");
             else setView("chat");
           }}
           onOpenSettings={(section) => {
@@ -1556,6 +1560,27 @@ export default function App() {
                 setView("chat");
                 send(
                   `Repurpose this viral post from @${author} in my voice for X, LinkedIn, and Instagram:\n\n"${caption}"`,
+                );
+              }}
+              onBack={() => setView("chat")}
+            />
+          ) : view === "competitors" ? (
+            <CompetitorsView
+              profileId={activeProfileId}
+              onUseFramework={(fw, comp) => {
+                setView("chat");
+                send(
+                  `Write a post in my creator voice using the "${fw.name || fw.title}" framework inspired by @${comp.handle}:\n\n` +
+                  `Hook Formula: ${fw.hook_formula}\n` +
+                  (fw.structure ? `Structure: ${fw.structure}\n` : "") +
+                  (fw.why_it_works ? `Why it works: ${fw.why_it_works}\n` : "") +
+                  `Topic: Create an engaging, high-reach post about our industry insights.`
+                );
+              }}
+              onRepurposePost={(caption, author) => {
+                setView("chat");
+                send(
+                  `Analyze and repurpose this top-performing post from @${author} in my creator voice for X and LinkedIn:\n\n"${caption}"`
                 );
               }}
               onBack={() => setView("chat")}
