@@ -768,8 +768,7 @@ async def _ensure_niche_and_competitors(
             chosen_handles.append(s_clean)
 
     if len(chosen_handles) < 3 and getattr(wiring, "competitors", None) is not None:
-        if platform not in ("x", "instagram", "tiktok"):
-
+        if platform not in ("x", "instagram", "tiktok") and not has_sufficient_volume:
             def _copy_primary_handles() -> list[str]:
                 copied = []
                 other_handles = (
@@ -842,10 +841,14 @@ async def _ensure_niche_and_competitors(
     await aio(_persist_handles)()
 
     report_id = None
+    should_run_peer_pipeline = (
+        platform in ("x", "instagram", "tiktok")
+        or (platform == "linkedin" and has_sufficient_volume)
+    )
     if (
         chosen_handles
         and getattr(wiring, "competitors", None) is not None
-        and platform in ("x", "instagram", "tiktok")
+        and should_run_peer_pipeline
     ):
         pipeline_ok = False
         for attempt in range(1, max_retries + 1):

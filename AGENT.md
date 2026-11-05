@@ -107,16 +107,27 @@ This document logs progress, architecture, implemented capabilities, and what re
   - Clean stop-and-send or draft auto-population.
   - Verified with 23 backend transcription tests and 79 frontend unit tests passing.
 
+### 12. LinkedIn Competitor Scraping & Social Data Ingestion (Initial Build)
+- Implemented `LinkedInSocialData` adapter in `apps/connections/linkedin_social.py` conforming to `ports.SocialData`:
+  - `fetch_user_posts(handle, since, limit)`: Reads LinkedIn member and creator posts via connected LinkedIn OAuth provider (`r_member_social`) or cached repository posts with metric normalization.
+  - `search_posts(query, limit)` & `get_user(handle)`: Resolves LinkedIn creator handles and post queries into typed `PostIn` / `UserInfo`.
+  - Wired via `RunSocialData` in `apps/intelligence/wiring.py` to automatically route `platform="linkedin"` requests.
+  - Enabled LinkedIn peer pipeline execution in `apps/intelligence/tasks.py` for profiles with sufficient volume, while preserving anchor persona framework inheritance for sparse profiles.
+  - Verified with 2/2 tests in `apps/connections/tests/test_linkedin_social.py` passing.
+
 ---
 
 ## 2. What Is Left to Do
 
 ### Open Action (Immediately Actionable Next Tasks)
-1. **Celery Beat Recurring Schedule**: Add periodic crontab schedule entry (e.g. every 12 or 24 hours) in celery config to invoke `intelligence.sync_peer_posts` automatically in production.
-2. **Transactional Outbound Email Provider**: Connect real SMTP or transactional API provider (Resend, SendGrid, Amazon SES) in `apps/core/` for the n8n Niche Radar notification alerts.
+1. **Multi-Platform Competitor Scraping Expansion (Open/In Progress)**:
+   - Initial LinkedIn adapter built (`apps/connections/linkedin_social.py`). Next action: expand proxy and headless scraping fallbacks for unauthenticated third-party competitor LinkedIn profiles (e.g., via RapidAPI or session proxies).
+2. **Celery Beat Recurring Schedule**: Add periodic crontab schedule entry (e.g. every 12 or 24 hours) in celery config to invoke `intelligence.sync_peer_posts` automatically in production.
+3. **Transactional Outbound Email Provider**: Connect real SMTP or transactional API provider (Resend, SendGrid, Amazon SES) in `apps/core/` for the n8n Niche Radar notification alerts.
 
 ### Planned (Architectural Roadmap & Future Enhancements)
-1. **Multi-Platform Scrape Adapter Expansion**: When official APIs become available for LinkedIn / Instagram competitor public feeds, expand `ports.SocialData` to support multi-network peer post ingestion beyond X and TikTok.
+1. **Multi-Platform Scrape Adapter Expansion (Planned)**:
+   - Expand `ports.SocialData` to support automated public competitor feeds on Instagram and Facebook as official Graph API permissions or proxy endpoints become available.
 2. **Extended Video Audio OCR & Visual Framing**: Add deeper frame-by-frame visual analysis for TikTok / Reels competitor winning posts.
 
 ---

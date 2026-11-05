@@ -60,7 +60,11 @@ Lumi uses Meta's Model API (`https://api.meta.ai/v1`) as its primary reasoning e
   - **Tier B (3–7 Winners)**: Preserves verified winners and synthesizes frameworks with moderate confidence tiering rather than collapsing into `insufficient_data`.
   - **Tier C ($< 3$ Winners)**: Activates reasoning model framework synthesis fallback (`_synthesize_niche_frameworks`) grounded in ecosystem posts and network interaction history.
 
-### 9. Semantic Competitor Badges & Multi-Account Switching
+### 10. LinkedIn Competitor Scraping & Social Data Ingestion (Initial Build)
+- **LinkedIn Social Adapter (`LinkedInSocialData`)**: Implemented in `apps/connections/linkedin_social.py` and routed via `RunSocialData` in `apps/intelligence/wiring.py` to ingest public competitor posts and connected feeds for LinkedIn.
+- **Volume-Aware Processing**: Profiles with sufficient volume run full pipeline extraction; thin profiles gracefully inherit anchor frameworks.
+
+### 11. Semantic Competitor Badges & Multi-Account Switching
 - **Role Badges in `WinnersCard`**: Exposes semantic badges for Direct Competitors (blue), Parallel Founders (emerald), Aspirational Leaders (purple), and Co-Builders (amber) with match grading scores (`85% Match`) and ecosystem alignment tags (`🇳🇬 NG`).
 - **Side-by-Side Account Switcher**: Sidebar includes 1-click pill buttons for switching between connected accounts (e.g. `[ 𝕏 @atehofficial ] [ in @ateh ]`) with synchronized active profile states.
 - **Audio Voice Recorder**: Built-in chat composer microphone with real-time waveform animation and Meta ASR speech transcription.

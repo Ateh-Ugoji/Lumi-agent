@@ -116,6 +116,10 @@ class RunSocialData:
     async def fetch_user_posts(
         self, platform: Platform, handle: str, since: datetime | None, limit: int
     ) -> list[PostIn]:
+        if platform == "linkedin":
+            from apps.connections.linkedin_social import LinkedInSocialData
+
+            return await LinkedInSocialData().fetch_user_posts(handle, since, limit)
         return await (await self._data()).fetch_user_posts(
             platform, handle, since, limit
         )
@@ -123,14 +127,26 @@ class RunSocialData:
     async def search_posts(
         self, platform: Platform, query: str, limit: int
     ) -> list[PostIn]:
+        if platform == "linkedin":
+            from apps.connections.linkedin_social import LinkedInSocialData
+
+            return await LinkedInSocialData().search_posts(query, limit)
         return await (await self._data()).search_posts(platform, query, limit)
 
     async def get_user(self, platform: Platform, handle: str) -> UserInfo | None:
+        if platform == "linkedin":
+            from apps.connections.linkedin_social import LinkedInSocialData
+
+            return await LinkedInSocialData().get_user(handle)
         return await (await self._data()).get_user(platform, handle)
 
     async def search_users(
         self, platform: Platform, query: str, limit: int
     ) -> list[UserInfo]:
+        if platform == "linkedin":
+            from apps.connections.linkedin_social import LinkedInSocialData
+
+            return await LinkedInSocialData().search_users(query, limit)
         return await (await self._data()).search_users(platform, query, limit)
 
 
