@@ -40,6 +40,27 @@ class _OwnedProfileView(APIView):
     permission_classes = [IsProfileOwner]
 
 
+class ProfileDetailView(_OwnedProfileView):
+    """``DELETE /profiles/{profile_id}``: disconnect and remove a profile and any associated connected accounts."""
+
+    def delete(self, request, profile_id: int):
+        from apps.connections import accounts
+        from apps.connections.models import ConnectedAccount
+        from apps.profiles.models import SocialProfile
+
+        accs = list(
+            ConnectedAccount.objects.filter(
+                user=request.user, social_profile_id=profile_id
+            )
+        )
+        for acc in accs:
+            accounts.disconnect(
+                request.user, acc.provider, account_id=acc.external_account_id
+            )
+        SocialProfile.objects.filter(pk=profile_id, user=request.user).delete()
+        return Response({"deleted": True, "profile_id": profile_id})
+
+
 class ProfileListView(APIView):
     def get(self, request):
         return Response({"profiles": services.list_profile_summaries(request.user.pk)})

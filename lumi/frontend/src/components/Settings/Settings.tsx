@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useLightMode } from "../../hooks/useLightMode";
 import { IconArrowBoxLeft, IconMoon, IconSun } from "../Sidebar/Icons";
-import { errorMessage, startConnect, startConnectMessage, type ConnectReturn, type ProfileSummary, type User } from "../../api";
+import { deleteProfile, errorMessage, startConnect, startConnectMessage, type ConnectReturn, type ProfileSummary, type User } from "../../api";
 import SocialIcon from "../ThinkingState/SocialIcons";
 import { useT } from "../../i18n/index.ts";
 import LangToggle from "../../i18n/LangToggle";
@@ -49,6 +49,7 @@ export default function Settings({
   returned,
   onDismissReturn,
   onConnectionsChanged,
+  onDeleteProfile,
 }: {
   section: SettingsSection;
   onSectionChange: (next: SettingsSection) => void;
@@ -58,6 +59,7 @@ export default function Settings({
   activeProfileId: number | null;
   onSelectProfile: (id: number) => void;
   onCreateProfile: (platform: string, handle: string) => Promise<unknown>;
+  onDeleteProfile?: (id: number) => Promise<void> | void;
   onClearHistory: (profileId: number) => Promise<void>;
   onLogout: () => void;
   returned: ConnectReturn | null;
@@ -74,6 +76,29 @@ export default function Settings({
   const [connectingPlatform, setConnectingPlatform] = useState<string | null>(null);
   const [connectError, setConnectError] = useState<string | null>(null);
   const [showManual, setShowManual] = useState(false);
+
+  const handleDisconnectProfile = async (id: number, handle: string) => {
+    if (
+      !window.confirm(
+        `Disconnect @${handle} from Lumi? This will revoke access and remove the account connection.`,
+      )
+    ) {
+      return;
+    }
+    setProfileBusy(true);
+    try {
+      if (onDeleteProfile) {
+        await onDeleteProfile(id);
+      } else {
+        await deleteProfile(id);
+        onConnectionsChanged();
+      }
+    } catch (err) {
+      setProfileError(err instanceof Error ? err.message : "Failed to disconnect profile");
+    } finally {
+      setProfileBusy(false);
+    }
+  };
 
   const handleConnectPfm = async (platform: string) => {
     setConnectingPlatform(platform);
@@ -179,21 +204,46 @@ export default function Settings({
                   <ul className={styles.accountList} aria-label="Profiles">
                     {profiles.map((p) => (
                       <li key={p.id} className={styles.accountRow}>
-                        <span>
-                          <strong>@{p.handle}</strong> · {p.platform}
-                          {p.has_voice_profile ? t("settings.voice_ready") : ""}
-                        </span>
-                        {p.id === activeProfileId ? (
-                          <span className={styles.chipOn}>{t("settings.active")}</span>
-                        ) : (
+                        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                          {p.avatar_url ? (
+                            <img
+                              src={p.avatar_url}
+                              alt={p.handle}
+                              style={{ width: "24px", height: "24px", borderRadius: "50%", objectFit: "cover" }}
+                            />
+                          ) : (
+                            <span style={{ fontSize: "14px" }}>
+                              {p.platform === "x" ? "𝕏" : p.platform.slice(0, 2).toUpperCase()}
+                            </span>
+                          )}
+                          <span>
+                            <strong>@{p.handle}</strong> · {p.platform}
+                            {p.name && p.name !== p.handle ? ` (${p.name})` : ""}
+                            {p.has_voice_profile ? ` · ${t("settings.voice_ready")}` : ""}
+                          </span>
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                          {p.id === activeProfileId ? (
+                            <span className={styles.chipOn}>{t("settings.active")}</span>
+                          ) : (
+                            <button
+                              type="button"
+                              className={styles.textBtn}
+                              onClick={() => onSelectProfile(p.id)}
+                            >
+                              {t("settings.use_this")}
+                            </button>
+                          )}
                           <button
                             type="button"
                             className={styles.textBtn}
-                            onClick={() => onSelectProfile(p.id)}
+                            style={{ color: "#f87171" }}
+                            disabled={profileBusy}
+                            onClick={() => void handleDisconnectProfile(p.id, p.handle)}
                           >
-                            {t("settings.use_this")}
+                            {t("panel.disconnect")}
                           </button>
-                        )}
+                        </div>
                       </li>
                     ))}
                   </ul>

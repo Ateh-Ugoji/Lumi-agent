@@ -37,6 +37,7 @@ import {
   analyticsFrom,
   connectLinksFrom,
   deleteChatHistory,
+  deleteProfile,
   generateChatTitle,
   finishConnect,
   getProfileAnalytics,
@@ -568,6 +569,23 @@ export default function App() {
     try {
       sessionStorage.setItem("lumi_connect_prompt_dismissed", "true");
     } catch {}
+  };
+
+  const handleDisconnectProfile = async (profileId: number, handle?: string) => {
+    if (
+      handle &&
+      !window.confirm(
+        `Disconnect @${handle} from Lumi? This will revoke access and remove the account connection.`,
+      )
+    ) {
+      return;
+    }
+    try {
+      await deleteProfile(profileId);
+      await refreshProfiles();
+    } catch (err) {
+      console.error("Failed to disconnect profile:", err);
+    }
   };
 
   useEffect(() => {
@@ -1371,6 +1389,7 @@ export default function App() {
           profiles={profiles}
           activeProfileId={activeProfileId}
           onSelectProfile={selectProfile}
+          onDisconnectProfile={handleDisconnectProfile}
 
           recents={recents}
           userProfile={
@@ -1416,6 +1435,7 @@ export default function App() {
               activeProfileId={activeProfileId}
               onSelectProfile={selectProfile}
               onCreateProfile={createProfile}
+              onDeleteProfile={handleDisconnectProfile}
               onClearHistory={deleteChatHistory}
               onLogout={() => void logout()}
               returned={connectReturn}

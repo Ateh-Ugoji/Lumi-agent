@@ -830,9 +830,10 @@ def _revoke_remote(provider: str, row: ConnectedAccount) -> bool:
             return True
         outcome = async_to_sync(make_provider(provider).revoke)(token_set(row))
         return bool(outcome.remote_revoked)
-    except TokenDecryptError:
-        # Nothing to revoke with. The user still gets out: the rows are deleted by the caller.
-        logger.warning("tokens unreadable, remote revoke skipped for %s", provider)
+    except (TokenDecryptError, SocialDataError, Exception) as exc:
+        # Nothing to revoke with or remote error. The user still gets out: the rows are deleted by the caller.
+        logger.warning("remote revoke failed for %s: %s", provider, exc)
+        return False
         return False
     except SocialDataError:
         # The user wants out. A remote failure must not keep the tokens here.

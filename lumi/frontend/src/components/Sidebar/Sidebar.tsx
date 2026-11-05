@@ -69,6 +69,7 @@ type SidebarNavProps = {
   profiles?: ProfileSummary[];
   activeProfileId?: number | null;
   onSelectProfile?: (id: number) => void;
+  onDisconnectProfile?: (id: number, handle: string) => void;
 };
 
 
@@ -143,6 +144,7 @@ function WorkspaceMenu({
   profiles,
   activeProfileId,
   onSelectProfile,
+  onDisconnectProfile,
   onClose,
   onOpenSettings,
   onSignOut,
@@ -151,6 +153,7 @@ function WorkspaceMenu({
   profiles?: ProfileSummary[];
   activeProfileId?: number | null;
   onSelectProfile?: (id: number) => void;
+  onDisconnectProfile?: (id: number, handle: string) => void;
   onClose: () => void;
   onOpenSettings?: (section: string) => void;
   onSignOut?: () => void;
@@ -204,35 +207,69 @@ function WorkspaceMenu({
               const isActive = p.id === activeProfileId;
               const clean = p.handle.replace(/^@/, "");
               return (
-                <button
+                <div
                   key={p.id}
                   data-menu-row
-                  type="button"
-                  onClick={() => {
-                    onSelectProfile?.(p.id);
-                    onClose();
-                  }}
                   className={`${styles.menuRow} ${isActive ? styles.menuRowActive : ""}`}
+                  style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px" }}
                 >
-                  {p.avatar_url ? (
-                    <img src={p.avatar_url} alt={clean} className={styles.menuProfileAvatar} />
-                  ) : (
-                    <span className={styles.platformBadge}>
-                      {p.platform === "x" ? "𝕏" : p.platform === "linkedin" ? "in" : p.platform.slice(0, 2).toUpperCase()}
-                    </span>
-                  )}
-                  <div className={styles.menuProfileInfo}>
-                    <span className={styles.menuProfileHandle}>@{clean}</span>
-                    {p.name && p.name !== clean && (
-                      <span className={styles.menuProfileName}>{p.name}</span>
+                  <div
+                    style={{ display: "flex", alignItems: "center", gap: "8px", flex: 1, minWidth: 0, cursor: "pointer" }}
+                    onClick={() => {
+                      onSelectProfile?.(p.id);
+                      onClose();
+                    }}
+                  >
+                    {p.avatar_url ? (
+                      <img src={p.avatar_url} alt={clean} className={styles.menuProfileAvatar} />
+                    ) : (
+                      <span className={styles.platformBadge}>
+                        {p.platform === "x" ? "𝕏" : p.platform === "linkedin" ? "in" : p.platform.slice(0, 2).toUpperCase()}
+                      </span>
+                    )}
+                    <div className={styles.menuProfileInfo}>
+                      <span className={styles.menuProfileHandle}>@{clean}</span>
+                      {p.name && p.name !== clean && (
+                        <span className={styles.menuProfileName}>{p.name}</span>
+                      )}
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px", flexShrink: 0 }}>
+                    {isActive && (
+                      <span className={styles.menuCheck}>
+                        <IconCheckmarkSmall size={16} />
+                      </span>
+                    )}
+                    {onDisconnectProfile && (
+                      <button
+                        type="button"
+                        title={`Disconnect @${clean}`}
+                        aria-label={`Disconnect @${clean}`}
+                        style={{
+                          background: "none",
+                          border: "none",
+                          color: "rgba(255, 255, 255, 0.4)",
+                          cursor: "pointer",
+                          padding: "4px",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          borderRadius: "4px",
+                          transition: "all 0.15s ease",
+                        }}
+                        onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = "#f87171")}
+                        onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = "rgba(255, 255, 255, 0.4)")}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onDisconnectProfile(p.id, clean);
+                          onClose();
+                        }}
+                      >
+                        <IconTrash size={14} />
+                      </button>
                     )}
                   </div>
-                  {isActive && (
-                    <span className={styles.menuCheck}>
-                      <IconCheckmarkSmall size={18} />
-                    </span>
-                  )}
-                </button>
+                </div>
               );
             })}
             <div className={styles.menuDivider} />
@@ -294,6 +331,7 @@ export default function SidebarNav({
   profiles = [],
   activeProfileId = null,
   onSelectProfile,
+  onDisconnectProfile,
 }: SidebarNavProps) {
   const [collapsed, setCollapsed] = useState(
     () => typeof window !== "undefined" && window.innerWidth < 900,
@@ -478,6 +516,7 @@ export default function SidebarNav({
               profiles={profiles}
               activeProfileId={activeProfileId}
               onSelectProfile={onSelectProfile}
+              onDisconnectProfile={onDisconnectProfile}
               onClose={() => setWorkspaceOpen(false)}
               onOpenSettings={onOpenSettings}
               onSignOut={onSignOut}

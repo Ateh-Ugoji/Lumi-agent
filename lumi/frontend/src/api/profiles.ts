@@ -27,6 +27,14 @@ export async function createProfile(
   });
 }
 
+export async function deleteProfile(
+  profileId: number,
+): Promise<{ deleted: boolean; profile_id: number }> {
+  return request<{ deleted: boolean; profile_id: number }>(`/profiles/${profileId}`, {
+    method: "DELETE",
+  });
+}
+
 export type ProfileAnalytics = {
   profile_id: number;
   handle: string;
