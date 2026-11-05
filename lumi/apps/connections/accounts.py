@@ -613,7 +613,7 @@ def _stored_status(
     accounts = list(
         ConnectedAccount.objects.filter(user=user, provider=provider)
         .defer(*TOKEN_COLUMNS)
-        .select_related("social_profile")
+        .select_related("social_profile__handle")
         .order_by("id")
     )
     for row in accounts:
@@ -642,7 +642,37 @@ def sync_pfm(user) -> ProviderStatus:
             sync_pfm_accounts(user)
         except SocialDataError:
             stale = True
-    return _stored_status(user, "pfm", configured, stale=stale)
+    status = _stored_status(user, "pfm", configured, stale=stale)
+    details = dict(status.details)
+    active_job = None
+    active_profile_id = None
+    for acc in status.accounts:
+        if acc.status == AccountStatus.ACTIVE and acc.social_profile_id:
+            active_profile_id = acc.social_profile_id
+            from apps.core.models import BackgroundJob
+
+            bj = (
+                BackgroundJob.objects.filter(
+                    profile_id=acc.social_profile_id, kind="profile.bootstrap"
+                )
+                .order_by("-created_at")
+                .first()
+            )
+            if bj:
+                active_job = str(bj.pk)
+            break
+    if active_job:
+        details["job_id"] = active_job
+    if active_profile_id:
+        details["profile_id"] = active_profile_id
+    return ProviderStatus(
+        provider=status.provider,
+        configured=status.configured,
+        connected=status.connected,
+        stale=status.stale,
+        accounts=status.accounts,
+        details=details,
+    )
 
 
 PFM_PAGE_SIZE = 50

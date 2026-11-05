@@ -220,13 +220,24 @@ function WorkspaceMenu({
                       onClose();
                     }}
                   >
-                    {p.avatar_url ? (
-                      <img src={p.avatar_url} alt={clean} className={styles.menuProfileAvatar} />
-                    ) : (
-                      <span className={styles.platformBadge}>
-                        {p.platform === "x" ? "𝕏" : p.platform === "linkedin" ? "in" : p.platform.slice(0, 2).toUpperCase()}
-                      </span>
-                    )}
+                    {p.avatar_url || (p.platform === "x" && clean) ? (
+                      <img
+                        src={p.avatar_url || `https://unavatar.io/x/${clean}`}
+                        alt={clean}
+                        className={styles.menuProfileAvatar}
+                        onError={(e) => {
+                          e.currentTarget.style.display = "none";
+                          const fallback = e.currentTarget.nextElementSibling as HTMLElement;
+                          if (fallback) fallback.style.display = "flex";
+                        }}
+                      />
+                    ) : null}
+                    <span
+                      className={styles.platformBadge}
+                      style={{ display: p.avatar_url || (p.platform === "x" && clean) ? "none" : "flex" }}
+                    >
+                      {p.platform === "x" ? "𝕏" : p.platform === "linkedin" ? "in" : p.platform.slice(0, 2).toUpperCase()}
+                    </span>
                     <div className={styles.menuProfileInfo}>
                       <span className={styles.menuProfileHandle}>@{clean}</span>
                       {p.name && p.name !== clean && (

@@ -45,12 +45,25 @@ export default function ConnectSocialsModal({
     setConnecting(platform);
     setError(null);
     try {
+      try {
+        localStorage.setItem(
+          "lumi_pending_connect",
+          JSON.stringify({ timestamp: Date.now(), platform, provider: "pfm" })
+        );
+      } catch {
+        // storage disabled
+      }
       const url = await startConnect("pfm", {
         platform,
         redirectAfter: "/",
       });
       window.location.assign(url);
     } catch (err) {
+      try {
+        localStorage.removeItem("lumi_pending_connect");
+      } catch {
+        // ignore
+      }
       setConnecting(null);
       setError(startConnectMessage(err));
     }
@@ -63,7 +76,13 @@ export default function ConnectSocialsModal({
       const res = await syncPfm();
       const active = res.accounts.find((a) => a.status === "active") || res.accounts[0];
       if (active) {
+        try {
+          localStorage.removeItem("lumi_pending_connect");
+        } catch {
+          // ignore
+        }
         if (onAccountSynced) {
+          const jobId = res.job_id || (res.details?.job_id as string | undefined) || null;
           onAccountSynced(
             {
               handle: active.handle,
@@ -71,8 +90,8 @@ export default function ConnectSocialsModal({
               avatar_url: active.avatar_url,
               platform: active.platform || "x",
             },
-            null,
-            active.profile_id,
+            jobId,
+            res.profile_id ?? active.profile_id,
           );
         } else {
           onClose();

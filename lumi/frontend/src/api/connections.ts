@@ -23,11 +23,15 @@ export type ConnectionStatus = {
   connected: boolean;
   stale: boolean;
   accounts: ConnectedAccount[];
+  job_id?: string | null;
+  profile_id?: number | null;
   /** Provider data that is not an account. Google: scopes, expires_at, has_refresh_token. */
   details?: {
     scopes?: string | string[] | null;
     expires_at?: string | null;
     has_refresh_token?: boolean;
+    job_id?: string | null;
+    profile_id?: number | null;
   };
 };
 
@@ -188,19 +192,23 @@ export async function finishConnect(landing: CallbackLanding): Promise<ConnectRe
     if (!landing.success) throw new ApiError(400, "connections.pfm_failed", "pfm");
     // The sync call reads the accounts Post for Me now holds for this user and stores them.
     const status = await syncPfm();
-    const primary = status.accounts[0];
-    return {
+    const primary = status.accounts.find((a) => a.status === "active") || status.accounts[0];
+    const jobId = status.job_id || (status.details?.job_id as string | undefined) || null;
+    const profileId = status.profile_id || primary?.profile_id || null;
+    const out: ConnectResult = {
       provider: "pfm",
       connected: status.connected,
-      profile_id: primary?.profile_id ?? null,
-      account: primary
-        ? {
-            handle: primary.handle,
-            name: primary.display_name,
-            avatar_url: primary.avatar_url,
-          }
-        : null,
     };
+    if (profileId) out.profile_id = profileId;
+    if (jobId) out.job_id = jobId;
+    if (primary) {
+      out.account = {
+        handle: primary.handle,
+        name: primary.display_name,
+        avatar_url: primary.avatar_url,
+      };
+    }
+    return out;
   }
   const body =
     landing.kind === "grant"

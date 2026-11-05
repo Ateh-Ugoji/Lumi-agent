@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useLightMode } from "../../hooks/useLightMode";
 import { IconArrowBoxLeft, IconMoon, IconSun } from "../Sidebar/Icons";
-import { deleteProfile, errorMessage, startConnect, startConnectMessage, type ConnectReturn, type ProfileSummary, type User } from "../../api";
+import { deleteProfile, errorMessage, startConnect, startConnectMessage, syncPfm, type ConnectReturn, type ProfileSummary, type User } from "../../api";
 import SocialIcon from "../ThinkingState/SocialIcons";
 import { useT } from "../../i18n/index.ts";
 import LangToggle from "../../i18n/LangToggle";
@@ -50,6 +50,7 @@ export default function Settings({
   onDismissReturn,
   onConnectionsChanged,
   onDeleteProfile,
+  onAccountSynced,
 }: {
   section: SettingsSection;
   onSectionChange: (next: SettingsSection) => void;
@@ -65,6 +66,11 @@ export default function Settings({
   returned: ConnectReturn | null;
   onDismissReturn: () => void;
   onConnectionsChanged: () => void;
+  onAccountSynced?: (
+    account: { handle: string | null; name?: string | null; avatar_url?: string | null; platform?: string },
+    jobId?: string | null,
+    profileId?: number | null,
+  ) => void;
 }) {
   const { light, set: setLight } = useLightMode();
   const t = useT();
@@ -100,10 +106,20 @@ export default function Settings({
     }
   };
 
+  const [isSyncing, setIsSyncing] = useState(false);
+
   const handleConnectPfm = async (platform: string) => {
     setConnectingPlatform(platform);
     setConnectError(null);
     try {
+      try {
+        localStorage.setItem(
+          "lumi_pending_connect",
+          JSON.stringify({ timestamp: Date.now(), platform, provider: "pfm" })
+        );
+      } catch {
+        // ignore
+      }
       const url = await startConnect("pfm", {
         platform,
         profileId: activeProfileId,
@@ -111,8 +127,49 @@ export default function Settings({
       });
       window.location.assign(url);
     } catch (err) {
+      try {
+        localStorage.removeItem("lumi_pending_connect");
+      } catch {
+        // ignore
+      }
       setConnectingPlatform(null);
       setConnectError(startConnectMessage(err));
+    }
+  };
+
+  const handleSyncAccounts = async () => {
+    setIsSyncing(true);
+    setConnectError(null);
+    try {
+      const res = await syncPfm();
+      const active = res.accounts.find((a) => a.status === "active") || res.accounts[0];
+      if (active) {
+        try {
+          localStorage.removeItem("lumi_pending_connect");
+        } catch {
+          // ignore
+        }
+        onConnectionsChanged();
+        if (onAccountSynced) {
+          const jobId = res.job_id || (res.details?.job_id as string | undefined) || null;
+          onAccountSynced(
+            {
+              handle: active.handle,
+              name: active.display_name,
+              avatar_url: active.avatar_url,
+              platform: active.platform || "x",
+            },
+            jobId,
+            res.profile_id ?? active.profile_id,
+          );
+        }
+      } else {
+        setConnectError("No connected accounts found in Post for Me. Connect an account below first.");
+      }
+    } catch (err) {
+      setConnectError(startConnectMessage(err));
+    } finally {
+      setIsSyncing(false);
     }
   };
 
@@ -275,7 +332,16 @@ export default function Settings({
                         {connectError}
                       </p>
                     )}
-                    <div className={styles.manualToggleWrap}>
+                    <div className={styles.manualToggleWrap} style={{ display: "flex", gap: "12px", alignItems: "center" }}>
+                      <button
+                        type="button"
+                        className={styles.textBtnMuted}
+                        disabled={isSyncing}
+                        onClick={() => void handleSyncAccounts()}
+                        style={{ color: "#38bdf8", fontWeight: 600 }}
+                      >
+                        {isSyncing ? "Syncing with Post for Me..." : "🔄 Sync Accounts"}
+                      </button>
                       <button
                         type="button"
                         className={styles.textBtnMuted}

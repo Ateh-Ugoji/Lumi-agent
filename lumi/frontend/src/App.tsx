@@ -1,5 +1,6 @@
 import {
   Fragment,
+  useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -44,6 +45,7 @@ import {
   parseCallbackLanding,
   sendChatMessage,
   streamChatMessage,
+  syncPfm,
   agentErrorMessage,
   chatErrorMessage,
   CALLBACK_DONE_URL,
@@ -660,6 +662,90 @@ export default function App() {
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Auto-sync Post for Me accounts when returning from external OAuth redirect (or when profiles are empty/pending)
+  const isAutoSyncingRef = useRef(false);
+  const autoSyncedOnMountRef = useRef(false);
+
+  const checkAndSyncPfm = useCallback(
+    async (force = false) => {
+      if (!user || isAutoSyncingRef.current) return;
+      let isPending = false;
+      try {
+        const raw = localStorage.getItem("lumi_pending_connect");
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          // Valid if started within last 15 minutes
+          if (parsed && typeof parsed.timestamp === "number" && Date.now() - parsed.timestamp < 15 * 60 * 1000) {
+            isPending = true;
+          } else {
+            localStorage.removeItem("lumi_pending_connect");
+          }
+        }
+      } catch {
+        // ignore storage errors
+      }
+
+      // Sync if:
+      // 1) There is a pending connect from Post for Me (e.g. redirected to Onscript and user returned), OR
+      // 2) Forced, OR
+      // 3) User has 0 profiles and haven't synced on mount yet
+      const shouldSync = isPending || force || (profiles.length === 0 && !autoSyncedOnMountRef.current);
+      if (!shouldSync) return;
+
+      autoSyncedOnMountRef.current = true;
+      isAutoSyncingRef.current = true;
+      try {
+        const status = await syncPfm();
+        if (status.connected && status.accounts.length > 0) {
+          try {
+            localStorage.removeItem("lumi_pending_connect");
+          } catch {
+            // ignore
+          }
+          await refreshProfiles();
+          const active = status.accounts.find((a) => a.status === "active") || status.accounts[0];
+          const jobId = status.job_id || (status.details?.job_id as string | undefined) || null;
+          const profileId = status.profile_id || active.profile_id || null;
+          if (profileId) {
+            selectProfile(profileId);
+          }
+          if (isPending || force || profiles.length === 0) {
+            setUnderstandingState({
+              isOpen: true,
+              account: {
+                handle: active.handle,
+                name: active.display_name,
+                avatar_url: active.avatar_url,
+                platform: active.platform || "x",
+              },
+              jobId,
+              profileId,
+            });
+          }
+        }
+      } catch (err) {
+        console.warn("PFM auto-sync:", err);
+      } finally {
+        isAutoSyncingRef.current = false;
+      }
+    },
+    [user, profiles.length, refreshProfiles, selectProfile],
+  );
+
+  useEffect(() => {
+    void checkAndSyncPfm();
+  }, [checkAndSyncPfm]);
+
+  useEffect(() => {
+    const onFocus = () => {
+      void checkAndSyncPfm();
+    };
+    window.addEventListener("focus", onFocus);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [checkAndSyncPfm]);
 
   const runCounterRef = useRef(0);
   const settledReplyRef = useRef(0);
@@ -1441,6 +1527,18 @@ export default function App() {
               returned={connectReturn}
               onDismissReturn={() => setConnectReturn(null)}
               onConnectionsChanged={() => void refreshProfiles()}
+              onAccountSynced={(account, jobId, profileId) => {
+                void refreshProfiles();
+                if (profileId) {
+                  selectProfile(profileId);
+                }
+                setUnderstandingState({
+                  isOpen: true,
+                  account,
+                  jobId: jobId || null,
+                  profileId: profileId || null,
+                });
+              }}
             />
           ) : view === "publish" ? (
             <PublishStudio
