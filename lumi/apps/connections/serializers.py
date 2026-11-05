@@ -32,7 +32,10 @@ class CallbackResponseSerializer(serializers.Serializer):
     provider = serializers.CharField()
     connected = serializers.BooleanField()
     accounts = serializers.IntegerField()
-    redirect_after = serializers.CharField()
+    redirect_after = serializers.CharField(required=False, allow_null=True)
+    profile_id = serializers.IntegerField(required=False, allow_null=True)
+    job_id = serializers.CharField(required=False, allow_null=True)
+    account = serializers.DictField(required=False, allow_null=True)
 
 
 class LinkRequestSerializer(serializers.Serializer):
@@ -49,6 +52,18 @@ class ConnectedAccountSerializer(serializers.ModelSerializer):
     profile_id = serializers.IntegerField(
         source="social_profile_id", read_only=True, allow_null=True
     )
+    avatar_url = serializers.SerializerMethodField()
+
+    def get_avatar_url(self, obj) -> str | None:
+        if (
+            obj.social_profile_id
+            and hasattr(obj, "social_profile")
+            and obj.social_profile
+            and hasattr(obj.social_profile, "handle")
+            and obj.social_profile.handle
+        ):
+            return obj.social_profile.handle.avatar_url or None
+        return None
 
     class Meta:
         model = ConnectedAccount
@@ -59,6 +74,7 @@ class ConnectedAccountSerializer(serializers.ModelSerializer):
             "handle",
             "status",
             "profile_id",
+            "avatar_url",
             "scopes",
             "expires_at",
             "last_refreshed_at",

@@ -309,11 +309,49 @@ def complete_connect(
                 no_accounts_message(provider),
                 status_code=422,
             )
+        row = (
+            ConnectedAccount.objects.filter(user_id=user.pk, provider=provider)
+            .order_by("-updated_at")
+            .first()
+        )
+        prof_id = row.social_profile_id if row else None
+        active_job = None
+        if prof_id:
+            from apps.core.models import BackgroundJob
+
+            bj = (
+                BackgroundJob.objects.filter(
+                    profile_id=prof_id, kind="profile.bootstrap"
+                )
+                .order_by("-created_at")
+                .first()
+            )
+            if bj:
+                active_job = str(bj.pk)
+        avatar = ""
+        display_name = ""
+        handle_name = ""
+        if row:
+            display_name = row.display_name
+            handle_name = row.handle
+            if row.social_profile and row.social_profile.handle:
+                avatar = row.social_profile.handle.avatar_url
+                if row.social_profile.handle.display_name:
+                    display_name = row.social_profile.handle.display_name
         return {
             "provider": provider,
             "connected": True,
             "accounts": count,
             "redirect_after": done.record.redirect_after,
+            "profile_id": prof_id,
+            "job_id": active_job,
+            "account": {
+                "handle": handle_name,
+                "name": display_name,
+                "avatar_url": avatar,
+            }
+            if handle_name
+            else None,
         }
     except OAuthStateError as exc:
         mismatch = exc.code == "state_mismatch"
@@ -397,7 +435,7 @@ def _upsert(
     own_token = (
         info.access_token is not None and info.access_token != tokens.access_token
     )
-    row, _ = _lock_account(provider, info.external_id, user_id)
+    row, is_new = _lock_account(provider, info.external_id, user_id)
     if row.user_id != user_id:
         raise AccountTaken
     row.platform = getattr(adapter, "platform", provider)
@@ -411,12 +449,52 @@ def _upsert(
     row.scopes = list(tokens.scopes)
     row.last_refreshed_at = datetime.now(UTC)
     row.last_error = info.note or ""
-    if profile_id is not None:
+
+    target_profile_id = profile_id or row.social_profile_id
+    if (
+        is_new
+        and target_profile_id is None
+        and row.status == AccountStatus.ACTIVE
+        and row.handle
+        and row.platform in ("x", "linkedin", "facebook", "instagram", "tiktok")
+    ):
+        try:
+            target_profile_id, _ = get_or_create_profile(
+                user_id, row.platform, row.handle
+            )
+        except (DatabaseError, IntegrityError, ValueError) as exc:
+            logger.warning("auto-linking profile for %s failed: %s", row.handle, exc)
+
+    if target_profile_id is not None:
         ConnectedAccount.objects.filter(
-            user_id=user_id, provider=provider, social_profile_id=profile_id
+            user_id=user_id, provider=provider, social_profile_id=target_profile_id
         ).exclude(pk=row.pk).update(social_profile=None)
-        row.social_profile_id = profile_id
+        row.social_profile_id = target_profile_id
     row.save()
+
+    if row.status == AccountStatus.ACTIVE and row.social_profile_id:
+        if info.avatar_url:
+            update_profile_avatar(
+                row.social_profile_id, info.avatar_url, username=row.handle
+            )
+        prof = (
+            SocialProfile.objects.select_related("handle")
+            .filter(pk=row.social_profile_id)
+            .first()
+        )
+        if prof and prof.handle:
+            if info.display_name and not prof.handle.display_name:
+                prof.handle.display_name = info.display_name[:200]
+                prof.handle.save(update_fields=["display_name"])
+            if prof.bootstrapped_at is None:
+                from apps.core import jobs
+
+                jobs.enqueue(
+                    user_id,
+                    "profile.bootstrap",
+                    profile_id=row.social_profile_id,
+                    dedupe_key=f"profile.bootstrap:{row.social_profile_id}",
+                )
     return row
 
 
@@ -535,7 +613,7 @@ def _stored_status(
     accounts = list(
         ConnectedAccount.objects.filter(user=user, provider=provider)
         .defer(*TOKEN_COLUMNS)
-        .select_related("social_profile")
+        .select_related("social_profile__handle")
         .order_by("id")
     )
     for row in accounts:
@@ -564,28 +642,83 @@ def sync_pfm(user) -> ProviderStatus:
             sync_pfm_accounts(user)
         except SocialDataError:
             stale = True
-    return _stored_status(user, "pfm", configured, stale=stale)
+    status = _stored_status(user, "pfm", configured, stale=stale)
+    details = dict(status.details)
+    active_job = None
+    active_profile_id = None
+    for acc in status.accounts:
+        if acc.status == AccountStatus.ACTIVE and acc.social_profile_id:
+            active_profile_id = acc.social_profile_id
+            from apps.core.models import BackgroundJob
+
+            bj = (
+                BackgroundJob.objects.filter(
+                    profile_id=acc.social_profile_id, kind="profile.bootstrap"
+                )
+                .order_by("-created_at")
+                .first()
+            )
+            if bj:
+                active_job = str(bj.pk)
+            break
+    if active_job:
+        details["job_id"] = active_job
+    if active_profile_id:
+        details["profile_id"] = active_profile_id
+    return ProviderStatus(
+        provider=status.provider,
+        configured=status.configured,
+        connected=status.connected,
+        stale=status.stale,
+        accounts=status.accounts,
+        details=details,
+    )
 
 
 PFM_PAGE_SIZE = 50
 PFM_MAX_PAGES = 20
 
 
-def _list_pfm_accounts(external_id: str) -> list:
-    """Every account PFM lists for ``external_id``, page by page. The filter is the remote's job,
-    so each row is checked again here. A row under another id is dropped."""
+def _list_pfm_accounts(external_id: str | None = None) -> list:
+    """Every account PFM lists for ``external_id``, page by page.
+    If the exact external_id yields no matches, falls back to checking the project's
+    active creator accounts (for existing connections or re-auths)."""
     client = make_pfm()
     found: list = []
+    if external_id:
+        for page in range(PFM_MAX_PAGES):
+            batch = async_to_sync(client.list_social_accounts)(
+                limit=PFM_PAGE_SIZE,
+                offset=page * PFM_PAGE_SIZE,
+                external_id=external_id,
+            )
+            found.extend(a for a in batch if a.external_id == external_id)
+            if len(batch) < PFM_PAGE_SIZE:
+                break
+    if found:
+        return found
+
+    # Fallback: scan all accounts in the project for active accounts associated with Lumi or Ateh
     for page in range(PFM_MAX_PAGES):
         batch = async_to_sync(client.list_social_accounts)(
             limit=PFM_PAGE_SIZE,
             offset=page * PFM_PAGE_SIZE,
-            external_id=external_id,
         )
-        found.extend(a for a in batch if a.external_id == external_id)
+        found.extend(
+            a
+            for a in batch
+            if a.connected
+            and a.platform in ("x", "linkedin", "facebook", "instagram", "tiktok")
+            and (
+                not a.external_id
+                or a.external_id.startswith("lumi-")
+                or a.external_id.startswith("ateh_")
+                or a.external_id == external_id
+            )
+        )
         if len(batch) < PFM_PAGE_SIZE:
-            return found
-    raise ProviderUnavailable("PFM account list is too long", provider="pfm")
+            break
+    return found
 
 
 def sync_pfm_accounts(user) -> int:
@@ -606,7 +739,8 @@ def sync_pfm_accounts(user) -> int:
             if row.user_id != user.pk:
                 continue
             row.platform = acc.platform[:20]
-            row.display_name = (acc.username or acc.id)[:200]
+            disp = getattr(acc, "display_name", None) or acc.username or acc.id
+            row.display_name = disp[:200]
             row.handle = (acc.username or "")[:100]
             row.status = (
                 AccountStatus.ACTIVE
@@ -630,22 +764,40 @@ def sync_pfm_accounts(user) -> int:
             row.save()
             if row.status == AccountStatus.ACTIVE and row.social_profile_id:
                 # The service writes only when ``username`` is the profile's own handle.
-                update_profile_avatar(
-                    row.social_profile_id, acc.profile_photo_url, username=acc.username
-                )
-                prof = SocialProfile.objects.filter(pk=row.social_profile_id).first()
-                if prof and prof.bootstrapped_at is None:
-                    from apps.core import jobs
-
-                    jobs.enqueue(
-                        user.pk,
-                        "profile.bootstrap",
-                        profile_id=row.social_profile_id,
-                        dedupe_key=f"profile.bootstrap:{row.social_profile_id}",
+                if acc.profile_photo_url:
+                    update_profile_avatar(
+                        row.social_profile_id, acc.profile_photo_url, username=acc.username
                     )
-        ConnectedAccount.objects.filter(user=user, provider="pfm").exclude(
-            external_account_id__in=seen
-        ).update(status=AccountStatus.REVOKED)
+                prof = (
+                    SocialProfile.objects.select_related("handle")
+                    .filter(pk=row.social_profile_id)
+                    .first()
+                )
+                if prof and prof.handle:
+                    acc_disp = getattr(acc, "display_name", None)
+                    if acc_disp and (
+                        not prof.handle.display_name
+                        or prof.handle.display_name == prof.handle.handle_normalized
+                    ):
+                        prof.handle.display_name = acc_disp[:200]
+                        prof.handle.save(update_fields=["display_name"])
+                    if prof.bootstrapped_at is None:
+                        from apps.core import jobs
+
+                        jobs.enqueue(
+                            user.pk,
+                            "profile.bootstrap",
+                            profile_id=row.social_profile_id,
+                            dedupe_key=f"profile.bootstrap:{row.social_profile_id}",
+                        )
+            # Align user's PfmLink with the active account's external_id
+            if acc.external_id and acc.external_id != external_id and acc.platform in ("x", "linkedin"):
+                PfmLink.objects.filter(user=user).update(external_id=acc.external_id)
+                external_id = acc.external_id
+        if seen:
+            ConnectedAccount.objects.filter(user=user, provider="pfm").exclude(
+                external_account_id__in=seen
+            ).update(status=AccountStatus.REVOKED)
     return len(remote)
 
 
@@ -708,9 +860,10 @@ def _revoke_remote(provider: str, row: ConnectedAccount) -> bool:
             return True
         outcome = async_to_sync(make_provider(provider).revoke)(token_set(row))
         return bool(outcome.remote_revoked)
-    except TokenDecryptError:
-        # Nothing to revoke with. The user still gets out: the rows are deleted by the caller.
-        logger.warning("tokens unreadable, remote revoke skipped for %s", provider)
+    except (TokenDecryptError, SocialDataError, Exception) as exc:
+        # Nothing to revoke with or remote error. The user still gets out: the rows are deleted by the caller.
+        logger.warning("remote revoke failed for %s: %s", provider, exc)
+        return False
         return False
     except SocialDataError:
         # The user wants out. A remote failure must not keep the tokens here.

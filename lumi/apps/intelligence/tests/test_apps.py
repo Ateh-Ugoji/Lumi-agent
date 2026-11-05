@@ -6,7 +6,7 @@ import pytest
 
 from apps.core import keys
 
-EXPECTED = {"groq", "openrouter", "openlux", "typesafe", "chroma", "neatlogs", "video"}
+EXPECTED = {"groq", "openrouter", "openlux", "typesafe", "chroma", "neatlogs", "video", "gemini"}
 
 
 @pytest.fixture
@@ -20,6 +20,10 @@ def fresh_registry(monkeypatch):
         "NEATLOGS_API_KEY",
         "VIDEO_PROVIDER",
         "VIDEO_API_KEY",
+        "GEMINI_API_KEY",
+        "CHROMA_API_KEY",
+        "CHROMA_TENANT",
+        "CHROMA_DATABASE",
     ):
         monkeypatch.delenv(var, raising=False)
 

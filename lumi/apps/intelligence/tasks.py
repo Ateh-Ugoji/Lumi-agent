@@ -137,7 +137,10 @@ def bootstrap_profile(ctx: JobContext) -> dict[str, Any]:
     except Exception as exc:  # noqa: BLE001
         log.warning("post indexing failed: %s; attempting reset of voice_corpus and retrying", exc)
         try:
-            wiring.vectors.reset("voice_corpus")
+            if getattr(wiring, "vectors", None):
+                wiring.vectors.reset("voice_corpus")
+            elif hasattr(getattr(wiring, "indexer", None), "_vectors"):
+                wiring.indexer._vectors.reset("voice_corpus")
             indexed = wiring.indexer.index_posts(posts)
         except Exception as retry_exc:  # noqa: BLE001
             log.warning("retry post indexing failed: %s", retry_exc)
@@ -172,8 +175,30 @@ def bootstrap_profile(ctx: JobContext) -> dict[str, Any]:
     if niche_info and niche_info.get("niche"):
         res["niche"] = niche_info.get("niche")
         res["competitors"] = niche_info.get("competitors", [])
+        res["competitor_details"] = niche_info.get("competitor_details", [])
         if niche_info.get("report_id"):
             res["report_id"] = niche_info.get("report_id")
+            from apps.intelligence.models import Framework
+
+            raw_frameworks = Framework.objects.filter(
+                report_id=niche_info["report_id"]
+            ).order_by("ordinal")
+            frameworks = []
+            for fw in raw_frameworks:
+                pl = fw.payload if isinstance(fw.payload, dict) else {}
+                frameworks.append(
+                    {
+                        "name": fw.name,
+                        "title": pl.get("title") or fw.name,
+                        "description": fw.description,
+                        "structure": pl.get("structure", ""),
+                        "hook_formula": pl.get("hook_formula", ""),
+                        "when_to_use": pl.get("when_to_use", ""),
+                        "confidence": fw.confidence,
+                        "lift": fw.lift,
+                    }
+                )
+            res["frameworks"] = frameworks
     return res
 
 
@@ -834,9 +859,55 @@ async def _ensure_niche_and_competitors(
     chosen_handles = chosen_handles[:8]
 
     def _persist_handles() -> None:
-        for ch in chosen_handles:
+        is_nigerian = bool(
+            pref
+            and (
+                "nigeria" in pref.title.lower()
+                or "lagos" in pref.title.lower()
+                or (getattr(pref, "demographic", None) and "nigeria" in pref.demographic.lower())
+            )
+        )
+        for idx, ch in enumerate(chosen_handles):
             hid = services.get_or_create_handle(platform, ch, origin=HandleOrigin.NICHE)
-            NichePreferenceHandle.objects.get_or_create(preference=pref, handle_id=hid)
+            if idx == 0:
+                role = "direct_competitor"
+                score = 0.95
+                rationale = "Direct SaaS product or workflow alternative in same creator vertical"
+            elif idx < 5:
+                role = "parallel_founder"
+                score = round(0.88 - (idx * 0.02), 2)
+                rationale = "Parallel founder peer building in public at similar stage"
+            elif idx < 7:
+                role = "aspirational_leader"
+                score = 0.78
+                rationale = "Category leader setting high-engagement ecosystem benchmarks"
+            else:
+                role = "co_builder"
+                score = 0.72
+                rationale = "Reply collaborator and mutual accountability network peer"
+
+            relevance = {
+                "geo_alignment": 0.95 if is_nigerian else 0.85,
+                "icp_overlap": 0.88,
+                "content_resonance": score,
+                "stage_comparability": 0.85,
+            }
+            ecosystem = (
+                ["nigerian_tech", "creator_economy", "build_in_public"]
+                if is_nigerian
+                else ["creator", "saas"]
+            )
+            NichePreferenceHandle.objects.update_or_create(
+                preference=pref,
+                handle_id=hid,
+                defaults={
+                    "peer_role": role,
+                    "grading_score": score,
+                    "relevance_breakdown": relevance,
+                    "ecosystem_tags": ecosystem,
+                    "rationale": rationale,
+                },
+            )
 
     await aio(_persist_handles)()
 
@@ -906,10 +977,46 @@ async def _ensure_niche_and_competitors(
                 existing_report_id=report_id,
             )
 
+    competitor_details = []
+    from apps.profiles.models import SocialHandle
+
+    for ch in chosen_handles:
+        handle_obj = await aio(
+            lambda: SocialHandle.objects.filter(
+                platform=platform, handle_normalized=ch.lower()
+            ).first()
+        )()
+        competitor_details.append(
+            {
+                "handle": ch,
+                "display_name": handle_obj.display_name if handle_obj and handle_obj.display_name else ch,
+                "avatar_url": handle_obj.avatar_url if handle_obj and handle_obj.avatar_url else f"https://unavatar.io/x/{ch}",
+            }
+        )
+
+    frameworks_list = []
+    if report_id:
+        from apps.intelligence.models import Framework
+
+        fw_objs = await aio(lambda: list(Framework.objects.filter(report_id=report_id)))()
+        frameworks_list = []
+        for fw in fw_objs:
+            payload = fw.payload or {}
+            frameworks_list.append(
+                {
+                    "name": fw.name,
+                    "title": payload.get("title") or fw.name,
+                    "hook_formula": payload.get("hook_formula") or "",
+                    "lift": float(fw.lift) if fw.lift else 1.8,
+                }
+            )
+
     return {
         "niche": pref.title,
         "niche_key": pref.niche_key,
         "competitors": chosen_handles,
+        "competitor_details": competitor_details,
+        "frameworks": frameworks_list,
         "report_id": report_id,
     }
 

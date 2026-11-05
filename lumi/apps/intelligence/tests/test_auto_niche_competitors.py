@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from asgiref.sync import async_to_sync
@@ -319,3 +319,106 @@ class TestCrossNetworkAnchorPersonaAndNicheInheritance:
         assert latest is not None
         assert latest.id == report_x.pk
         assert latest.query == "AI & Agentic Automation"
+
+    def test_4_tier_competitor_grading_spectrum_and_details(self, owner, make_profile):
+        profile = make_profile(owner, handle="atehofficial", platform="x")
+        posts = [DummyPost("Building autonomous tech products #saas #nigeria")]
+        wiring = SimpleNamespace(
+            competitors=SimpleNamespace(
+                pipeline=SimpleNamespace(social=MagicMock(), config=AIConfig()),
+            ),
+            chain=None,
+            config=AIConfig(),
+        )
+
+        res = async_to_sync(_ensure_niche_and_competitors)(wiring, profile.pk, posts)
+        assert "competitors" in res
+        assert "competitor_details" in res
+        assert len(res["competitor_details"]) > 0
+
+        # Check NichePreferenceHandle database rows
+        pref = NichePreference.objects.filter(profile=profile, is_active=True).first()
+        assert pref is not None
+        handles = list(NichePreferenceHandle.objects.filter(preference=pref).order_by("id"))
+        assert len(handles) > 0
+
+        # Verify 4-tier roles & grading scores
+        roles = [h.peer_role for h in handles]
+        assert "direct_competitor" in roles
+        assert "parallel_founder" in roles
+        for h in handles:
+            assert 0.0 <= h.grading_score <= 1.0
+            assert "geo_alignment" in h.relevance_breakdown
+            assert isinstance(h.ecosystem_tags, list)
+
+    def test_bootstrap_profile_returns_competitor_details_and_frameworks(self, owner, make_profile, monkeypatch):
+        from apps.intelligence.models import Framework, NicheReport
+        from apps.core import jobs
+        from apps.intelligence import tasks
+
+        profile = make_profile(owner, handle="testcreator", platform="x")
+        report = NicheReport.objects.create(
+            profile=profile,
+            query="SaaS Tools",
+            niche="saas-tools:global",
+            status="ok",
+            posts_analyzed=10,
+            winner_count=2,
+            peers_analyzed=2,
+            report={},
+            origin="pipeline",
+        )
+        Framework.objects.create(
+            report=report,
+            name="motion_vulnerability",
+            description="A vulnerability-driven motion UI hook that builds trust",
+            lift=2.3,
+            confidence=0.92,
+            ordinal=1,
+            payload={
+                "title": "The Raw Motion Vulnerability Hook",
+                "structure": "Hook -> Metric -> Vulnerable Story -> CTA",
+                "hook_formula": "I almost quit building...",
+                "when_to_use": "When sharing technical milestones",
+            },
+        )
+
+        mock_wiring = SimpleNamespace(
+            sync=SimpleNamespace(sync_own_posts=AsyncMock(return_value={"stored": 5})),
+            posts=SimpleNamespace(list_posts=AsyncMock(return_value=[])),
+            indexer=SimpleNamespace(index_posts=MagicMock(return_value=5)),
+            vectors=SimpleNamespace(reset=MagicMock()),
+            style=SimpleNamespace(
+                ensure_voice=AsyncMock(
+                    return_value=SimpleNamespace(status="created", posts_found=5)
+                )
+            ),
+            config=AIConfig(),
+        )
+        monkeypatch.setattr("apps.intelligence.runtime.get_wiring", lambda: mock_wiring)
+
+        with patch("apps.intelligence.tasks._ensure_niche_and_competitors", return_value={
+            "niche": "saas-tools:global",
+            "competitors": ["peer1", "peer2"],
+            "competitor_details": [{"handle": "peer1", "avatar_url": "https://img.com/p1.jpg"}],
+            "report_id": report.pk,
+        }):
+            import uuid
+
+            job_id = str(uuid.uuid4())
+            BackgroundJob.objects.create(
+                id=job_id,
+                user=owner,
+                profile=profile,
+                kind=tasks.BOOTSTRAP_KIND,
+                status="running",
+            )
+            ctx = jobs.JobContext(job_id, owner.pk, profile.pk, tasks.BOOTSTRAP_KIND, {})
+            out = tasks.bootstrap_profile(ctx)
+            assert "competitor_details" in out
+            assert len(out["competitor_details"]) == 1
+            assert out["competitor_details"][0]["handle"] == "peer1"
+            assert "frameworks" in out
+            assert len(out["frameworks"]) == 1
+            assert out["frameworks"][0]["name"] == "motion_vulnerability"
+            assert out["frameworks"][0]["lift"] == 2.3

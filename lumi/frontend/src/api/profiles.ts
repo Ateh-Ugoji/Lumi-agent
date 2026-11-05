@@ -5,6 +5,8 @@ export type ProfileSummary = {
   name: string;
   platform: string;
   handle: string;
+  avatar_url?: string | null;
+  bio?: string | null;
   has_voice_profile: boolean;
   listening_active: boolean;
   timezone?: string | null;
@@ -22,6 +24,14 @@ export async function createProfile(
   return request<ProfileSummary>("/profiles", {
     method: "POST",
     body: { platform, handle: handle.trim().replace(/^@/, "") },
+  });
+}
+
+export async function deleteProfile(
+  profileId: number,
+): Promise<{ deleted: boolean; profile_id: number }> {
+  return request<{ deleted: boolean; profile_id: number }>(`/profiles/${profileId}`, {
+    method: "DELETE",
   });
 }
 

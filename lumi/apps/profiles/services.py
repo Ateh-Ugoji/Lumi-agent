@@ -86,6 +86,8 @@ class ProfileSummary(TypedDict):
     name: str
     platform: str
     handle: str
+    avatar_url: str | None
+    bio: str | None
     has_voice_profile: bool
     listening_active: bool
     timezone: str | None
@@ -344,6 +346,8 @@ def _summaries(profiles: Sequence[SocialProfile]) -> list[ProfileSummary]:
             name=_display_name(p.handle),
             platform=p.handle.platform,
             handle=p.handle.handle_display or p.handle.handle_normalized,
+            avatar_url=p.handle.avatar_url or None,
+            bio="",
             has_voice_profile=p.pk in voiced,
             listening_active=p.pk in listening,
             timezone=p.timezone,

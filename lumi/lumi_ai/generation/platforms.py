@@ -48,17 +48,22 @@ _X = PlatformRules(
         "the real text, which can only be stricter."
     ),
     limit_is_official=True,
-    target_min=0,
-    target_max=280,
+    target_min=100,
+    target_max=260,
     hashtags_min=0,
     hashtags_max=1,
     hashtag_cap_enforced=False,
     utf16_length=False,
     guidance=(
-        "- Under 280 characters in total. Punchy, one idea, no filler.\n"
-        "- Short lines, a blank line between thoughts, a hook in the first line.\n"
-        "- 0 or 1 hashtag; never a hashtag pile.\n"
-        "- Close with a question or a sharp statement that invites a reply."
+        "- Between 100 and 260 characters in total (Earlybird text length score sweet spot).\n"
+        "- Hook in the first line: High-entropy opening with a strong point of view.\n"
+        "- Conversational open-loop: The closing line MUST invite a reply or question to maximize "
+        "P(Reply), weighted at +13.5x in the Heavy Ranker (up to +75x when the author replies back).\n"
+        "- Zero external URLs in post body: Links carry a tiny 0.1x weight and trigger downranking. "
+        "Save links for replies or the bio.\n"
+        "- 0 or at most 1 hashtag: 2+ hashtags triggers 'has_multiple_hashtags_or_trends_flag'.\n"
+        "- Clean casing: Avoid ALL-CAPS words to prevent Earlybird shout damping.\n"
+        "- Anti-slop: Avoid stock AI clichés like 'dive in', 'delve', or 'game-changer'."
     ),
 )
 

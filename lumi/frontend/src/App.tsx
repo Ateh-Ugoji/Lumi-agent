@@ -1,5 +1,6 @@
 import {
   Fragment,
+  useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -14,7 +15,9 @@ import WinnersCard, { type WinnersData } from "./components/WinnersCard/WinnersC
 
 import Settings, { type SettingsSection } from "./components/Settings/Settings";
 import ConnectSocialsModal from "./components/ConnectSocialsModal/ConnectSocialsModal";
+import AccountUnderstandingModal from "./components/AccountUnderstandingModal/AccountUnderstandingModal";
 import ChronicOnline from "./components/ChronicOnline/ChronicOnline";
+import CompetitorsView from "./components/Competitors/CompetitorsView";
 import SidebarNav from "./components/Sidebar/Sidebar";
 import ThinkingState from "./components/ThinkingState/ThinkingState";
 import AgentThinking from "./components/AgentThinking/AgentThinking";
@@ -36,12 +39,14 @@ import {
   analyticsFrom,
   connectLinksFrom,
   deleteChatHistory,
+  deleteProfile,
   generateChatTitle,
   finishConnect,
   getProfileAnalytics,
   parseCallbackLanding,
   sendChatMessage,
   streamChatMessage,
+  syncPfm,
   agentErrorMessage,
   chatErrorMessage,
   CALLBACK_DONE_URL,
@@ -526,7 +531,7 @@ export default function App() {
   const [pills, setPills] = useState<string[]>(pickPills);
   const [subline, setSubline] = useState<string | null>(null);
   const [sublineShown, setSublineShown] = useState(false);
-  const [view, setView] = useState<"chat" | "chronic" | "publish" | "settings">("chat");
+  const [view, setView] = useState<"chat" | "chronic" | "publish" | "settings" | "competitors">("chat");
   const [settingsSection, setSettingsSection] =
     useState<SettingsSection>("profile");
   const { user, logout } = useAuth();
@@ -569,6 +574,23 @@ export default function App() {
     } catch {}
   };
 
+  const handleDisconnectProfile = async (profileId: number, handle?: string) => {
+    if (
+      handle &&
+      !window.confirm(
+        `Disconnect @${handle} from Lumi? This will revoke access and remove the account connection.`,
+      )
+    ) {
+      return;
+    }
+    try {
+      await deleteProfile(profileId);
+      await refreshProfiles();
+    } catch (err) {
+      console.error("Failed to disconnect profile:", err);
+    }
+  };
+
   useEffect(() => {
     setAnalytics(null);
     if (activeProfileId === null) return;
@@ -581,6 +603,13 @@ export default function App() {
     };
   }, [activeProfileId]);
 
+  const [understandingState, setUnderstandingState] = useState<{
+    isOpen: boolean;
+    account: { handle: string | null; name?: string | null; avatar_url?: string | null; platform?: string };
+    jobId?: string | null;
+    profileId?: number | null;
+  } | null>(null);
+
   // The provider redirects the browser to /connections/<provider>/callback on this app. Finish the
   // grant here with this user's Token: the server refuses a state that someone else started. The
   // URL is replaced at once, so a reload or a shared link never repeats the grant.
@@ -592,7 +621,9 @@ export default function App() {
     landingRef.current = found;
     window.history.replaceState(null, "", CALLBACK_DONE_URL);
     setSettingsSection(found.kind !== "pfm" && found.provider === "google" ? "connectors" : "social");
-    setView("settings");
+    if (found.kind !== "pfm" && found.provider === "google") {
+      setView("settings");
+    }
   }, []);
   useEffect(() => {
     const landing = landingRef.current;
@@ -610,6 +641,17 @@ export default function App() {
               },
         );
         refreshProfiles();
+        if (done.connected && done.provider !== "google") {
+          setUnderstandingState({
+            isOpen: true,
+            account: done.account || {
+              handle: "creator",
+              platform: done.provider,
+            },
+            jobId: done.job_id || null,
+            profileId: done.profile_id || null,
+          });
+        }
       })
       .catch((err: unknown) => {
         const code = err instanceof ApiError ? err.code : "internal_error";
@@ -621,6 +663,90 @@ export default function App() {
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Auto-sync Post for Me accounts when returning from external OAuth redirect (or when profiles are empty/pending)
+  const isAutoSyncingRef = useRef(false);
+  const autoSyncedOnMountRef = useRef(false);
+
+  const checkAndSyncPfm = useCallback(
+    async (force = false) => {
+      if (!user || isAutoSyncingRef.current) return;
+      let isPending = false;
+      try {
+        const raw = localStorage.getItem("lumi_pending_connect");
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          // Valid if started within last 15 minutes
+          if (parsed && typeof parsed.timestamp === "number" && Date.now() - parsed.timestamp < 15 * 60 * 1000) {
+            isPending = true;
+          } else {
+            localStorage.removeItem("lumi_pending_connect");
+          }
+        }
+      } catch {
+        // ignore storage errors
+      }
+
+      // Sync if:
+      // 1) There is a pending connect from Post for Me (e.g. redirected to Onscript and user returned), OR
+      // 2) Forced, OR
+      // 3) User has 0 profiles and haven't synced on mount yet
+      const shouldSync = isPending || force || (profiles.length === 0 && !autoSyncedOnMountRef.current);
+      if (!shouldSync) return;
+
+      autoSyncedOnMountRef.current = true;
+      isAutoSyncingRef.current = true;
+      try {
+        const status = await syncPfm();
+        if (status.connected && status.accounts.length > 0) {
+          try {
+            localStorage.removeItem("lumi_pending_connect");
+          } catch {
+            // ignore
+          }
+          await refreshProfiles();
+          const active = status.accounts.find((a) => a.status === "active") || status.accounts[0];
+          const jobId = status.job_id || (status.details?.job_id as string | undefined) || null;
+          const profileId = status.profile_id || active.profile_id || null;
+          if (profileId) {
+            selectProfile(profileId);
+          }
+          if (isPending || force || profiles.length === 0) {
+            setUnderstandingState({
+              isOpen: true,
+              account: {
+                handle: active.handle,
+                name: active.display_name,
+                avatar_url: active.avatar_url,
+                platform: active.platform || "x",
+              },
+              jobId,
+              profileId,
+            });
+          }
+        }
+      } catch (err) {
+        console.warn("PFM auto-sync:", err);
+      } finally {
+        isAutoSyncingRef.current = false;
+      }
+    },
+    [user, profiles.length, refreshProfiles, selectProfile],
+  );
+
+  useEffect(() => {
+    void checkAndSyncPfm();
+  }, [checkAndSyncPfm]);
+
+  useEffect(() => {
+    const onFocus = () => {
+      void checkAndSyncPfm();
+    };
+    window.addEventListener("focus", onFocus);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [checkAndSyncPfm]);
 
   const runCounterRef = useRef(0);
   const settledReplyRef = useRef(0);
@@ -1350,10 +1476,17 @@ export default function App() {
           profiles={profiles}
           activeProfileId={activeProfileId}
           onSelectProfile={selectProfile}
+          onDisconnectProfile={handleDisconnectProfile}
 
           recents={recents}
           userProfile={
-            activeProfile ? { name: activeProfile.name, handle: activeProfile.handle } : null
+            activeProfile
+              ? {
+                  name: activeProfile.name,
+                  handle: activeProfile.handle,
+                  avatar_url: activeProfile.avatar_url,
+                }
+              : null
           }
           activeNav={
             view === "settings"
@@ -1362,12 +1495,15 @@ export default function App() {
                 ? "chronic"
                 : view === "publish"
                   ? "publish"
-                  : "home"
+                  : view === "competitors"
+                    ? "competitors"
+                    : "home"
           }
           onNavigate={(key) => {
             if (key === "settings") setView("settings");
             else if (key === "chronic") setView("chronic");
             else if (key === "publish") setView("publish");
+            else if (key === "competitors") setView("competitors");
             else setView("chat");
           }}
           onOpenSettings={(section) => {
@@ -1389,11 +1525,24 @@ export default function App() {
               activeProfileId={activeProfileId}
               onSelectProfile={selectProfile}
               onCreateProfile={createProfile}
+              onDeleteProfile={handleDisconnectProfile}
               onClearHistory={deleteChatHistory}
               onLogout={() => void logout()}
               returned={connectReturn}
               onDismissReturn={() => setConnectReturn(null)}
               onConnectionsChanged={() => void refreshProfiles()}
+              onAccountSynced={(account, jobId, profileId) => {
+                void refreshProfiles();
+                if (profileId) {
+                  selectProfile(profileId);
+                }
+                setUnderstandingState({
+                  isOpen: true,
+                  account,
+                  jobId: jobId || null,
+                  profileId: profileId || null,
+                });
+              }}
             />
           ) : view === "publish" ? (
             <PublishStudio
@@ -1411,6 +1560,27 @@ export default function App() {
                 setView("chat");
                 send(
                   `Repurpose this viral post from @${author} in my voice for X, LinkedIn, and Instagram:\n\n"${caption}"`,
+                );
+              }}
+              onBack={() => setView("chat")}
+            />
+          ) : view === "competitors" ? (
+            <CompetitorsView
+              profileId={activeProfileId}
+              onUseFramework={(fw, comp) => {
+                setView("chat");
+                send(
+                  `Write a post in my creator voice using the "${fw.name || fw.title}" framework inspired by @${comp.handle}:\n\n` +
+                  `Hook Formula: ${fw.hook_formula}\n` +
+                  (fw.structure ? `Structure: ${fw.structure}\n` : "") +
+                  (fw.why_it_works ? `Why it works: ${fw.why_it_works}\n` : "") +
+                  `Topic: Create an engaging, high-reach post about our industry insights.`
+                );
+              }}
+              onRepurposePost={(caption, author) => {
+                setView("chat");
+                send(
+                  `Analyze and repurpose this top-performing post from @${author} in my creator voice for X and LinkedIn:\n\n"${caption}"`
                 );
               }}
               onBack={() => setView("chat")}
@@ -1561,6 +1731,29 @@ export default function App() {
         isOpen={showConnectModal}
         onClose={handleCloseConnectModal}
         connectedPlatforms={profiles.map((p) => p.platform)}
+        onAccountSynced={(account, jobId, profileId) => {
+          handleCloseConnectModal();
+          void refreshProfiles();
+          setUnderstandingState({
+            isOpen: true,
+            account,
+            jobId: jobId || null,
+            profileId: profileId || null,
+          });
+        }}
+      />
+      <AccountUnderstandingModal
+        isOpen={Boolean(understandingState?.isOpen)}
+        account={understandingState?.account ?? null}
+        jobId={understandingState?.jobId ?? null}
+        onComplete={() => {
+          if (understandingState?.profileId) {
+            selectProfile(understandingState.profileId);
+          }
+          setUnderstandingState(null);
+          setView("chat");
+          void refreshProfiles();
+        }}
       />
     </div>
   );

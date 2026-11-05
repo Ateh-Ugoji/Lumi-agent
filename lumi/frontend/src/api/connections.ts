@@ -10,6 +10,7 @@ export type ConnectedAccount = {
   handle: string | null;
   status: string;
   profile_id: number | null;
+  avatar_url?: string | null;
   scopes?: string[] | string | null;
   expires_at?: string | null;
   last_refreshed_at?: string | null;
@@ -22,11 +23,15 @@ export type ConnectionStatus = {
   connected: boolean;
   stale: boolean;
   accounts: ConnectedAccount[];
+  job_id?: string | null;
+  profile_id?: number | null;
   /** Provider data that is not an account. Google: scopes, expires_at, has_refresh_token. */
   details?: {
     scopes?: string | string[] | null;
     expires_at?: string | null;
     has_refresh_token?: boolean;
+    job_id?: string | null;
+    profile_id?: number | null;
   };
 };
 
@@ -167,7 +172,19 @@ export function parseCallbackLanding(pathname: string, search: string): Callback
 /** Where the browser goes once the landing is handled: no code, no state, no way to replay it. */
 export const CALLBACK_DONE_URL = "/";
 
-export type ConnectResult = { provider: string; connected: boolean };
+export type ConnectedAccountInfo = {
+  handle: string | null;
+  name?: string | null;
+  avatar_url?: string | null;
+};
+
+export type ConnectResult = {
+  provider: string;
+  connected: boolean;
+  profile_id?: number | null;
+  job_id?: string | null;
+  account?: ConnectedAccountInfo | null;
+};
 
 /** Finish the grant. Every outcome is an `ApiError` code the panel can explain. */
 export async function finishConnect(landing: CallbackLanding): Promise<ConnectResult> {
@@ -175,7 +192,23 @@ export async function finishConnect(landing: CallbackLanding): Promise<ConnectRe
     if (!landing.success) throw new ApiError(400, "connections.pfm_failed", "pfm");
     // The sync call reads the accounts Post for Me now holds for this user and stores them.
     const status = await syncPfm();
-    return { provider: "pfm", connected: status.connected };
+    const primary = status.accounts.find((a) => a.status === "active") || status.accounts[0];
+    const jobId = status.job_id || (status.details?.job_id as string | undefined) || null;
+    const profileId = status.profile_id || primary?.profile_id || null;
+    const out: ConnectResult = {
+      provider: "pfm",
+      connected: status.connected,
+    };
+    if (profileId) out.profile_id = profileId;
+    if (jobId) out.job_id = jobId;
+    if (primary) {
+      out.account = {
+        handle: primary.handle,
+        name: primary.display_name,
+        avatar_url: primary.avatar_url,
+      };
+    }
+    return out;
   }
   const body =
     landing.kind === "grant"

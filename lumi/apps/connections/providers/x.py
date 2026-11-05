@@ -186,7 +186,7 @@ class XProvider(SocialProvider):
         response = await self._http.request(
             "GET",
             f"{API_BASE}/2/users/me",
-            params={"user.fields": "username,name"},
+            params={"user.fields": "username,name,profile_image_url,description"},
             headers=bearer(tokens),
             retries=1,
         )
@@ -196,11 +196,16 @@ class XProvider(SocialProvider):
                 "unexpected users/me response", provider=self.name
             )
         username = data.get("username")
+        raw_avatar = data.get("profile_image_url")
+        avatar_url = str(raw_avatar).replace("_normal.", ".") if raw_avatar else None
+        bio = str(data.get("description") or "").strip() or None
         return AccountInfo(
             external_id=str(data["id"]),
             display_name=str(data.get("name") or username or data["id"]),
             handle=str(username).lower() if username else None,
             status="active",
+            avatar_url=avatar_url,
+            description=bio,
         )
 
     async def publish(

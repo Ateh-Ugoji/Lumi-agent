@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import re
 from dataclasses import dataclass, replace
 from typing import Any, get_args
 
@@ -110,7 +111,7 @@ def _clean_handles(raw: Any) -> list[str]:
     seen: dict[str, None] = {}
     for h in raw or []:
         name = str(h).strip().lstrip("@").lower()
-        if name and name not in EXCLUDED_PEER_HANDLES:
+        if name:
             seen.setdefault(name)
     return list(seen)
 
@@ -222,20 +223,27 @@ def build(services: CompetitorServices) -> list[ToolSpec]:
         from apps.intelligence.models import NichePreference
         from apps.intelligence.repos.aio import aio
 
-        pref = await aio(
-            lambda: NichePreference.objects.filter(
-                profile_id=ctx.profile_id, is_active=True
-            ).first()
-        )()
+        pref = None
         tracked_peers: list[str] = []
         niche_title = ""
-        if pref:
-            niche_title = pref.title
-            tracked_peers = await aio(
-                lambda: list(
-                    pref.handles.values_list("handle__handle_normalized", flat=True)
-                )
+        try:
+            from apps.intelligence.models import NichePreference
+            from apps.intelligence.repos.aio import aio
+
+            pref = await aio(
+                lambda: NichePreference.objects.filter(
+                    profile_id=ctx.profile_id, is_active=True
+                ).first()
             )()
+            if pref:
+                niche_title = pref.title
+                tracked_peers = await aio(
+                    lambda: list(
+                        pref.handles.values_list("handle__handle_normalized", flat=True)
+                    )
+                )()
+        except Exception:
+            pass
 
         report = await reports.latest_report(ctx.profile_id)
         if report is None:
@@ -266,6 +274,7 @@ def build(services: CompetitorServices) -> list[ToolSpec]:
         if report.status != "ok":
             return {
                 **head,
+                "error": report.detail or "insufficient data in report",
                 "detail": report.detail or f"Niche '{niche_title}' has tracked peers: {', '.join(tracked_peers)}",
                 "frameworks": [],
                 "examples": [],
@@ -313,6 +322,53 @@ def build(services: CompetitorServices) -> list[ToolSpec]:
         plat = await _platform(ctx, platform)
         if plat is None:
             return {"error": f"unknown platform {platform!r}; use one of {PLATFORMS}"}
+
+        # Resolve post text from pasted URLs (e.g. x.com/author/status/12345)
+        url_match = re.search(
+            r"(?:twitter\.com|x\.com)/([A-Za-z0-9_]+)/status/(\d+)", body
+        )
+        resolved_from_url = False
+        author_from_url = None
+        if url_match:
+            author_from_url = url_match.group(1)
+            status_id = url_match.group(2)
+            try:
+                if s.pipeline and s.pipeline.social:
+                    posts = await s.pipeline.social.fetch_user_posts(
+                        plat or "x", author_from_url, None, 20
+                    )
+                    matching = next(
+                        (
+                            p
+                            for p in posts
+                            if getattr(p, "post_id", None) == status_id
+                            or getattr(p, "platform_post_id", None) == status_id
+                            or status_id in getattr(p, "url", "")
+                        ),
+                        None,
+                    )
+                    if matching:
+                        match_text = getattr(matching, "text", "") or getattr(
+                            matching, "caption", ""
+                        )
+                        if match_text:
+                            body = match_text
+                            resolved_from_url = True
+            except Exception:
+                pass
+
+            if not resolved_from_url and body == url_match.group(0):
+                return {
+                    "url_detected": True,
+                    "author": author_from_url,
+                    "status_id": status_id,
+                    "note": (
+                        f"Post link detected from @{author_from_url}. If this specific post is not in their "
+                        "recent 20 posts, paste the post's text directly for immediate framework extraction, "
+                        f"or ask me to analyze @{author_from_url}'s overall winning frameworks."
+                    ),
+                }
+
         digest = hashlib.sha256(body.encode()).hexdigest()[:10]
         pasted = _Pasted(post_id=f"pasted-{digest}", text=body)
         (tagging,) = await tag_posts(s.pipeline.llm, [pasted])
@@ -326,8 +382,16 @@ def build(services: CompetitorServices) -> list[ToolSpec]:
             "analysis": analysis.model_dump(mode="json"),
             "primary_framework": analysis.body.primary_framework,
         }
+        if resolved_from_url and author_from_url:
+            out["source_url"] = url_match.group(0) if url_match else ""
+            out["author"] = author_from_url
         if tagging.framework_guess:
             out["framework_guess"] = tagging.framework_guess
+        if plat == "x":
+            from dataclasses import asdict
+            from lumi_ai.evaluation.x_algorithm import audit_x_post
+
+            out["x_algorithm_audit"] = asdict(audit_x_post(body))
         report = await reports.latest_report(ctx.profile_id)
         if report is None or report.status != "ok":
             out["niche_comparison"] = (
@@ -347,6 +411,83 @@ def build(services: CompetitorServices) -> list[ToolSpec]:
             "niche_frameworks": [framework_key(f) for f in report.frameworks],
         }
         return out
+
+    # -- tweepcred health audit ---------------------------------------------
+
+    async def tweepcred_audit(
+        ctx: ToolContext,
+        followers: int | None = None,
+        following: int | None = None,
+        handle: str | None = None,
+    ) -> dict[str, Any]:
+        """Audit an X account's follower ratio against X's official TweepCred algorithm."""
+        from lumi_ai.competitors.metrics import calculate_tweepcred_ratio_health
+
+        target_handle = (handle or "").lstrip("@").strip()
+        fol = followers
+        fng = following
+
+        # If not provided, try to resolve from user's profile handle snapshots
+        if (fol is None or fng is None) and not target_handle:
+            try:
+                from apps.intelligence.repos.aio import aio
+                from apps.profiles.models import HandleSnapshot
+
+                snapshot = await aio(
+                    lambda: HandleSnapshot.objects.filter(
+                        handle__profile_id=ctx.profile_id, handle__platform="x"
+                    )
+                    .order_by("-captured_at")
+                    .first()
+                )()
+                if snapshot:
+                    fol = fol if fol is not None else snapshot.followers
+                    fng = fng if fng is not None else snapshot.following
+                    target_handle = target_handle or snapshot.handle.handle_normalized
+            except Exception:
+                pass
+
+        if fol is None or fng is None:
+            return {
+                "handle": target_handle or "your_account",
+                "status": "awaiting_input",
+                "message": (
+                    "Please provide your followers and following counts (e.g. followers=1200, following=450) "
+                    "to compute your exact TweepCred PageRank reach penalty."
+                ),
+                "thresholds": {
+                    "max_following_threshold": 2500,
+                    "target_following_to_follower_ratio": "<= 0.60",
+                    "max_reach_penalty": "50x division if ratio > 0.60 and following > 2,500",
+                },
+            }
+
+        health = calculate_tweepcred_ratio_health(fol, fng)
+        return {
+            "handle": target_handle or "account",
+            "followers": fol,
+            "following": fng,
+            **health,
+            "formula_source": "the-algorithm/src/scala/com/twitter/graph/batch/job/tweepcred/Reputation.scala",
+            "explanation": (
+                f"Your following-to-follower ratio is {health['following_to_followers_ratio']}. "
+                + (
+                    f"⚠️ Warning: You follow >2,500 accounts and your ratio exceeds 0.60. "
+                    f"X's TweepCred engine is dividing your account PageRank by {health['division_factor']}x, "
+                    f"cutting your timeline reach by {health['reach_loss_percentage']}%. "
+                    f"Unfollow at least {health['unfollow_target_to_fix']} accounts to restore full reach."
+                    if health["is_penalized"]
+                    else (
+                        "✅ Healthy: Your account is not suffering from TweepCred follow-ratio reach penalties. "
+                        + (
+                            f"Keep following under {int(fol * 0.6)} to stay safely under the 0.60 threshold."
+                            if fng > 2500
+                            else "You follow under 2,500 accounts, so the ratio penalty is currently bypassed."
+                        )
+                    )
+                )
+            ),
+        }
 
     # -- own lift -----------------------------------------------------------
 
@@ -686,6 +827,33 @@ def build(services: CompetitorServices) -> list[ToolSpec]:
             handler=analyze_pasted,
             cost="llm",
             cache_ttl=0,  # the comparison depends on the niche report, which can change between calls
+        ),
+        ToolSpec(
+            name="audit_x_tweepcred",
+            description=(
+                "Audit an X account's follower and following counts against X's official TweepCred PageRank algorithm. "
+                "Detects whether the account triggers the 50x reach penalty for following >2,500 people with ratio >0.60."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "followers": {
+                        "type": "integer",
+                        "description": "Number of followers on X.",
+                    },
+                    "following": {
+                        "type": "integer",
+                        "description": "Number of accounts followed on X.",
+                    },
+                    "handle": {
+                        "type": "string",
+                        "description": "Account handle without @ (optional).",
+                    },
+                },
+                "required": [],
+            },
+            handler=tweepcred_audit,
+            cost="free",
         ),
     ]
     if s.posts is not None:

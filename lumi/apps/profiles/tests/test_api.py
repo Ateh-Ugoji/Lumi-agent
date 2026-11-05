@@ -76,11 +76,21 @@ def test_list_only_returns_my_profiles(api, profile, stranger, make_profile):
         "name",
         "platform",
         "handle",
+        "avatar_url",
+        "bio",
         "has_voice_profile",
         "listening_active",
         "timezone",
         "timezone_source",
     }
+
+
+def test_list_returns_avatar_url_and_bio_when_present(api, profile):
+    profile.handle.avatar_url = "https://cdn.example/pfp.jpg"
+    profile.handle.save(update_fields=["avatar_url"])
+    body = api.get(f"{BASE}/profiles").json()
+    item = body["profiles"][0]
+    assert item["avatar_url"] == "https://cdn.example/pfp.jpg"
 
 
 def test_list_query_count_does_not_grow(api, owner, make_profile):
@@ -340,3 +350,22 @@ def test_profile_refresh_fails_cleanly_when_the_posts_cannot_be_read(
     assert jobs.run_job(job_id) == "failed"
     body = api.get(f"{BASE}/jobs/{job_id}").json()
     assert (body["status"], body["error_code"]) == ("failed", "profiles.sync_failed")
+
+
+def test_delete_profile_disconnects_and_removes_profile(api, profile, owner):
+    from apps.connections.models import ConnectedAccount
+    from apps.profiles.models import SocialProfile
+
+    ConnectedAccount.objects.create(
+        user=owner,
+        provider="meta",
+        external_account_id="ext-del-1",
+        platform="facebook",
+        social_profile=profile,
+    )
+    res = api.delete(f"{BASE}/profiles/{profile.pk}")
+    assert res.status_code == 200
+    assert res.json() == {"deleted": True, "profile_id": profile.pk}
+    assert not SocialProfile.objects.filter(pk=profile.pk).exists()
+    assert not ConnectedAccount.objects.filter(external_account_id="ext-del-1").exists()
+

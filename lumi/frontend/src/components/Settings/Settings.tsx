@@ -1,20 +1,22 @@
 import { useState } from "react";
 import { useLightMode } from "../../hooks/useLightMode";
 import { IconArrowBoxLeft, IconMoon, IconSun } from "../Sidebar/Icons";
-import { errorMessage, startConnect, startConnectMessage, type ConnectReturn, type ProfileSummary, type User } from "../../api";
+import { deleteProfile, errorMessage, startConnect, startConnectMessage, syncPfm, type ConnectReturn, type ProfileSummary, type User } from "../../api";
 import SocialIcon from "../ThinkingState/SocialIcons";
 import { useT } from "../../i18n/index.ts";
 import LangToggle from "../../i18n/LangToggle";
 import ConnectionsPanel from "./ConnectionsPanel";
+import ChannelsPanel from "./ChannelsPanel";
 import styles from "./Settings.module.css";
 
-export type SettingsSection = "profile" | "appearance" | "social" | "connectors";
+export type SettingsSection = "profile" | "appearance" | "social" | "connectors" | "channels";
 
 const SECTIONS: { key: SettingsSection; label: string }[] = [
   { key: "profile", label: "settings.section_profile" },
   { key: "appearance", label: "settings.section_appearance" },
   { key: "social", label: "settings.section_social" },
   { key: "connectors", label: "settings.section_connectors" },
+  { key: "channels", label: "settings.section_channels" },
 ];
 
 const NETWORKS = ["x", "linkedin", "facebook", "instagram", "tiktok"] as const;
@@ -49,6 +51,8 @@ export default function Settings({
   returned,
   onDismissReturn,
   onConnectionsChanged,
+  onDeleteProfile,
+  onAccountSynced,
 }: {
   section: SettingsSection;
   onSectionChange: (next: SettingsSection) => void;
@@ -58,11 +62,17 @@ export default function Settings({
   activeProfileId: number | null;
   onSelectProfile: (id: number) => void;
   onCreateProfile: (platform: string, handle: string) => Promise<unknown>;
+  onDeleteProfile?: (id: number) => Promise<void> | void;
   onClearHistory: (profileId: number) => Promise<void>;
   onLogout: () => void;
   returned: ConnectReturn | null;
   onDismissReturn: () => void;
   onConnectionsChanged: () => void;
+  onAccountSynced?: (
+    account: { handle: string | null; name?: string | null; avatar_url?: string | null; platform?: string },
+    jobId?: string | null,
+    profileId?: number | null,
+  ) => void;
 }) {
   const { light, set: setLight } = useLightMode();
   const t = useT();
@@ -75,10 +85,43 @@ export default function Settings({
   const [connectError, setConnectError] = useState<string | null>(null);
   const [showManual, setShowManual] = useState(false);
 
+  const handleDisconnectProfile = async (id: number, handle: string) => {
+    if (
+      !window.confirm(
+        `Disconnect @${handle} from Lumi? This will revoke access and remove the account connection.`,
+      )
+    ) {
+      return;
+    }
+    setProfileBusy(true);
+    try {
+      if (onDeleteProfile) {
+        await onDeleteProfile(id);
+      } else {
+        await deleteProfile(id);
+        onConnectionsChanged();
+      }
+    } catch (err) {
+      setProfileError(err instanceof Error ? err.message : "Failed to disconnect profile");
+    } finally {
+      setProfileBusy(false);
+    }
+  };
+
+  const [isSyncing, setIsSyncing] = useState(false);
+
   const handleConnectPfm = async (platform: string) => {
     setConnectingPlatform(platform);
     setConnectError(null);
     try {
+      try {
+        localStorage.setItem(
+          "lumi_pending_connect",
+          JSON.stringify({ timestamp: Date.now(), platform, provider: "pfm" })
+        );
+      } catch {
+        // ignore
+      }
       const url = await startConnect("pfm", {
         platform,
         profileId: activeProfileId,
@@ -86,8 +129,49 @@ export default function Settings({
       });
       window.location.assign(url);
     } catch (err) {
+      try {
+        localStorage.removeItem("lumi_pending_connect");
+      } catch {
+        // ignore
+      }
       setConnectingPlatform(null);
       setConnectError(startConnectMessage(err));
+    }
+  };
+
+  const handleSyncAccounts = async () => {
+    setIsSyncing(true);
+    setConnectError(null);
+    try {
+      const res = await syncPfm();
+      const active = res.accounts.find((a) => a.status === "active") || res.accounts[0];
+      if (active) {
+        try {
+          localStorage.removeItem("lumi_pending_connect");
+        } catch {
+          // ignore
+        }
+        onConnectionsChanged();
+        if (onAccountSynced) {
+          const jobId = res.job_id || (res.details?.job_id as string | undefined) || null;
+          onAccountSynced(
+            {
+              handle: active.handle,
+              name: active.display_name,
+              avatar_url: active.avatar_url,
+              platform: active.platform || "x",
+            },
+            jobId,
+            res.profile_id ?? active.profile_id,
+          );
+        }
+      } else {
+        setConnectError("No connected accounts found in Post for Me. Connect an account below first.");
+      }
+    } catch (err) {
+      setConnectError(startConnectMessage(err));
+    } finally {
+      setIsSyncing(false);
     }
   };
 
@@ -179,21 +263,46 @@ export default function Settings({
                   <ul className={styles.accountList} aria-label="Profiles">
                     {profiles.map((p) => (
                       <li key={p.id} className={styles.accountRow}>
-                        <span>
-                          <strong>@{p.handle}</strong> · {p.platform}
-                          {p.has_voice_profile ? t("settings.voice_ready") : ""}
-                        </span>
-                        {p.id === activeProfileId ? (
-                          <span className={styles.chipOn}>{t("settings.active")}</span>
-                        ) : (
+                        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                          {p.avatar_url ? (
+                            <img
+                              src={p.avatar_url}
+                              alt={p.handle}
+                              style={{ width: "24px", height: "24px", borderRadius: "50%", objectFit: "cover" }}
+                            />
+                          ) : (
+                            <span style={{ fontSize: "14px" }}>
+                              {p.platform === "x" ? "𝕏" : p.platform.slice(0, 2).toUpperCase()}
+                            </span>
+                          )}
+                          <span>
+                            <strong>@{p.handle}</strong> · {p.platform}
+                            {p.name && p.name !== p.handle ? ` (${p.name})` : ""}
+                            {p.has_voice_profile ? ` · ${t("settings.voice_ready")}` : ""}
+                          </span>
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                          {p.id === activeProfileId ? (
+                            <span className={styles.chipOn}>{t("settings.active")}</span>
+                          ) : (
+                            <button
+                              type="button"
+                              className={styles.textBtn}
+                              onClick={() => onSelectProfile(p.id)}
+                            >
+                              {t("settings.use_this")}
+                            </button>
+                          )}
                           <button
                             type="button"
                             className={styles.textBtn}
-                            onClick={() => onSelectProfile(p.id)}
+                            style={{ color: "#f87171" }}
+                            disabled={profileBusy}
+                            onClick={() => void handleDisconnectProfile(p.id, p.handle)}
                           >
-                            {t("settings.use_this")}
+                            {t("panel.disconnect")}
                           </button>
-                        )}
+                        </div>
                       </li>
                     ))}
                   </ul>
@@ -225,7 +334,16 @@ export default function Settings({
                         {connectError}
                       </p>
                     )}
-                    <div className={styles.manualToggleWrap}>
+                    <div className={styles.manualToggleWrap} style={{ display: "flex", gap: "12px", alignItems: "center" }}>
+                      <button
+                        type="button"
+                        className={styles.textBtnMuted}
+                        disabled={isSyncing}
+                        onClick={() => void handleSyncAccounts()}
+                        style={{ color: "#38bdf8", fontWeight: 600 }}
+                      >
+                        {isSyncing ? "Syncing with Post for Me..." : "🔄 Sync Accounts"}
+                      </button>
                       <button
                         type="button"
                         className={styles.textBtnMuted}
@@ -336,6 +454,10 @@ export default function Settings({
                 returned={returned}
                 onDismissReturn={onDismissReturn}
               />
+            )}
+
+            {section === "channels" && (
+              <ChannelsPanel profileId={activeProfileId} />
             )}
           </div>
         </div>

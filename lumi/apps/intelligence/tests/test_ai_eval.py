@@ -35,6 +35,8 @@ def test_live_without_any_key_refuses_instead_of_pretending(monkeypatch) -> None
         "GROQ_API_KEY",
         "OPENROUTER_API_KEY",
         "OPENLUX_API_KEY",
+        "GEMINI_API_KEY",
+        "META_API_KEY",
     ):
         monkeypatch.delenv(name, raising=False)
     with pytest.raises(CommandError, match="--live necesita"):

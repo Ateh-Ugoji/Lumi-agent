@@ -5,6 +5,11 @@ from apps.profiles import views
 urlpatterns = [
     path("profiles", views.ProfileListView.as_view(), name="profiles"),
     path(
+        "profiles/<int:profile_id>",
+        views.ProfileDetailView.as_view(),
+        name="profile-detail",
+    ),
+    path(
         "profiles/<int:profile_id>/select",
         views.ProfileSelectView.as_view(),
         name="profile-select",

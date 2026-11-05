@@ -47,6 +47,76 @@ class PeerConfig:
 
 
 # --------------------------------------------------------------------------
+# PEER ROLE & GRADING SCHEMAS (4-Tier Spectrum)
+# --------------------------------------------------------------------------
+PeerRole = Literal[
+    "direct_competitor",      # Tier 1
+    "parallel_founder",       # Tier 2 (Core Focus)
+    "aspirational_leader",    # Tier 3
+    "co_builder",             # Tier 4
+]
+
+class RelevanceBreakdown(BaseModel):
+    geo_alignment: float = Field(ge=0.0, le=1.0, default=0.85, description="Regional & cultural proximity (e.g., Nigeria/Lagos vs global)")
+    icp_overlap: float = Field(ge=0.0, le=1.0, default=0.80, description="Target audience and follower archetype overlap")
+    content_resonance: float = Field(ge=0.0, le=1.0, default=0.80, description="Style, tone, and media format relevance")
+    stage_comparability: float = Field(ge=0.0, le=1.0, default=0.80, description="Stage comparability (bootstrap/early vs enterprise)")
+
+class PeerGrading(BaseModel):
+    handle: str
+    peer_role: PeerRole = "parallel_founder"
+    grading_score: float = Field(ge=0.0, le=1.0, default=0.80, description="Weighted composite grading score")
+    relevance: RelevanceBreakdown = Field(default_factory=RelevanceBreakdown)
+    ecosystem_tags: list[str] = Field(default_factory=list, description="e.g. ['lagos_tech', 'motion_ui', 'bootstrap']")
+    rationale: str = Field(default="", description="Explanation of why this peer was selected and graded at this tier")
+
+
+# --------------------------------------------------------------------------
+# EXTENDED DIMENSIONS (Language, Media Style, Ecosystem Context)
+# --------------------------------------------------------------------------
+LanguageRegister = Literal[
+    "nigerian_pidgin",          # Heavy or blended Nigerian Pidgin ("e no easy", "my eye see shege")
+    "nigerian_colloquial",      # Informal tech/founder Nigerian English ("let's cook", "wahala", "omo")
+    "formal_business",          # Traditional executive / investor / corporate English
+    "technical_deep_dive",      # Code snippets, API architecture, high-density engineering jargon
+    "blended_casual",           # Conversational international English
+]
+
+MediaStyle = Literal[
+    "motion_design_video",      # Custom After Effects / motion UI animation showing product workflows
+    "screen_recording_demo",    # Raw loom/OBS screen capture demonstrating features
+    "talking_head_video",       # Direct-to-camera founder monologue or reaction
+    "screenshot_metric",        # Stripe dashboard, user growth graph, conversion proof
+    "screenshot_code",          # Formatted syntax-highlighted code editor or terminal
+    "photo_behind_the_scenes",  # Workspace, team, event photo
+    "text_only_punchy",         # Short < 280-char bold claim or punchy hot take
+    "text_only_thread",         # Multi-part numbered educational or storytelling breakdown
+]
+
+EcosystemContext = Literal[
+    "local_summit_conference",   # Moonshot by TechCabal, Lagos Tech Fest, NITDA, local developer meetups
+    "builder_infrastructure",    # Power/NEPA, FX devaluation, international payment gateways, banking APIs
+    "client_to_saas_pivot",      # Transitioning from agency/freelancing to building scalable software
+    "public_accountability",     # Shipping streaks, daily metrics, public commitments, failure post-mortems
+    "founder_debate_rant",       # Contrarian critique of hype, fake metrics, or influencer culture
+    "general_educational",       # Universal tips and tutorials not tied to a specific local event
+]
+
+LiftDimension = Literal[
+    "primary_framework",
+    "hook_type",
+    "format",
+    "cta_type",
+    "funnel_stage",
+    "content_pillar",
+    "hook_modality",
+    "language_register",
+    "media_style",
+    "ecosystem_context",
+]
+
+
+# --------------------------------------------------------------------------
 # ENUMS
 # --------------------------------------------------------------------------
 PostFormat = Literal[
@@ -360,6 +430,15 @@ class PostAnalysis(BaseModel):
     cta: CTAAnalysis
     voice: VoiceAnalysis
     strategy: StrategyAnalysis
+    language_register: LanguageRegister = Field(
+        default="blended_casual", description="Dominant linguistic style and vernacular"
+    )
+    media_style: MediaStyle = Field(
+        default="text_only_punchy", description="Visual media execution format"
+    )
+    ecosystem_context: EcosystemContext = Field(
+        default="general_educational", description="Thematic local or macro founder context"
+    )
 
 
 class PostAnalysisBatch(BaseModel):
@@ -391,15 +470,7 @@ class PostTagging(BaseModel):
 # SYNTHESIS (lift table computed in code, narrative written by LLM)
 # --------------------------------------------------------------------------
 class LiftRow(BaseModel):
-    dimension: Literal[
-        "primary_framework",
-        "hook_type",
-        "format",
-        "cta_type",
-        "funnel_stage",
-        "content_pillar",
-        "hook_modality",
-    ]
+    dimension: LiftDimension
     value: str
     n_winners: int
     n_baseline: int
