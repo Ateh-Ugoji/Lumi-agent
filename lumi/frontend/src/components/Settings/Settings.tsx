@@ -6,15 +6,17 @@ import SocialIcon from "../ThinkingState/SocialIcons";
 import { useT } from "../../i18n/index.ts";
 import LangToggle from "../../i18n/LangToggle";
 import ConnectionsPanel from "./ConnectionsPanel";
+import ChannelsPanel from "./ChannelsPanel";
 import styles from "./Settings.module.css";
 
-export type SettingsSection = "profile" | "appearance" | "social" | "connectors";
+export type SettingsSection = "profile" | "appearance" | "social" | "connectors" | "channels";
 
 const SECTIONS: { key: SettingsSection; label: string }[] = [
   { key: "profile", label: "settings.section_profile" },
   { key: "appearance", label: "settings.section_appearance" },
   { key: "social", label: "settings.section_social" },
   { key: "connectors", label: "settings.section_connectors" },
+  { key: "channels", label: "settings.section_channels" },
 ];
 
 const NETWORKS = ["x", "linkedin", "facebook", "instagram", "tiktok"] as const;
@@ -452,6 +454,10 @@ export default function Settings({
                 returned={returned}
                 onDismissReturn={onDismissReturn}
               />
+            )}
+
+            {section === "channels" && (
+              <ChannelsPanel profileId={activeProfileId} />
             )}
           </div>
         </div>

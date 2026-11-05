@@ -8,6 +8,8 @@ The segment ``connections/`` is part of these routes, so one include is enough::
 from django.urls import path
 
 from . import views
+from apps.connections.imessage import views as imessage_views
+from apps.connections.signals import views as signal_views
 
 urlpatterns = [
     path("publish", views.PublishView.as_view(), name="publish"),
@@ -17,6 +19,31 @@ urlpatterns = [
     path("handles/stats", views.HandleStatsView.as_view(), name="handles-stats"),
     path(
         "connections/pfm/sync", views.PfmSyncView.as_view(), name="connections-pfm-sync"
+    ),
+    path(
+        "channels/imessage/status",
+        imessage_views.IMessageStatusView.as_view(),
+        name="imessage-status",
+    ),
+    path(
+        "channels/imessage/send",
+        imessage_views.IMessageSendView.as_view(),
+        name="imessage-send",
+    ),
+    path(
+        "channels/imessage/webhook",
+        imessage_views.IMessageWebhookView.as_view(),
+        name="imessage-webhook",
+    ),
+    path(
+        "signals/webhook",
+        signal_views.SignalWebhookView.as_view(),
+        name="signals-webhook",
+    ),
+    path(
+        "signals/test",
+        signal_views.SignalTestView.as_view(),
+        name="signals-test",
     ),
     path(
         "connections/<str:provider>/connect",
