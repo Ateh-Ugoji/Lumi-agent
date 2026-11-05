@@ -85,6 +85,14 @@ def test_list_only_returns_my_profiles(api, profile, stranger, make_profile):
     }
 
 
+def test_list_returns_avatar_url_and_bio_when_present(api, profile):
+    profile.handle.avatar_url = "https://cdn.example/pfp.jpg"
+    profile.handle.save(update_fields=["avatar_url"])
+    body = api.get(f"{BASE}/profiles").json()
+    item = body["profiles"][0]
+    assert item["avatar_url"] == "https://cdn.example/pfp.jpg"
+
+
 def test_list_query_count_does_not_grow(api, owner, make_profile):
     make_profile(owner, "first")
     api.get(f"{BASE}/profiles")  # the first request of a token also stamps last_used_at

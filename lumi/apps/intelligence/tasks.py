@@ -177,17 +177,24 @@ def bootstrap_profile(ctx: JobContext) -> dict[str, Any]:
             res["report_id"] = niche_info.get("report_id")
             from apps.intelligence.models import Framework
 
-            frameworks = list(
-                Framework.objects.filter(report_id=niche_info["report_id"]).values(
-                    "name",
-                    "title",
-                    "structure",
-                    "hook_formula",
-                    "when_to_use",
-                    "confidence",
-                    "lift",
+            raw_frameworks = Framework.objects.filter(
+                report_id=niche_info["report_id"]
+            ).order_by("ordinal")
+            frameworks = []
+            for fw in raw_frameworks:
+                pl = fw.payload if isinstance(fw.payload, dict) else {}
+                frameworks.append(
+                    {
+                        "name": fw.name,
+                        "title": pl.get("title") or fw.name,
+                        "description": fw.description,
+                        "structure": pl.get("structure", ""),
+                        "hook_formula": pl.get("hook_formula", ""),
+                        "when_to_use": pl.get("when_to_use", ""),
+                        "confidence": fw.confidence,
+                        "lift": fw.lift,
+                    }
                 )
-            )
             res["frameworks"] = frameworks
     return res
 

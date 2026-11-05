@@ -190,6 +190,10 @@ LINKEDIN_TABLE = {
     ("POST", "/oauth/v2/accessToken"): json_response("linkedin_token.json"),
     ("GET", "/v2/userinfo"): json_response("linkedin_userinfo.json"),
 }
+X_TABLE = {
+    ("POST", "/2/oauth2/token"): json_response("x_token.json"),
+    ("GET", "/2/users/me"): json_response("x_me.json"),
+}
 
 
 # --- connect -----------------------------------------------------------------
@@ -427,6 +431,35 @@ def test_linkedin_links_the_single_account_to_the_profile(
     assert row.social_profile_id == profile.pk
     assert row.expires_at is not None
     assert row.access_token == "li-access-FAKE"
+
+
+def test_x_connection_auto_creates_profile_and_populates_avatar(
+    api, env, providers, user
+) -> None:
+    from apps.profiles.models import SocialHandle, SocialProfile
+
+    env({**X_ENV, "X_LIVE_ENABLED": "true"})
+    providers.on("x", X_TABLE)
+    state = state_of(connect(api, "x").json()["authorize_url"])
+    done = complete("x", state, "c0de", user=user)
+    assert done.status_code == 200
+    data = done.json()
+    assert data["connected"] is True
+    assert data["account"]["handle"] == "lumitest"
+    assert (
+        data["account"]["avatar_url"]
+        == "https://pbs.twimg.com/profile_images/123/avatar.jpg"
+    )
+    assert data["profile_id"] is not None
+
+    prof = SocialProfile.objects.get(pk=data["profile_id"])
+    assert prof.user_id == user.pk
+    assert prof.handle.platform == "x"
+    assert prof.handle.handle_normalized == "lumitest"
+    assert (
+        prof.handle.avatar_url
+        == "https://pbs.twimg.com/profile_images/123/avatar.jpg"
+    )
 
 
 def test_reconnecting_updates_the_same_row(api, env, providers) -> None:
