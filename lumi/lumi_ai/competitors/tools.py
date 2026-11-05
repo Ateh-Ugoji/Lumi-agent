@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import re
 from dataclasses import dataclass, replace
 from typing import Any, get_args
 
@@ -222,20 +223,27 @@ def build(services: CompetitorServices) -> list[ToolSpec]:
         from apps.intelligence.models import NichePreference
         from apps.intelligence.repos.aio import aio
 
-        pref = await aio(
-            lambda: NichePreference.objects.filter(
-                profile_id=ctx.profile_id, is_active=True
-            ).first()
-        )()
+        pref = None
         tracked_peers: list[str] = []
         niche_title = ""
-        if pref:
-            niche_title = pref.title
-            tracked_peers = await aio(
-                lambda: list(
-                    pref.handles.values_list("handle__handle_normalized", flat=True)
-                )
+        try:
+            from apps.intelligence.models import NichePreference
+            from apps.intelligence.repos.aio import aio
+
+            pref = await aio(
+                lambda: NichePreference.objects.filter(
+                    profile_id=ctx.profile_id, is_active=True
+                ).first()
             )()
+            if pref:
+                niche_title = pref.title
+                tracked_peers = await aio(
+                    lambda: list(
+                        pref.handles.values_list("handle__handle_normalized", flat=True)
+                    )
+                )()
+        except Exception:
+            pass
 
         report = await reports.latest_report(ctx.profile_id)
         if report is None:
@@ -266,6 +274,7 @@ def build(services: CompetitorServices) -> list[ToolSpec]:
         if report.status != "ok":
             return {
                 **head,
+                "error": report.detail or "insufficient data in report",
                 "detail": report.detail or f"Niche '{niche_title}' has tracked peers: {', '.join(tracked_peers)}",
                 "frameworks": [],
                 "examples": [],
@@ -313,6 +322,53 @@ def build(services: CompetitorServices) -> list[ToolSpec]:
         plat = await _platform(ctx, platform)
         if plat is None:
             return {"error": f"unknown platform {platform!r}; use one of {PLATFORMS}"}
+
+        # Resolve post text from pasted URLs (e.g. x.com/author/status/12345)
+        url_match = re.search(
+            r"(?:twitter\.com|x\.com)/([A-Za-z0-9_]+)/status/(\d+)", body
+        )
+        resolved_from_url = False
+        author_from_url = None
+        if url_match:
+            author_from_url = url_match.group(1)
+            status_id = url_match.group(2)
+            try:
+                if s.pipeline and s.pipeline.social:
+                    posts = await s.pipeline.social.fetch_user_posts(
+                        plat or "x", author_from_url, None, 20
+                    )
+                    matching = next(
+                        (
+                            p
+                            for p in posts
+                            if getattr(p, "post_id", None) == status_id
+                            or getattr(p, "platform_post_id", None) == status_id
+                            or status_id in getattr(p, "url", "")
+                        ),
+                        None,
+                    )
+                    if matching:
+                        match_text = getattr(matching, "text", "") or getattr(
+                            matching, "caption", ""
+                        )
+                        if match_text:
+                            body = match_text
+                            resolved_from_url = True
+            except Exception:
+                pass
+
+            if not resolved_from_url and body == url_match.group(0):
+                return {
+                    "url_detected": True,
+                    "author": author_from_url,
+                    "status_id": status_id,
+                    "note": (
+                        f"Post link detected from @{author_from_url}. If this specific post is not in their "
+                        "recent 20 posts, paste the post's text directly for immediate framework extraction, "
+                        f"or ask me to analyze @{author_from_url}'s overall winning frameworks."
+                    ),
+                }
+
         digest = hashlib.sha256(body.encode()).hexdigest()[:10]
         pasted = _Pasted(post_id=f"pasted-{digest}", text=body)
         (tagging,) = await tag_posts(s.pipeline.llm, [pasted])
@@ -326,6 +382,9 @@ def build(services: CompetitorServices) -> list[ToolSpec]:
             "analysis": analysis.model_dump(mode="json"),
             "primary_framework": analysis.body.primary_framework,
         }
+        if resolved_from_url and author_from_url:
+            out["source_url"] = url_match.group(0) if url_match else ""
+            out["author"] = author_from_url
         if tagging.framework_guess:
             out["framework_guess"] = tagging.framework_guess
         report = await reports.latest_report(ctx.profile_id)
