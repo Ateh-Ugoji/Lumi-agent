@@ -309,11 +309,49 @@ def complete_connect(
                 no_accounts_message(provider),
                 status_code=422,
             )
+        row = (
+            ConnectedAccount.objects.filter(user_id=user.pk, provider=provider)
+            .order_by("-updated_at")
+            .first()
+        )
+        prof_id = row.social_profile_id if row else None
+        active_job = None
+        if prof_id:
+            from apps.core.models import BackgroundJob
+
+            bj = (
+                BackgroundJob.objects.filter(
+                    profile_id=prof_id, kind="profile.bootstrap"
+                )
+                .order_by("-created_at")
+                .first()
+            )
+            if bj:
+                active_job = str(bj.pk)
+        avatar = ""
+        display_name = ""
+        handle_name = ""
+        if row:
+            display_name = row.display_name
+            handle_name = row.handle
+            if row.social_profile and row.social_profile.handle:
+                avatar = row.social_profile.handle.avatar_url
+                if row.social_profile.handle.display_name:
+                    display_name = row.social_profile.handle.display_name
         return {
             "provider": provider,
             "connected": True,
             "accounts": count,
             "redirect_after": done.record.redirect_after,
+            "profile_id": prof_id,
+            "job_id": active_job,
+            "account": {
+                "handle": handle_name,
+                "name": display_name,
+                "avatar_url": avatar,
+            }
+            if handle_name
+            else None,
         }
     except OAuthStateError as exc:
         mismatch = exc.code == "state_mismatch"
@@ -397,7 +435,7 @@ def _upsert(
     own_token = (
         info.access_token is not None and info.access_token != tokens.access_token
     )
-    row, _ = _lock_account(provider, info.external_id, user_id)
+    row, is_new = _lock_account(provider, info.external_id, user_id)
     if row.user_id != user_id:
         raise AccountTaken
     row.platform = getattr(adapter, "platform", provider)
@@ -411,12 +449,52 @@ def _upsert(
     row.scopes = list(tokens.scopes)
     row.last_refreshed_at = datetime.now(UTC)
     row.last_error = info.note or ""
-    if profile_id is not None:
+
+    target_profile_id = profile_id or row.social_profile_id
+    if (
+        is_new
+        and target_profile_id is None
+        and row.status == AccountStatus.ACTIVE
+        and row.handle
+        and row.platform in ("x", "linkedin", "facebook", "instagram", "tiktok")
+    ):
+        try:
+            target_profile_id, _ = get_or_create_profile(
+                user_id, row.platform, row.handle
+            )
+        except (DatabaseError, IntegrityError, ValueError) as exc:
+            logger.warning("auto-linking profile for %s failed: %s", row.handle, exc)
+
+    if target_profile_id is not None:
         ConnectedAccount.objects.filter(
-            user_id=user_id, provider=provider, social_profile_id=profile_id
+            user_id=user_id, provider=provider, social_profile_id=target_profile_id
         ).exclude(pk=row.pk).update(social_profile=None)
-        row.social_profile_id = profile_id
+        row.social_profile_id = target_profile_id
     row.save()
+
+    if row.status == AccountStatus.ACTIVE and row.social_profile_id:
+        if info.avatar_url:
+            update_profile_avatar(
+                row.social_profile_id, info.avatar_url, username=row.handle
+            )
+        prof = (
+            SocialProfile.objects.select_related("handle")
+            .filter(pk=row.social_profile_id)
+            .first()
+        )
+        if prof and prof.handle:
+            if info.display_name and not prof.handle.display_name:
+                prof.handle.display_name = info.display_name[:200]
+                prof.handle.save(update_fields=["display_name"])
+            if prof.bootstrapped_at is None:
+                from apps.core import jobs
+
+                jobs.enqueue(
+                    user_id,
+                    "profile.bootstrap",
+                    profile_id=row.social_profile_id,
+                    dedupe_key=f"profile.bootstrap:{row.social_profile_id}",
+                )
     return row
 
 

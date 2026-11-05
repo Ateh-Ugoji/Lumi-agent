@@ -222,6 +222,8 @@ async def test_get_account_and_publish_build_the_post_url() -> None:
     )
     account = await provider.get_account(TOKENS)
     assert (account.external_id, account.handle) == ("2244994945", "lumitest")
+    assert account.avatar_url == "https://pbs.twimg.com/profile_images/123/avatar.jpg"
+    assert account.description == "Lumi founder building in public"
     result = await provider.publish(TOKENS, account, PublishDraft(text="hola"))
     assert result.external_post_id == "1445880548472328192"
     assert result.url == "https://x.com/lumitest/status/1445880548472328192"

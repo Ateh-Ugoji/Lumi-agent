@@ -732,7 +732,7 @@ def test_connecting_again_replaces_an_unreadable_account(
     env(META_ENV)
     lost_row(settings, user, external_account_id="meta-1")
     accounts.quarantine_unreadable(user_id=user.pk)
-    row = accounts._lock_account("meta", "meta-1", user.pk)
+    row, _ = accounts._lock_account("meta", "meta-1", user.pk)
     row.access_token = "fresh-FAKE"
     row.status = AccountStatus.ACTIVE
     row.last_error = ""

@@ -14,6 +14,7 @@ import WinnersCard, { type WinnersData } from "./components/WinnersCard/WinnersC
 
 import Settings, { type SettingsSection } from "./components/Settings/Settings";
 import ConnectSocialsModal from "./components/ConnectSocialsModal/ConnectSocialsModal";
+import AccountUnderstandingModal from "./components/AccountUnderstandingModal/AccountUnderstandingModal";
 import ChronicOnline from "./components/ChronicOnline/ChronicOnline";
 import SidebarNav from "./components/Sidebar/Sidebar";
 import ThinkingState from "./components/ThinkingState/ThinkingState";
@@ -581,6 +582,13 @@ export default function App() {
     };
   }, [activeProfileId]);
 
+  const [understandingState, setUnderstandingState] = useState<{
+    isOpen: boolean;
+    account: { handle: string | null; name?: string | null; avatar_url?: string | null; platform?: string };
+    jobId?: string | null;
+    profileId?: number | null;
+  } | null>(null);
+
   // The provider redirects the browser to /connections/<provider>/callback on this app. Finish the
   // grant here with this user's Token: the server refuses a state that someone else started. The
   // URL is replaced at once, so a reload or a shared link never repeats the grant.
@@ -592,7 +600,9 @@ export default function App() {
     landingRef.current = found;
     window.history.replaceState(null, "", CALLBACK_DONE_URL);
     setSettingsSection(found.kind !== "pfm" && found.provider === "google" ? "connectors" : "social");
-    setView("settings");
+    if (found.kind !== "pfm" && found.provider === "google") {
+      setView("settings");
+    }
   }, []);
   useEffect(() => {
     const landing = landingRef.current;
@@ -610,6 +620,17 @@ export default function App() {
               },
         );
         refreshProfiles();
+        if (done.connected && done.provider !== "google") {
+          setUnderstandingState({
+            isOpen: true,
+            account: done.account || {
+              handle: "creator",
+              platform: done.provider,
+            },
+            jobId: done.job_id || null,
+            profileId: done.profile_id || null,
+          });
+        }
       })
       .catch((err: unknown) => {
         const code = err instanceof ApiError ? err.code : "internal_error";
@@ -1353,7 +1374,13 @@ export default function App() {
 
           recents={recents}
           userProfile={
-            activeProfile ? { name: activeProfile.name, handle: activeProfile.handle } : null
+            activeProfile
+              ? {
+                  name: activeProfile.name,
+                  handle: activeProfile.handle,
+                  avatar_url: activeProfile.avatar_url,
+                }
+              : null
           }
           activeNav={
             view === "settings"
@@ -1561,6 +1588,19 @@ export default function App() {
         isOpen={showConnectModal}
         onClose={handleCloseConnectModal}
         connectedPlatforms={profiles.map((p) => p.platform)}
+      />
+      <AccountUnderstandingModal
+        isOpen={Boolean(understandingState?.isOpen)}
+        account={understandingState?.account ?? null}
+        jobId={understandingState?.jobId ?? null}
+        onComplete={() => {
+          if (understandingState?.profileId) {
+            selectProfile(understandingState.profileId);
+          }
+          setUnderstandingState(null);
+          setView("chat");
+          void refreshProfiles();
+        }}
       />
     </div>
   );

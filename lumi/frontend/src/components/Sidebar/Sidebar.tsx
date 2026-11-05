@@ -65,7 +65,7 @@ type SidebarNavProps = {
   onFooterClick?: () => void;
   onSignOut?: () => void;
   recents?: SidebarRecent[];
-  userProfile?: { name: string; handle: string } | null;
+  userProfile?: { name: string; handle: string; avatar_url?: string | null } | null;
   profiles?: ProfileSummary[];
   activeProfileId?: number | null;
   onSelectProfile?: (id: number) => void;
@@ -214,9 +214,13 @@ function WorkspaceMenu({
                   }}
                   className={`${styles.menuRow} ${isActive ? styles.menuRowActive : ""}`}
                 >
-                  <span className={styles.platformBadge}>
-                    {p.platform === "x" ? "𝕏" : p.platform === "linkedin" ? "in" : p.platform.slice(0, 2).toUpperCase()}
-                  </span>
+                  {p.avatar_url ? (
+                    <img src={p.avatar_url} alt={clean} className={styles.menuProfileAvatar} />
+                  ) : (
+                    <span className={styles.platformBadge}>
+                      {p.platform === "x" ? "𝕏" : p.platform === "linkedin" ? "in" : p.platform.slice(0, 2).toUpperCase()}
+                    </span>
+                  )}
                   <div className={styles.menuProfileInfo}>
                     <span className={styles.menuProfileHandle}>@{clean}</span>
                     {p.name && p.name !== clean && (
@@ -426,10 +430,10 @@ export default function SidebarNav({
             aria-hidden={collapsed}
             title={userProfile ? `@${userProfile.handle}` : "View profile"}
           >
-            {avatarHandle && !avatarFailed ? (
+            {(userProfile?.avatar_url || (avatarHandle && !avatarFailed)) ? (
               <img
                 className={styles.userAvatarImg}
-                src={`https://unavatar.io/x/${avatarHandle}`}
+                src={userProfile?.avatar_url || `https://unavatar.io/x/${avatarHandle}`}
                 alt={userProfile?.name || avatarHandle}
                 onError={() => setAvatarFailed(true)}
               />

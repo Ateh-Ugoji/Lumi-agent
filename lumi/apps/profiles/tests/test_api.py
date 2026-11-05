@@ -76,6 +76,8 @@ def test_list_only_returns_my_profiles(api, profile, stranger, make_profile):
         "name",
         "platform",
         "handle",
+        "avatar_url",
+        "bio",
         "has_voice_profile",
         "listening_active",
         "timezone",

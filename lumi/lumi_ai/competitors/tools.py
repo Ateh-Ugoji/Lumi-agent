@@ -110,7 +110,7 @@ def _clean_handles(raw: Any) -> list[str]:
     seen: dict[str, None] = {}
     for h in raw or []:
         name = str(h).strip().lstrip("@").lower()
-        if name and name not in EXCLUDED_PEER_HANDLES:
+        if name:
             seen.setdefault(name)
     return list(seen)
 

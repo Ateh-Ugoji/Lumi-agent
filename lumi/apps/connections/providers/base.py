@@ -58,6 +58,8 @@ class AccountInfo:
     # Facebook Pages carry their own token, separate from the user token.
     access_token: str | None = field(default=None, repr=False)
     note: str | None = None
+    avatar_url: str | None = None
+    description: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

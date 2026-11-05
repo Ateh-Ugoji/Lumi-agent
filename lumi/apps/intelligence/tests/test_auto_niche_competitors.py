@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from asgiref.sync import async_to_sync
@@ -319,3 +319,34 @@ class TestCrossNetworkAnchorPersonaAndNicheInheritance:
         assert latest is not None
         assert latest.id == report_x.pk
         assert latest.query == "AI & Agentic Automation"
+
+    def test_4_tier_competitor_grading_spectrum_and_details(self, owner, make_profile):
+        profile = make_profile(owner, handle="atehofficial", platform="x")
+        posts = [DummyPost("Building autonomous tech products #saas #nigeria")]
+        wiring = SimpleNamespace(
+            competitors=SimpleNamespace(
+                pipeline=SimpleNamespace(social=MagicMock(), config=AIConfig()),
+            ),
+            chain=None,
+            config=AIConfig(),
+        )
+
+        res = async_to_sync(_ensure_niche_and_competitors)(wiring, profile.pk, posts)
+        assert "competitors" in res
+        assert "competitor_details" in res
+        assert len(res["competitor_details"]) > 0
+
+        # Check NichePreferenceHandle database rows
+        pref = NichePreference.objects.filter(profile=profile, is_active=True).first()
+        assert pref is not None
+        handles = list(NichePreferenceHandle.objects.filter(preference=pref).order_by("id"))
+        assert len(handles) > 0
+
+        # Verify 4-tier roles & grading scores
+        roles = [h.peer_role for h in handles]
+        assert "direct_competitor" in roles
+        assert "parallel_founder" in roles
+        for h in handles:
+            assert 0.0 <= h.grading_score <= 1.0
+            assert "geo_alignment" in h.relevance_breakdown
+            assert isinstance(h.ecosystem_tags, list)

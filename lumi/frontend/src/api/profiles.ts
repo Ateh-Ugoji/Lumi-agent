@@ -5,6 +5,8 @@ export type ProfileSummary = {
   name: string;
   platform: string;
   handle: string;
+  avatar_url?: string | null;
+  bio?: string | null;
   has_voice_profile: boolean;
   listening_active: boolean;
   timezone?: string | null;

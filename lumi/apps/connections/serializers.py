@@ -32,7 +32,10 @@ class CallbackResponseSerializer(serializers.Serializer):
     provider = serializers.CharField()
     connected = serializers.BooleanField()
     accounts = serializers.IntegerField()
-    redirect_after = serializers.CharField()
+    redirect_after = serializers.CharField(required=False, allow_null=True)
+    profile_id = serializers.IntegerField(required=False, allow_null=True)
+    job_id = serializers.CharField(required=False, allow_null=True)
+    account = serializers.DictField(required=False, allow_null=True)
 
 
 class LinkRequestSerializer(serializers.Serializer):

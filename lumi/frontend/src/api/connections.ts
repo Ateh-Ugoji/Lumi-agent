@@ -167,7 +167,19 @@ export function parseCallbackLanding(pathname: string, search: string): Callback
 /** Where the browser goes once the landing is handled: no code, no state, no way to replay it. */
 export const CALLBACK_DONE_URL = "/";
 
-export type ConnectResult = { provider: string; connected: boolean };
+export type ConnectedAccountInfo = {
+  handle: string | null;
+  name?: string | null;
+  avatar_url?: string | null;
+};
+
+export type ConnectResult = {
+  provider: string;
+  connected: boolean;
+  profile_id?: number | null;
+  job_id?: string | null;
+  account?: ConnectedAccountInfo | null;
+};
 
 /** Finish the grant. Every outcome is an `ApiError` code the panel can explain. */
 export async function finishConnect(landing: CallbackLanding): Promise<ConnectResult> {
@@ -175,7 +187,18 @@ export async function finishConnect(landing: CallbackLanding): Promise<ConnectRe
     if (!landing.success) throw new ApiError(400, "connections.pfm_failed", "pfm");
     // The sync call reads the accounts Post for Me now holds for this user and stores them.
     const status = await syncPfm();
-    return { provider: "pfm", connected: status.connected };
+    const primary = status.accounts[0];
+    return {
+      provider: "pfm",
+      connected: status.connected,
+      profile_id: primary?.profile_id ?? null,
+      account: primary
+        ? {
+            handle: primary.handle,
+            name: primary.display_name,
+          }
+        : null,
+    };
   }
   const body =
     landing.kind === "grant"

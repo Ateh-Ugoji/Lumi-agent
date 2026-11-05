@@ -163,6 +163,13 @@ class NichePreferenceKeyword(models.Model):
         ]
 
 
+class PeerRoleChoice(models.TextChoices):
+    DIRECT_COMPETITOR = "direct_competitor", "Direct Product Competitor"
+    PARALLEL_FOUNDER = "parallel_founder", "Parallel Founder Peer"
+    ASPIRATIONAL_LEADER = "aspirational_leader", "Aspirational Category Leader"
+    CO_BUILDER = "co_builder", "Co-Builder & Network Graph"
+
+
 class NichePreferenceHandle(models.Model):
     preference = models.ForeignKey(
         NichePreference, on_delete=models.CASCADE, related_name="handles"
@@ -172,12 +179,27 @@ class NichePreferenceHandle(models.Model):
         on_delete=models.CASCADE,
         related_name="niche_preferences",
     )
+    peer_role = models.CharField(
+        max_length=24,
+        choices=PeerRoleChoice.choices,
+        db_default=PeerRoleChoice.PARALLEL_FOUNDER,
+        default=PeerRoleChoice.PARALLEL_FOUNDER,
+    )
+    grading_score = models.FloatField(db_default=0.80, default=0.80)
+    relevance_breakdown = models.JSONField(default=dict, blank=True)
+    ecosystem_tags = ArrayField(models.CharField(max_length=50), default=list, blank=True)
+    rationale = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(db_default=Now(), editable=False)
 
     class Meta:
         db_table = "niche_preference_handles"
         constraints = [
             models.UniqueConstraint(
                 fields=["preference", "handle"], name="uq_niche_handles_handle"
+            ),
+            models.CheckConstraint(
+                condition=Q(grading_score__gte=0.0) & Q(grading_score__lte=1.0),
+                name="ck_peer_grading_score_range",
             ),
         ]
 
