@@ -277,21 +277,26 @@ export default function ConnectionsPanel({
             )}
 
             {provider === "pfm" && (
-              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", margin: "10px 0 14px" }}>
-                {PFM_PLATFORMS.map((p) => (
-                  <button
-                    key={p}
-                    type="button"
-                    className={styles.segBtn}
-                    style={{ padding: "6px 12px", fontSize: "12px", gap: "6px" }}
-                    disabled={card.busy || card.loading || status?.configured === false}
-                    onClick={() => void connect("pfm", p)}
-                  >
-                    <SocialIcon name={p} size={14} />
-                    <span>Connect {p === "x" ? "X" : p.charAt(0).toUpperCase() + p.slice(1)}</span>
-                  </button>
-                ))}
-              </div>
+              <>
+                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", margin: "10px 0 10px" }}>
+                  {PFM_PLATFORMS.map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      className={styles.segBtn}
+                      style={{ padding: "6px 12px", fontSize: "12px", gap: "6px" }}
+                      disabled={card.busy || card.loading || status?.configured === false}
+                      onClick={() => void connect("pfm", p)}
+                    >
+                      <SocialIcon name={p} size={14} />
+                      <span>Connect {p === "x" ? "X" : p.charAt(0).toUpperCase() + p.slice(1)}</span>
+                    </button>
+                  ))}
+                </div>
+                <div style={{ fontSize: "11.5px", color: "rgba(255, 255, 255, 0.6)", marginBottom: "12px", lineHeight: "1.4" }}>
+                  💡 Redirected to Onscript after OAuth? Click <strong>Sync Accounts</strong> below to pull your accounts into Lumi.
+                </div>
+              </>
             )}
             <div className={styles.cardActions}>
               <button
@@ -320,7 +325,7 @@ export default function ConnectionsPanel({
                 disabled={card.busy || card.loading}
                 onClick={() => void refresh(provider)}
               >
-                {t("panel.refresh")}
+                {provider === "pfm" ? "Sync Accounts" : t("panel.refresh")}
               </button>
             </div>
           </section>

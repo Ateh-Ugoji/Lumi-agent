@@ -10,6 +10,7 @@ export type ConnectedAccount = {
   handle: string | null;
   status: string;
   profile_id: number | null;
+  avatar_url?: string | null;
   scopes?: string[] | string | null;
   expires_at?: string | null;
   last_refreshed_at?: string | null;
@@ -196,6 +197,7 @@ export async function finishConnect(landing: CallbackLanding): Promise<ConnectRe
         ? {
             handle: primary.handle,
             name: primary.display_name,
+            avatar_url: primary.avatar_url,
           }
         : null,
     };

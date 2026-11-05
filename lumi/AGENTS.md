@@ -27,6 +27,9 @@ Unless the user explicitly says "don't plan" for a given task:
      - Active background daemons (Postgres, Uvicorn, Vite) and database ports.
      - What was validated, any edge cases considered, and next steps.
    - Never provide one-line vague answers or omit what was changed under the hood.
+8. **Browser Testing & Live End-to-End Verification**:
+   - When modifying or troubleshooting OAuth flows, account connections, UI modals, and redirects, test and verify the live browser/HTTP flow (including redirect URIs, callback landing routes, token handoffs, and third-party dashboard redirect settings) rather than relying solely on isolated mocked tests.
+   - Always confirm that live credentials in `.env` match external provider dashboard configurations (e.g. Post for Me Project Redirect URL, Twitter Developer Portal callback URLs).
 
 ## LANGUAGE RULE
 

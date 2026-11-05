@@ -59,6 +59,7 @@ class PfmAccount:
     status: str
     external_id: str | None = None
     profile_photo_url: str | None = None
+    display_name: str | None = None
 
     @property
     def connected(self) -> bool:
@@ -104,6 +105,8 @@ def parse_account(body: Mapping[str, Any]) -> PfmAccount:
     account_id = _text(body.get("id"))
     if account_id is None:
         raise ProviderRequestError("account without id", provider=PROVIDER)
+    meta = body.get("metadata")
+    disp = _text(meta.get("display_name")) if isinstance(meta, Mapping) else None
     return PfmAccount(
         id=account_id,
         platform=_text(body.get("platform")) or "",
@@ -112,6 +115,7 @@ def parse_account(body: Mapping[str, Any]) -> PfmAccount:
         status=_text(body.get("status")) or "disconnected",
         external_id=_text(body.get("external_id")),
         profile_photo_url=_text(body.get("profile_photo_url")),
+        display_name=disp,
     )
 
 

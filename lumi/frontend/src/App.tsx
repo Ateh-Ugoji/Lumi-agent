@@ -1588,6 +1588,16 @@ export default function App() {
         isOpen={showConnectModal}
         onClose={handleCloseConnectModal}
         connectedPlatforms={profiles.map((p) => p.platform)}
+        onAccountSynced={(account, jobId, profileId) => {
+          handleCloseConnectModal();
+          void refreshProfiles();
+          setUnderstandingState({
+            isOpen: true,
+            account,
+            jobId: jobId || null,
+            profileId: profileId || null,
+          });
+        }}
       />
       <AccountUnderstandingModal
         isOpen={Boolean(understandingState?.isOpen)}
