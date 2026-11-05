@@ -389,17 +389,30 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  width: 20px;
-  height: 20px;
+  width: 17px;
+  height: 17px;
   margin-top: 1px;
   border-radius: 4px;
   overflow: hidden;
+  /* Pops in on every logo swap — the key={name} remount restarts it. */
+  animation: iconSwap 180ms ease-out both;
 }
 
 .iconSocialLight {
   background: #ffffff;
   padding: 2px;
   box-sizing: border-box;
+}
+
+@keyframes iconSwap {
+  from {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 /* ------------------------------------------------------------------ *
@@ -446,6 +459,7 @@
   .labelIn,
   .iconOut,
   .iconIn,
+  .iconSocial,
   .doneText {
     animation: none !important;
   }

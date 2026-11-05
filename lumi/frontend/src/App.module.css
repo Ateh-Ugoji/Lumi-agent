@@ -52,6 +52,10 @@
 }
 
 .stream {
+  /* Anchors absolutely positioned descendants (e.g. .srOnly live regions) to
+     this scroll box so they are clipped by it instead of leaking past it and
+     making the whole document scrollable. */
+  position: relative;
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -289,6 +293,53 @@
   transform: translateY(0) scale(0.98);
 }
 
+/* ── Stop (abort the run / flush a mid-flight reveal) ── */
+.stopRow {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 14px;
+  animation: fade-up 0.4s cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+.stopBtn {
+  font-family: "DM Sans", sans-serif;
+  font-size: 12.5px;
+  line-height: 1.3;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+  background: var(--glass-thick);
+  backdrop-filter: var(--blur-thin);
+  -webkit-backdrop-filter: var(--blur-thin);
+  border: 1px solid var(--glass-border);
+  border-radius: 999px;
+  padding: 7px 14px;
+  cursor: pointer;
+  box-shadow: var(--spec-sm), var(--sh-sm);
+  transition:
+    color 0.15s ease,
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    transform 0.15s ease;
+}
+
+.stopBtn:hover {
+  color: var(--text);
+  border-color: var(--red);
+  background: color-mix(in srgb, var(--red) 16%, transparent);
+  transform: translateY(-1px);
+}
+
+.stopBtn:active {
+  transform: translateY(0) scale(0.98);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stopRow {
+    animation: none;
+  }
+}
+
 /* ── Connect X card button ── */
 .connectCard {
   display: inline-flex;
@@ -342,6 +393,107 @@
   background: var(--glass-thick, rgba(255,255,255,0.07));
   border-radius: 4px;
   padding: 1px 5px;
+}
+
+.msgEm {
+  font-style: italic;
+}
+
+/* ── message blocks: headings, rules, quotes, lists, fences ── */
+.msgPara {
+  margin: 0 0 10px;
+  font-family: "Outfit", sans-serif;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--text);
+  white-space: pre-wrap;
+}
+
+.msgPara:last-child {
+  margin-bottom: 0;
+}
+
+.msgHeading {
+  margin: 14px 0 6px;
+  font-family: "Outfit", sans-serif;
+  font-weight: 650;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+
+.msgHeading[data-level="1"] {
+  font-size: 19px;
+}
+
+.msgHeading[data-level="2"] {
+  font-size: 17px;
+}
+
+.msgHeading[data-level="3"] {
+  font-size: 15.5px;
+}
+
+.msgHeading[data-level="4"],
+.msgHeading[data-level="5"],
+.msgHeading[data-level="6"] {
+  font-size: 14.5px;
+}
+
+.msgRule {
+  margin: 12px 0;
+  border: none;
+  border-top: 1px solid var(--glass-border, rgba(255, 255, 255, 0.12));
+}
+
+.msgQuote {
+  margin: 10px 0;
+  padding: 2px 0 2px 12px;
+  border-left: 2px solid var(--glass-border, rgba(255, 255, 255, 0.18));
+  color: var(--text-dim, rgba(255, 255, 255, 0.72));
+  font-family: "Outfit", sans-serif;
+  font-size: 14.5px;
+  line-height: 1.5;
+}
+
+.msgList {
+  margin: 8px 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-family: "Outfit", sans-serif;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--text);
+}
+
+.msgListItem::marker {
+  color: var(--text-muted);
+}
+
+.msgPre {
+  margin: 10px 0;
+  padding: 10px 12px;
+  overflow-x: auto;
+  border: 1px solid var(--glass-border, rgba(255, 255, 255, 0.12));
+  border-radius: 8px;
+  background: var(--glass-thick, rgba(255, 255, 255, 0.06));
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text);
+}
+
+.msgPre code {
+  font-family: inherit;
+  background: none;
+  padding: 0;
+}
+
+/* A cut-off turn is shown muted, never as a real answer. */
+[data-interrupted="true"] {
+  opacity: 0.72;
 }
 
 @media (max-width: 640px) {

@@ -5,12 +5,15 @@ import {
   useMemo,
   useRef,
   useState,
+  type RefObject,
 } from "react";
 import AmbientBackground from "./components/AmbientBackground/AmbientBackground";
 import PromptBar from "./components/PromptBar/PromptBar";
 import InsightCards from "./components/InsightCards/InsightCards";
+import WinnersCard, { type WinnersData } from "./components/WinnersCard/WinnersCard";
 
 import Settings, { type SettingsSection } from "./components/Settings/Settings";
+import ConnectSocialsModal from "./components/ConnectSocialsModal/ConnectSocialsModal";
 import ChronicOnline from "./components/ChronicOnline/ChronicOnline";
 import SidebarNav from "./components/Sidebar/Sidebar";
 import ThinkingState from "./components/ThinkingState/ThinkingState";
@@ -29,18 +32,36 @@ import {
   SUBLINE_STORE_KEY,
 } from "./constants/sublines";
 import {
-  streamChatMessage,
-  sendChatMessage,
-  getProfiles,
-  getProfileAnalytics,
-  generateChatTitle,
+  ApiError,
+  analyticsFrom,
+  connectLinksFrom,
   deleteChatHistory,
-  type StreamEvent,
-  type ProfileSummary,
+  generateChatTitle,
+  finishConnect,
+  getProfileAnalytics,
+  parseCallbackLanding,
+  sendChatMessage,
+  streamChatMessage,
+  agentErrorMessage,
+  chatErrorMessage,
+  CALLBACK_DONE_URL,
+  type CallbackLanding,
+  type ConnectLink,
+  type ConnectReturn,
   type ProfileAnalytics,
-} from "./api/agent";
+  type StreamEvent,
+} from "./api";
+import { useAuth } from "./auth/AuthContext";
+import { useProfiles } from "./hooks/useProfiles";
+import PublishStudio from "./components/Publish/PublishStudio";
+import { ACTIVE_KEY, CHATS_KEY, DRAFTS_KEY } from "./session";
 import styles from "./App.module.css";
+import { speak, stopSpeaking } from "./voice/speak";
+import { useSmoothText } from "./reveal/useSmoothText";
+import { parseInline, parseMarkdown, type MdBlock, type MdInline } from "./markdown";
 
+/** Shown when a run dies before the agent could answer. */
+const INTERRUPTED_TEXT = "Agent interrupted — please try again.";
 
 type Message = {
   id: number;
@@ -48,6 +69,12 @@ type Message = {
   text: string;
   insights?: boolean;
   analytics?: ProfileAnalytics | null;
+  /** Niche winners card data for this reply (frameworks, peers, viral posts). */
+  winners?: WinnersData | null;
+  /** True when the stream died before the agent finished the turn. */
+  interrupted?: boolean;
+  /** Connect links the server returned for this reply; only these are drawn as connect cards. */
+  connectLinks?: ConnectLink[];
   sim?: { scriptId: string; elapsedMs: number; customScript?: SimScript };
   thinking?: string;
 };
@@ -78,10 +105,6 @@ let nextId = 1;
 let nextChatId = 1;
 let sessionPick: number | null = null;
 
-const CHATS_KEY = "lumi_agent_chats";
-const ACTIVE_KEY = "lumi_agent_active";
-const DRAFTS_KEY = "lumi_agent_drafts";
-
 const loadDrafts = (): Record<string, string> => {
   try {
     const raw = localStorage.getItem(DRAFTS_KEY);
@@ -103,10 +126,23 @@ const loadChats = (): Chat[] => {
     if (raw) {
       const parsed = JSON.parse(raw) as Chat[];
       if (Array.isArray(parsed) && parsed.length > 0) {
+        // Reissue duplicate message ids: a Vite Fast Refresh re-ran this
+        // module (resetting `nextId` to 1) while React state survived, so
+        // ids collided. Duplicates break `key` uniqueness AND make an old
+        // message share `revealingId` with the fresh reply — its settled
+        // onRevealDone then clears the flag and the new reply renders full
+        // instantly (no reveal). Healing on load keeps ids unique.
+        const seen = new Set<number>();
         for (const c of parsed) {
           nextChatId = Math.max(nextChatId, (c.id ?? 0) + 1);
           for (const msg of c.messages ?? []) {
-            nextId = Math.max(nextId, (msg.id ?? 0) + 1);
+            let id = msg.id ?? 0;
+            if (seen.has(id)) {
+              id = nextId++;
+              msg.id = id;
+            }
+            seen.add(id);
+            nextId = Math.max(nextId, id + 1);
           }
         }
         return parsed;
@@ -131,6 +167,11 @@ const applyEdgeGates = (el: HTMLElement) => {
   }
 };
 
+// Fast Refresh re-runs this module (resetting nextId/nextChatId to 1) but
+// preserves React state, so re-derive the counters from storage right away.
+// Without this, every hot update makes the next message reuse an existing id.
+loadChats();
+
 /** X bird icon (simple SVG) */
 function XIcon({ className }: { className?: string }) {
   return (
@@ -140,81 +181,276 @@ function XIcon({ className }: { className?: string }) {
   );
 }
 
-/** Detect if a markdown link is a "Connect X" / OAuth / platform auth link */
-function isConnectLink(text: string, _url: string): boolean {
-  const low = text.toLowerCase();
-  return low.includes("connect") || low.includes("link") || low.includes("authorize");
+/** The connect link the server returned for this URL, if any. The label text is never a signal. */
+function connectLinkFor(url: string, links: ConnectLink[] | undefined): ConnectLink | undefined {
+  return links?.find((link) => link.url === url);
+}
+
+/** Inline tokens → nodes. A newline inside text becomes a <br>. */
+function renderInline(
+  tokens: MdInline[],
+  keyBase: string,
+  connectLinks?: ConnectLink[],
+): React.ReactNode[] {
+  const out: React.ReactNode[] = [];
+  tokens.forEach((token, i) => {
+    const key = `${keyBase}-${i}`;
+    if (token.kind === "strong") {
+      out.push(
+        <strong key={key} className={styles.msgBold}>
+          {token.text}
+        </strong>,
+      );
+      return;
+    }
+    if (token.kind === "em") {
+      out.push(
+        <em key={key} className={styles.msgEm}>
+          {token.text}
+        </em>,
+      );
+      return;
+    }
+    if (token.kind === "code") {
+      out.push(
+        <code key={key} className={styles.msgCode}>
+          {token.text}
+        </code>,
+      );
+      return;
+    }
+    if (token.kind === "link") {
+      const connect = connectLinkFor(token.href, connectLinks);
+      out.push(
+        connect ? (
+          <a
+            key={key}
+            href={token.href}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={styles.connectCard}
+          >
+            {connect.platform === "x" && <XIcon className={styles.connectCardIcon} />}
+            {token.text}
+          </a>
+        ) : (
+          <a
+            key={key}
+            href={token.href}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={styles.msgLink}
+          >
+            {token.text}
+          </a>
+        ),
+      );
+      return;
+    }
+    token.text.split("\n").forEach((line, li) => {
+      if (li > 0) out.push(<br key={`${key}-br${li}`} />);
+      if (line) out.push(line);
+    });
+  });
+  return out;
+}
+
+/** Block nodes → nodes: headings, rules, quotes, lists and code fences. */
+function renderBlocks(blocks: MdBlock[], connectLinks?: ConnectLink[]): React.ReactNode[] {
+  return blocks.map((block, i) => {
+    const key = `blk-${i}`;
+    switch (block.kind) {
+      case "heading":
+        return (
+          <p key={key} className={styles.msgHeading} data-level={block.level}>
+            {renderInline(parseInline(block.text), key, connectLinks)}
+          </p>
+        );
+      case "rule":
+        return <hr key={key} className={styles.msgRule} />;
+      case "quote":
+        return (
+          <blockquote key={key} className={styles.msgQuote}>
+            {renderInline(parseInline(block.text), key, connectLinks)}
+          </blockquote>
+        );
+      case "code":
+        return (
+          <pre key={key} className={styles.msgPre}>
+            <code>{block.text}</code>
+          </pre>
+        );
+      case "list": {
+        const Tag = block.ordered ? "ol" : "ul";
+        return (
+          <Tag key={key} className={styles.msgList}>
+            {block.items.map((item, j) => (
+              <li
+                key={`${key}-${j}`}
+                className={styles.msgListItem}
+                style={{ marginLeft: Math.min(item.indent, 6) * 8 }}
+              >
+                {renderInline(parseInline(item.text), `${key}-${j}`, connectLinks)}
+              </li>
+            ))}
+          </Tag>
+        );
+      }
+      default:
+        return (
+          <p key={key} className={styles.msgPara}>
+            {renderInline(parseInline(block.text), key, connectLinks)}
+          </p>
+        );
+    }
+  });
 }
 
 /**
- * Renders a single agent message with inline markdown:
- * - `[text](url)` → Connect X card (if connect link) or plain <a>
- * - **bold** → <strong>
- * - `code` → <code>
- * - Paragraphs split by double newline
+ * Turns a niche/peer tool result (or the reply's own bolded headlines) into
+ * the data the Winners card renders.
+ */
+function extractWinnersData(toolResult: any, query: string, reply: string): WinnersData {
+  const data: WinnersData = {
+    title: "Winners in the Space",
+    peers: [],
+    frameworks: [],
+    posts: [],
+  };
+
+  if (toolResult) {
+    if (Array.isArray(toolResult.frameworks)) {
+      data.frameworks = toolResult.frameworks.map((fw: any) => {
+        if (typeof fw === "string") return { name: fw };
+        const rawText = fw.text || "";
+        const nameMatch = rawText.match(/Winning framework:\s*([^\n—–-]+)/i);
+        const structMatch = rawText.match(/structure:\s*([^\n;]+)/i);
+        const hookMatch = rawText.match(/hook:\s*([^\n;]+)/i);
+        const driverMatch = rawText.match(/engagement driver:\s*([^\n;]+)/i);
+        const pillarMatch = rawText.match(/Content pillar:\s*([^\n(]+)/i);
+        const whyMatch = rawText.match(/Why it works:\s*([^\nWinning]+)/i);
+
+        return {
+          name: nameMatch ? nameMatch[1].trim() : (fw.metadata?.query || "Winning Content Framework"),
+          structure: structMatch ? structMatch[1].trim() : undefined,
+          hook: hookMatch ? hookMatch[1].trim() : undefined,
+          whyItWorks: driverMatch ? driverMatch[1].trim() : (whyMatch ? whyMatch[1].trim() : undefined),
+          pillar: pillarMatch ? pillarMatch[1].trim() : undefined,
+        };
+      });
+    }
+
+    const rawPeers =
+      (Array.isArray(toolResult.peers) && toolResult.peers.length > 0)
+        ? toolResult.peers
+        : (Array.isArray(toolResult.competitors) && toolResult.competitors.length > 0)
+        ? toolResult.competitors
+        : (Array.isArray(toolResult.source_handles) ? toolResult.source_handles : []);
+
+    if (rawPeers.length > 0) {
+      data.peers = rawPeers.map((h: any) => {
+        const handleStr = typeof h === "string" ? h : (h.handle || "");
+        return {
+          handle: handleStr.replace(/^@/, ""),
+          name: typeof h === "object" ? h.name : undefined,
+          role: typeof h === "object" ? (h.role || "Competitor Peer") : "Competitor Peer",
+        };
+      });
+    }
+
+    const rawPosts = toolResult.peer_posts || toolResult.viral_posts || [];
+    if (Array.isArray(rawPosts)) {
+      data.posts = rawPosts.map((p: any) => ({
+        author: (p.author || p.author_handle || "creator").replace(/^@/, ""),
+        caption: p.caption || p.text || "",
+        likes: p.likes ?? p.metrics?.like_count,
+        retweets: p.retweets ?? p.metrics?.retweet_count,
+        url: p.url || p.platform_url,
+      }));
+    }
+  }
+
+  const isWinnersQuery = /winners?|frameworks?|peers?|niche trends?|top creators?|winning content/i.test(query);
+  if ((!data.frameworks || data.frameworks.length === 0) && isWinnersQuery) {
+    const boldMatches = [...reply.matchAll(/\*\*(?:[0-9]+\.\s*)?([^*:\n]+)\*\*/g)];
+    if (boldMatches.length > 0) {
+      data.frameworks = boldMatches.slice(0, 3).map((m) => ({
+        name: m[1].replace(/["']/g, "").trim(),
+        structure: "Hook > Value Proposition > Proof / Link",
+        whyItWorks: "Drives community engagement and bookmarks in tech niche",
+      }));
+    }
+  }
+
+  return data;
+}
+
+/**
+ * Renders a single agent message with block + inline markdown:
+ * headings, rules, quotes, lists and fenced code (markdown.ts), plus
+ * `[text](url)` → Connect card (server-issued links only) or plain <a>.
  */
 function AgentMessage({
   text,
   analytics,
+  winners,
+  connectLinks,
   onPill,
+  animate = false,
+  scrollRef,
+  nearBottomRef,
+  onRevealDone,
+  flushRef,
 }: {
   text: string;
   analytics?: ProfileAnalytics | null;
+  winners?: WinnersData | null;
+  connectLinks?: ConnectLink[];
   onPill?: (t: string) => void;
+  /** True only for the freshly-streamed reply: reveal it gradually. */
+  animate?: boolean;
+  scrollRef?: RefObject<HTMLDivElement | null>;
+  nearBottomRef?: RefObject<boolean>;
+  onRevealDone?: () => void;
+  flushRef?: { current: (() => void) | null };
 }) {
-  const nodes = useMemo(() => {
-    // Split text into paragraphs first
-    const paragraphs = text.split(/\n\n+/);
-    return paragraphs.map((para, pi) => {
-      // Tokenise inline: **bold**, `code`, [label](url)
-      const INLINE = /(\*\*(.+?)\*\*|`([^`]+)`|\[([^\]]+)\]\((https?:\/\/[^)]+)\))/g;
-      const parts: React.ReactNode[] = [];
-      let last = 0;
-      let m: RegExpExecArray | null;
-      while ((m = INLINE.exec(para)) !== null) {
-        if (m.index > last) parts.push(para.slice(last, m.index));
-        if (m[2] !== undefined) {
-          // **bold**
-          parts.push(<strong key={m.index} className={styles.msgBold}>{m[2]}</strong>);
-        } else if (m[3] !== undefined) {
-          // `code`
-          parts.push(<code key={m.index} className={styles.msgCode}>{m[3]}</code>);
-        } else if (m[4] !== undefined && m[5]) {
-          // [label](url)
-          const label = m[4];
-          const url = m[5];
-          if (isConnectLink(label, url)) {
-            parts.push(
-              <a key={m.index} href={url} target="_blank" rel="noopener noreferrer" className={styles.connectCard}>
-                <XIcon className={styles.connectCardIcon} />
-                {label}
-              </a>
-            );
-          } else {
-            parts.push(
-              <a key={m.index} href={url} target="_blank" rel="noopener noreferrer" className={styles.msgLink}>{label}</a>
-            );
-          }
-        }
-        last = m.index + m[0].length;
-      }
-      if (last < para.length) parts.push(para.slice(last));
-      // single-newline breaks inside a paragraph
-      const withBreaks: React.ReactNode[] = [];
-      parts.forEach((node, ni) => {
-        if (typeof node === "string") {
-          const lines = node.split("\n");
-          lines.forEach((ln, li) => {
-            if (li > 0) withBreaks.push(<br key={`${pi}-${ni}-br${li}`} />);
-            if (ln) withBreaks.push(ln);
-          });
-        } else {
-          withBreaks.push(node);
-        }
-      });
-      return <p key={pi} className={styles.msgText}>{withBreaks}</p>;
-    });
-  }, [text]);
+  // Buffer-and-reveal: while `animate`, the message renders
+  // `text.slice(0, shown)` and types itself out at an adaptive speed
+  // (reveal/useSmoothText). History/reloads pass animate=false and render
+  // the full text instantly — old messages never re-animate.
+  const { text: visible, revealing, flush } = useSmoothText(text, animate);
+
+  // GFM block parsing (headings, rules, lists, quotes, fences) lives in
+  // markdown.ts; inline tokens are rendered against this message's connect
+  // links so only server-issued URLs become connect cards.
+  const nodes = useMemo(
+    () => renderBlocks(parseMarkdown(visible), connectLinks),
+    [visible, connectLinks],
+  );
+
+  // While revealing, keep the growing text pinned to the bottom — only if the
+  // user was already near the bottom (never fight manual scrolling).
+  useLayoutEffect(() => {
+    if (!animate || !revealing) return;
+    const el = scrollRef?.current;
+    if (!el || !nearBottomRef?.current) return;
+    const max = Math.max(el.scrollHeight - el.clientHeight, 0);
+    el.scrollTop = max;
+  }, [visible, animate, revealing, scrollRef, nearBottomRef]);
+
+  // Expose flush() to the Stop button while this message is the one revealing.
+  useEffect(() => {
+    if (!animate || !flushRef) return;
+    flushRef.current = flush;
+    return () => {
+      if (flushRef.current === flush) flushRef.current = null;
+    };
+  }, [animate, flush, flushRef]);
+
+  // Reveal settled: let the App clear its "this message is revealing" flag.
+  useEffect(() => {
+    if (animate && !revealing) onRevealDone?.();
+  }, [animate, revealing, onRevealDone]);
 
   return (
     <>
@@ -222,6 +458,11 @@ function AgentMessage({
       {analytics && (
         <div className={styles.insightSlot}>
           <InsightCards analytics={analytics} onPill={onPill} />
+        </div>
+      )}
+      {winners && (
+        <div className={styles.insightSlot}>
+          <WinnersCard data={winners} onPill={onPill} />
         </div>
       )}
     </>
@@ -259,6 +500,9 @@ export default function App() {
     setInput(draftFor(activeId));
   }, [activeId]);
   const [busy, setBusy] = useState(false);
+  // Id of the freshly-streamed agent reply that is revealing right now
+  // (null = nothing animating; history/reloads never re-animate).
+  const [revealingId, setRevealingId] = useState<number | null>(null);
   type ActiveRun = {
     runId: number;
     script: SimScript;
@@ -282,33 +526,111 @@ export default function App() {
   const [pills, setPills] = useState<string[]>(pickPills);
   const [subline, setSubline] = useState<string | null>(null);
   const [sublineShown, setSublineShown] = useState(false);
-  const [view, setView] = useState<"chat" | "chronic" | "settings">("chat");
+  const [view, setView] = useState<"chat" | "chronic" | "publish" | "settings">("chat");
   const [settingsSection, setSettingsSection] =
     useState<SettingsSection>("profile");
-  const [profiles, setProfiles] = useState<ProfileSummary[]>([]);
-  const [profilesLoaded, setProfilesLoaded] = useState(false);
+  const { user, logout } = useAuth();
+  const {
+    profiles,
+    activeId: activeProfileId,
+    active: activeProfile,
+    select: selectProfile,
+    create: createProfile,
+    refresh: refreshProfiles,
+  } = useProfiles();
   const [analytics, setAnalytics] = useState<ProfileAnalytics | null>(null);
+  const [connectReturn, setConnectReturn] = useState<ConnectReturn | null>(null);
+  const [showConnectModal, setShowConnectModal] = useState(false);
 
   useEffect(() => {
-    getProfiles()
-      .then((data) => {
-        setProfiles(data);
-        setProfilesLoaded(true);
-        // Fetch analytics for the first (active) profile
-        if (data.length > 0) {
-          getProfileAnalytics(data[0].id).then((a) => {
-            if (a) setAnalytics(a);
-          });
-        }
-      })
-      .catch(() => setProfilesLoaded(true));
-  }, [view]);
+    try {
+      if (sessionStorage.getItem("lumi_just_signed_in") === "true") {
+        sessionStorage.removeItem("lumi_just_signed_in");
+        setShowConnectModal(true);
+      }
+    } catch {}
+  }, []);
 
-  const hasConnectedAccounts = profiles.length > 0;
+  useEffect(() => {
+    if (user && profiles.length === 0) {
+      try {
+        const dismissed = sessionStorage.getItem("lumi_connect_prompt_dismissed");
+        if (!dismissed) {
+          setShowConnectModal(true);
+        }
+      } catch {}
+    }
+  }, [user, profiles.length]);
+
+  const handleCloseConnectModal = () => {
+    setShowConnectModal(false);
+    try {
+      sessionStorage.setItem("lumi_connect_prompt_dismissed", "true");
+    } catch {}
+  };
+
+  useEffect(() => {
+    setAnalytics(null);
+    if (activeProfileId === null) return;
+    let cancelled = false;
+    getProfileAnalytics(activeProfileId).then((a) => {
+      if (!cancelled && a) setAnalytics(a);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeProfileId]);
+
+  // The provider redirects the browser to /connections/<provider>/callback on this app. Finish the
+  // grant here with this user's Token: the server refuses a state that someone else started. The
+  // URL is replaced at once, so a reload or a shared link never repeats the grant.
+  const landingRef = useRef<CallbackLanding | null>(null);
+  const landingSentRef = useRef(false);
+  useLayoutEffect(() => {
+    const found = parseCallbackLanding(window.location.pathname, window.location.search);
+    if (!found) return;
+    landingRef.current = found;
+    window.history.replaceState(null, "", CALLBACK_DONE_URL);
+    setSettingsSection(found.kind !== "pfm" && found.provider === "google" ? "connectors" : "social");
+    setView("settings");
+  }, []);
+  useEffect(() => {
+    const landing = landingRef.current;
+    if (!landing || landingSentRef.current) return;
+    landingSentRef.current = true;
+    finishConnect(landing)
+      .then((done) => {
+        setConnectReturn(
+          done.connected
+            ? { kind: "connected", provider: done.provider }
+            : {
+                kind: "error",
+                code: "connections.no_accounts",
+                provider: landing.kind === "pfm" ? "pfm" : landing.provider,
+              },
+        );
+        refreshProfiles();
+      })
+      .catch((err: unknown) => {
+        const code = err instanceof ApiError ? err.code : "internal_error";
+        setConnectReturn({
+          kind: "error",
+          code,
+          provider: landing.kind === "pfm" ? "pfm" : landing.provider,
+        });
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const runCounterRef = useRef(0);
   const settledReplyRef = useRef(0);
   const pendingChatIdRef = useRef(0);
+  // True when the in-flight send came from the mic — the reply is spoken aloud.
+  const voiceReplyRef = useRef(false);
+  // In-flight /chat/stream fetch — aborted by the Stop button.
+  const abortRef = useRef<AbortController | null>(null);
+  // Registered by the revealing message so Stop can flush it to full text.
+  const flushRef = useRef<(() => void) | null>(null);
 
   const streamRef = useRef<HTMLDivElement>(null);
   const nearBottomRef = useRef(true);
@@ -344,6 +666,32 @@ export default function App() {
     };
   }, [view]);
 
+  // Heal duplicate message ids in LIVE state (a Fast Refresh used to reset
+  // nextId while this state survived). Idempotent: returns the same
+  // reference when ids are already unique, so it never re-renders on its own.
+  useEffect(() => {
+    setChats((prev) => {
+      const seen = new Set<number>();
+      let dirty = false;
+      const healed = prev.map((c) => ({
+        ...c,
+        messages: c.messages.map((m) => {
+          if (seen.has(m.id)) {
+            dirty = true;
+            const id = nextId++;
+            seen.add(id);
+            nextId = Math.max(nextId, id + 1);
+            return { ...m, id };
+          }
+          seen.add(m.id);
+          nextId = Math.max(nextId, m.id + 1);
+          return m;
+        }),
+      }));
+      return dirty ? healed : prev;
+    });
+  }, []);
+
   useEffect(() => {
     try {
       localStorage.setItem(CHATS_KEY, JSON.stringify(chats));
@@ -352,6 +700,12 @@ export default function App() {
       // storage unavailable (private mode etc.) - ignore
     }
   }, [chats, activeId]);
+
+  // Leaving a chat mid-reveal (or returning to it later) shows full text —
+  // the reveal only ever plays once, right after the reply streams in.
+  useEffect(() => {
+    setRevealingId(null);
+  }, [activeId]);
 
   useEffect(() => {
     let alive = true;
@@ -478,7 +832,13 @@ export default function App() {
 
   const send = (raw: string) => {
     const text = raw.trim();
-    if (!text) return;
+    if (!text || busy) return;
+    if (activeProfileId === null) {
+      // Chat works on a profile. Without one, send the user where it is created.
+      setSettingsSection("profile");
+      setView("settings");
+      return;
+    }
     pendingChatIdRef.current = activeId;
     const targetChatId = activeId;
     const currentChat = chats.find((c) => c.id === targetChatId);
@@ -530,6 +890,7 @@ export default function App() {
       ],
     };
 
+    const chatProfileId = activeProfileId;
     const startTime = performance.now();
     const liveSteps: SimStep[] = [...initialScript.steps];
 
@@ -540,10 +901,23 @@ export default function App() {
     });
     setBusy(true);
 
+    // One abort controller per run: the Stop button cancels the fetch, and
+    // the catch below must then NOT fall through to the direct-POST retry
+    // (that would re-run the whole agent turn server-side).
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     (async () => {
       try {
-        const activeProfileId = profiles.length > 0 ? profiles[0].id : 1;
-        const result = await streamChatMessage(activeProfileId, text, (evt: StreamEvent) => {
+        let streamError: string | null = null;
+        const result = await streamChatMessage(chatProfileId, text, (evt: StreamEvent) => {
+          if (evt.type === "error") {
+            // Agent failures arrive as a normal SSE event, not a rejected HTTP
+            // request. Dropping them makes a crashed run look like a success
+            // with an empty reply.
+            streamError = agentErrorMessage(evt.code, evt.error);
+            return;
+          }
           if (evt.type === "tool_start") {
             const toolName = evt.tool;
             const args = evt.arguments || {};
@@ -551,8 +925,8 @@ export default function App() {
             let kind: SimStepKind = "action";
             // The connected account's platform drives the header icon: steps
             // marked "social" crossfade the ball into that platform's logo.
-            const activePlatform: string = profiles[0]?.platform || "x";
-            const activeHandle = profiles[0]?.handle || "";
+            const activePlatform: string = activeProfile?.platform || "x";
+            const activeHandle = activeProfile?.handle || "";
             // The connected account's face — same unavatar source the Sidebar uses.
             const activeAvatarUrl = activeHandle
               ? `https://unavatar.io/${activePlatform === "x" ? "x" : activePlatform}/${activeHandle}`
@@ -561,17 +935,32 @@ export default function App() {
             let avatarUrl: string | undefined;
 
             if (toolName === "connect_account") {
-              label = "Generating secure X authorization link...";
+              const target = String(args.platform || activeProfile?.platform || "x");
+              label = `Generating secure ${target} authorization link...`;
               kind = "action";
-              platforms = ["x"];
+              platforms = [target];
             } else if (toolName === "check_niche_trends") {
               label = `Searching high-impression peer posts (${args.query || "niche"})`;
               kind = "social";
+              // Both tools take a `platform` arg that defaults to the profile's
+              // own network — the logo must follow it, never a fixed guess.
+              platforms = [String(args.platform || activePlatform)];
+            } else if (toolName === "search_keyword_trends") {
+              const word =
+                args.query ||
+                (Array.isArray(args.keywords) ? args.keywords.join(", ") : "") ||
+                "saved keywords";
+              label = `Searching posts by keyword (${word})`;
+              kind = "social";
+              platforms = [String(args.platform || activePlatform)];
+            } else if (toolName === "save_user_request") {
+              label = "Saving your requested handles (as user requests, not peers)";
+              kind = "action";
               platforms = ["x"];
             } else if (toolName === "discover_and_extract_niche_frameworks") {
-              label = `Extracting winning content frameworks (${args.niche || "tech"})`;
+              label = `Extracting winning content frameworks (${args.query || args.niche || "niche"})`;
               kind = "analysis";
-              platforms = ["x", "linkedin"];
+              platforms = [String(args.platform || activePlatform)];
             } else if (toolName === "extract_voice_profile") {
               label = "Extracting your creator voice profile";
               kind = "social";
@@ -599,7 +988,7 @@ export default function App() {
             } else if (toolName === "repurpose_caption") {
               label = `Repurposing caption for ${args.target_platform || "socials"}`;
               kind = "writing";
-              platforms = [args.target_platform || "x"];
+              platforms = [String(args.target_platform || "x")];
             }
 
 
@@ -653,16 +1042,21 @@ export default function App() {
               startedAt: startTime,
             });
           }
-        });
+        }, { signal: controller.signal });
 
         // Finished streaming response
         const elapsed = Math.round(performance.now() - startTime);
-        liveSteps.push({
-          id: `step-finish`,
-          label: "Synthesizing response",
-          kind: "writing",
-          durationMs: 400,
-        });
+        if (streamError) {
+          const lastStep = liveSteps[liveSteps.length - 1];
+          if (lastStep) lastStep.detail = "Failed";
+        } else {
+          liveSteps.push({
+            id: `step-finish`,
+            label: "Synthesizing response",
+            kind: "writing",
+            durationMs: 400,
+          });
+        }
 
         const completedScript: SimScript = {
           id: `live-${runId}`,
@@ -671,10 +1065,40 @@ export default function App() {
         };
 
         const target = pendingChatIdRef.current;
-        const analyticsExec = result.tool_executions?.find(
-          (e) => e.name === "get_analytics" && e.result,
-        );
 
+        const replyText = streamError
+          ? `⚠️ ${streamError}`
+          : !result.completed
+            ? INTERRUPTED_TEXT
+            : result.content?.trim() ||
+              "I finished working on that — let me know if you'd like more detail.";
+
+        // Analytics: the tool result, else the live profile summary when the
+        // user clearly asked about performance.
+        const isAnalyticsQuery =
+          /impressions?|analytics|reach|metrics|performance|stats|views|engagement/i.test(text);
+        const messageAnalytics =
+          analyticsFrom(result.tool_executions) ?? (isAnalyticsQuery ? analytics : undefined);
+
+        // Winners: a niche/peer tool result, else inferred from a winners-shaped ask.
+        const peerAdviceExec = result.tool_executions?.find(
+          (e) =>
+            (e.name === "get_peer_advice" ||
+              e.name === "check_niche_trends" ||
+              e.name === "discover_and_extract_niche_frameworks") &&
+            e.result,
+        );
+        const isWinnersQuery =
+          /winners?|frameworks?|peers?|niche trends?|top creators?|winning content/i.test(text);
+        const messageWinners =
+          peerAdviceExec?.result || isWinnersQuery
+            ? extractWinnersData(peerAdviceExec?.result, text, replyText)
+            : undefined;
+
+        // Pre-generate the reply id so the same batch can mark it as
+        // "revealing"; the updater itself stays pure (StrictMode-safe).
+        const replyId = nextId++;
+        setRevealingId(replyId);
         setChats((prev) =>
           prev.map((c) =>
             c.id === target
@@ -683,10 +1107,13 @@ export default function App() {
                   messages: [
                     ...c.messages,
                     {
-                      id: nextId++,
+                      id: replyId,
                       role: "agent",
-                      text: result.content?.trim() || "I finished working on that — let me know if you'd like more detail.",
-                      analytics: analyticsExec ? analyticsExec.result : undefined,
+                      text: replyText,
+                      interrupted: !result.completed,
+                      analytics: messageAnalytics,
+                      winners: messageWinners,
+                      connectLinks: connectLinksFrom(result.tool_executions),
                       sim: {
                         scriptId: completedScript.id,
                         elapsedMs: elapsed,
@@ -699,17 +1126,80 @@ export default function App() {
           ),
         );
 
+        if (voiceReplyRef.current) {
+          voiceReplyRef.current = false;
+          speak(replyText.replace(/^⚠️\s*/, ""));
+        }
+
       } catch (err: any) {
+        if (controller.signal.aborted) {
+          // Stop pressed: an honest "stopped" note — and never the direct
+          // POST below, which would re-run the whole agent turn server-side.
+          voiceReplyRef.current = false;
+          const stoppedTarget = pendingChatIdRef.current;
+          const stoppedId = nextId++;
+          setRevealingId(stoppedId);
+          setChats((prev) =>
+            prev.map((c) =>
+              c.id === stoppedTarget
+                ? {
+                    ...c,
+                    messages: [
+                      ...c.messages,
+                      { id: stoppedId, role: "agent", text: "⏹ Stopped — I didn't finish that." },
+                    ],
+                  }
+                : c,
+            ),
+          );
+          return; // finally still clears activeRun / busy
+        }
         console.warn("Live stream failed, falling back to direct chat:", err);
         const target = pendingChatIdRef.current;
-        const activeProfileId = profiles.length > 0 ? profiles[0].id : 1;
+        const noRetryCodes = ["agent_timeout", "stream_incomplete", "bad_response"];
+        if (
+          err instanceof ApiError &&
+          ((err.status >= 400 && err.status < 500) || noRetryCodes.includes(err.code))
+        ) {
+          // The server answered and refused, or the agent already started and went silent:
+          // running the turn again would only repeat the refusal or double the work.
+          const refusedId = nextId++;
+          setRevealingId(refusedId);
+          setChats((prev) =>
+            prev.map((c) =>
+              c.id === target
+                ? {
+                    ...c,
+                    messages: [
+                      ...c.messages,
+                      { id: refusedId, role: "agent", text: `⚠️ ${chatErrorMessage(err)}` },
+                    ],
+                  }
+                : c,
+            ),
+          );
+          return;
+        }
 
         try {
-          const direct = await sendChatMessage(activeProfileId, text);
+          const direct = await sendChatMessage(chatProfileId, text);
           const elapsed = Math.round(performance.now() - startTime);
-          const directAnalyticsExec = direct.tool_executions?.find(
-            (e) => e.name === "get_analytics" && e.result,
+          const directPeerExec = direct.tool_executions?.find(
+            (e) =>
+              (e.name === "get_peer_advice" ||
+                e.name === "check_niche_trends" ||
+                e.name === "discover_and_extract_niche_frameworks") &&
+              e.result,
           );
+          const directIsWinnersQuery =
+            /winners?|frameworks?|peers?|niche trends?|top creators?|winning content/i.test(text);
+          const directText = direct.content || "Done!";
+          const directWinners =
+            directPeerExec?.result || directIsWinnersQuery
+              ? extractWinnersData(directPeerExec?.result, text, directText)
+              : undefined;
+          const directId = nextId++;
+          setRevealingId(directId);
           setChats((prev) =>
             prev.map((c) =>
               c.id === target
@@ -718,22 +1208,27 @@ export default function App() {
                     messages: [
                       ...c.messages,
                       {
-                        id: nextId++,
+                        id: directId,
                         role: "agent",
-                        text: direct.content || "Done!",
-                        analytics: directAnalyticsExec ? directAnalyticsExec.result : undefined,
+                        text: directText,
+                        analytics: analyticsFrom(direct.tool_executions),
+                        winners: directWinners,
+                        connectLinks: connectLinksFrom(direct.tool_executions),
                       },
                     ],
                   }
                 : c,
             ),
           );
+          if (voiceReplyRef.current) {
+            voiceReplyRef.current = false;
+            speak(direct.content || "Done!");
+          }
         } catch (fallbackErr: any) {
-          const errorMsg =
-            fallbackErr?.message ||
-            err?.message ||
-            "Unable to reach the Lumi agent backend. Please check that the server is running on http://localhost:8000.";
+          const errorMsg = chatErrorMessage(fallbackErr ?? err);
 
+          const errorId = nextId++;
+          setRevealingId(errorId);
           setChats((prev) =>
             prev.map((c) =>
               c.id === target
@@ -742,21 +1237,33 @@ export default function App() {
                     messages: [
                       ...c.messages,
                       {
-                        id: nextId++,
+                        id: errorId,
                         role: "agent",
-                        text: `⚠️ Connection error: ${errorMsg}`,
+                        text: `⚠️ ${errorMsg}`,
                       },
                     ],
                   }
                 : c,
             ),
           );
+          if (voiceReplyRef.current) {
+            voiceReplyRef.current = false;
+            speak(`Sorry — I could not reach the backend. ${errorMsg}`);
+          }
         }
       } finally {
+        if (abortRef.current === controller) abortRef.current = null;
         setActiveRun(null);
         setBusy(false);
       }
     })();
+  };
+
+  // Stop: abort the in-flight stream, and flush any mid-flight reveal so
+  // everything received so far appears at once.
+  const stopRun = () => {
+    abortRef.current?.abort();
+    flushRef.current?.();
   };
 
   const resetChat = () => {
@@ -774,6 +1281,7 @@ export default function App() {
     }
     setActiveRun(null);
     setBusy(false);
+    setRevealingId(null);
     setInput("");
     setPills(pickPills());
   };
@@ -795,11 +1303,14 @@ export default function App() {
       delete draftsRef.current[idStr];
       persistDrafts();
     }
-    if (profiles.length > 0) {
-      deleteChatHistory(profiles[0].id).catch(() => {});
-    }
   };
 
+  const liveSteps = activeRun ? activeRun.script.steps : [];
+  // The init "Thinking..." row is only current while no tool has run yet.
+  // It never gets a `detail`, so without excluding it here `index` stayed
+  // pinned to step 0 and the header kept showing the orb instead of the
+  // platform logo of the step that is actually running.
+  const toolStarted = liveSteps.some((s) => s.id.startsWith("tool-"));
   const live = activeRun
     ? {
         runId: activeRun.runId,
@@ -808,10 +1319,10 @@ export default function App() {
         elapsedMs,
         // First step that has NOT completed; -1 = everything started has
         // finished (the model is reasoning between turns) → nothing spins.
-        index: activeRun.script.steps.findIndex(
-          (s) => s.detail !== "Completed",
+        index: liveSteps.findIndex(
+          (s) => !(toolStarted && s.id === "step-init") && s.detail !== "Completed",
         ),
-        startedCount: activeRun.script.steps.length,
+        startedCount: liveSteps.length,
       }
     : null;
 
@@ -821,14 +1332,6 @@ export default function App() {
     .slice()
     .reverse()
     .map((c) => ({ id: String(c.id), label: c.title || "Untitled" }));
-
-  useLayoutEffect(() => {
-    const say = new URLSearchParams(window.location.search).get(
-      "say",
-    );
-    if (say && messages.length === 0 && !busy) send(say);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   return (
     <div className={styles.page}>
@@ -844,22 +1347,36 @@ export default function App() {
           }}
           activeTitle={activeChat ? activeChat.title || null : null}
 
+          profiles={profiles}
+          activeProfileId={activeProfileId}
+          onSelectProfile={selectProfile}
+
           recents={recents}
           userProfile={
-            profiles.length > 0
-              ? { name: profiles[0].name, handle: profiles[0].handle }
-              : null
+            activeProfile ? { name: activeProfile.name, handle: activeProfile.handle } : null
           }
-          activeNav={view === "settings" ? "settings" : view === "chronic" ? "chronic" : "home"}
+          activeNav={
+            view === "settings"
+              ? "settings"
+              : view === "chronic"
+                ? "chronic"
+                : view === "publish"
+                  ? "publish"
+                  : "home"
+          }
           onNavigate={(key) => {
             if (key === "settings") setView("settings");
             else if (key === "chronic") setView("chronic");
+            else if (key === "publish") setView("publish");
             else setView("chat");
           }}
           onOpenSettings={(section) => {
             setSettingsSection(section as SettingsSection);
             setView("settings");
           }}
+          onSignOut={() => void logout()}
+          footerLabel="Log out"
+          onFooterClick={() => void logout()}
         />
         <main className={styles.main}>
           {view === "settings" ? (
@@ -867,10 +1384,29 @@ export default function App() {
               section={settingsSection}
               onSectionChange={setSettingsSection}
               onBack={() => setView("chat")}
+              user={user}
+              profiles={profiles}
+              activeProfileId={activeProfileId}
+              onSelectProfile={selectProfile}
+              onCreateProfile={createProfile}
+              onClearHistory={deleteChatHistory}
+              onLogout={() => void logout()}
+              returned={connectReturn}
+              onDismissReturn={() => setConnectReturn(null)}
+              onConnectionsChanged={() => void refreshProfiles()}
+            />
+          ) : view === "publish" ? (
+            <PublishStudio
+              profileId={activeProfileId}
+              handle={activeProfile?.handle ?? null}
+              onOpenConnections={() => {
+                setSettingsSection("social");
+                setView("settings");
+              }}
             />
           ) : view === "chronic" ? (
             <ChronicOnline
-              profileId={profiles.length > 0 ? profiles[0].id : 1}
+              profileId={activeProfileId}
               onRepurpose={(caption, author) => {
                 setView("chat");
                 send(
@@ -934,6 +1470,7 @@ export default function App() {
                         )}
                         <div
                           data-role={m.role}
+                          data-interrupted={m.interrupted ? "true" : undefined}
                           className={
                             m.role === "user"
                               ? styles.userMsg
@@ -947,7 +1484,16 @@ export default function App() {
                             <AgentMessage
                               text={m.text}
                               analytics={m.analytics ?? (m.insights ? analytics : null)}
+                              winners={m.winners ?? null}
+                              connectLinks={m.connectLinks}
                               onPill={(t) => handleInput(t)}
+                              animate={m.id === revealingId}
+                              scrollRef={streamRef}
+                              nearBottomRef={nearBottomRef}
+                              onRevealDone={() =>
+                                setRevealingId((cur) => (cur === m.id ? null : cur))
+                              }
+                              flushRef={flushRef}
                             />
                           ) : (
                             <p className={styles.msgText}>{m.text}</p>
@@ -968,13 +1514,20 @@ export default function App() {
                     )}
                   </div>
                 </div>
-                <div
-                  className={`${styles.edge} ${styles.edgeBottom}`}
-                  aria-hidden="true"
-                />
               </div>
 
               <div className={styles.dock}>
+                {(busy || revealingId !== null) && (
+                  <div className={styles.stopRow}>
+                    <button
+                      type="button"
+                      className={styles.stopBtn}
+                      onClick={stopRun}
+                    >
+                      ■ Stop
+                    </button>
+                  </div>
+                )}
                 {messages.length === 0 && !busy && (
                   <div className={styles.pills}>
                     {pills.map((p) => (
@@ -995,12 +1548,20 @@ export default function App() {
                   onTextChange={handleInput}
                   onSend={send}
                   busy={busy}
+                  history={messages
+                    .filter((m) => m.role === "user")
+                    .map((m) => m.text)}
                 />
               </div>
             </>
           )}
         </main>
       </div>
+      <ConnectSocialsModal
+        isOpen={showConnectModal}
+        onClose={handleCloseConnectModal}
+        connectedPlatforms={profiles.map((p) => p.platform)}
+      />
     </div>
   );
 }

@@ -1,0 +1,36 @@
+# PostgreSQL local para Lumi. Solo para desarrollo y tests.
+#
+#   docker compose up -d db
+#   DATABASE_URL=postgresql://lumi:lumi_dev@localhost:5432/lumi   (en lumi/.env)
+#
+# Crea la base "lumi". pytest-django crea y borra por su cuenta "test_lumi" (el rol de la imagen
+# es superusuario, así que puede).
+# Cambia el puerto con LUMI_DB_PORT si el 5432 está ocupado. El contenedor solo escucha en 127.0.0.1.
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-lumi}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-lumi_dev}
+      POSTGRES_DB: ${POSTGRES_DB:-lumi}
+    ports:
+      - "127.0.0.1:${LUMI_DB_PORT:-5432}:5432"
+    volumes:
+      - lumi_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Opcional: Redis para Celery (docker compose --profile celery up -d).
+  redis:
+    image: redis:7-alpine
+    profiles: ["celery"]
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${LUMI_REDIS_PORT:-6379}:6379"
+
+volumes:
+  lumi_pgdata:

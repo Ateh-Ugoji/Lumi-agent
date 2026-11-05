@@ -259,6 +259,26 @@ function MorphLabel({
   );
 }
 
+/** Platform names ``SocialIcon`` can actually draw — an unknown name would
+ *  render an empty chip, so rows filter against this set first. */
+const ROW_LOGO_PLATFORMS = new Set([
+  "x",
+  "facebook",
+  "instagram",
+  "linkedin",
+  "tiktok",
+  "youtube",
+]);
+
+/** The logo chips that lead a row: steps that search a social network show that
+ *  network's mark (old Lumi c466c5d behaviour). Action/writing rows stay clean. */
+function rowLogos(step: SimStep): string[] {
+  if (step.kind !== "social" && step.kind !== "analysis") return [];
+  return (step.platforms ?? [])
+    .filter((name) => ROW_LOGO_PLATFORMS.has(name))
+    .slice(0, 3);
+}
+
 function StepRow({
   step,
   active,
@@ -292,6 +312,18 @@ function StepRow({
       )}
       <span className={styles.rowBody}>
         <span className={styles.rowLine}>
+          {rowLogos(step).map((name) => (
+            <span
+              key={name}
+              // Decorative — the row's label already names what is happening.
+              aria-hidden="true"
+              className={`${styles.iconSocial} ${
+                name === "x" ? styles.iconSocialLight : ""
+              }`}
+            >
+              <SocialIcon name={name} size={name === "x" ? 13 : 17} />
+            </span>
+          ))}
           {active ? (
             <MorphLabel label={step.label} small enabled={!reduced} />
           ) : (
@@ -365,8 +397,16 @@ export default function AgentThinking({
   const reduced = usePrefersReducedMotion();
   const [manual, setManual] = useState<boolean | null>(null);
   const final = settled || status === "done";
-  const isShort = script.steps.length <= 4;
-  const expanded = manual ?? (!final || isShort);
+  // Once the answer is delivered the detailed steps collapse on their own;
+  // the reader only sees them if they open the panel themselves. A manual
+  // toggle is remembered while a run is in flight, then reset at each edge so
+  // the next delivered answer always starts closed.
+  const prevFinal = useRef(final);
+  if (final !== prevFinal.current) {
+    prevFinal.current = final;
+    setManual(null);
+  }
+  const expanded = manual ?? !final;
 
   const count = final
     ? script.steps.length
@@ -397,13 +437,21 @@ export default function AgentThinking({
   const toggle = () => setManual(!expanded);
 
   // Header icon identity: swapped pieces crossfade (150ms delay / 200ms fade).
+  // While the model reasons between turns `activeStep` is undefined; the
+  // header then keeps the logo of the social this run is actually going
+  // through (its last social step) instead of dropping back to the orb.
+  const iconStep =
+    activeStep ??
+    (final
+      ? undefined
+      : [...script.steps].reverse().find((s) => s.kind === "social"));
   const iconKey = final
     ? "spark"
-    : activeStep?.avatar_url
-      ? `avatar:${activeStep.avatar_url}`
-      : activeStep?.kind === "social"
-        ? `social:${(activeStep.platforms ?? ["x"]).join(",")}`
-        : activeStep?.kind === "action"
+    : iconStep?.avatar_url
+      ? `avatar:${iconStep.avatar_url}`
+      : iconStep?.kind === "social"
+        ? `social:${(iconStep.platforms ?? ["x"]).join(",")}`
+        : iconStep?.kind === "action"
           ? "busy"
           : "calm";
   const { previous: prevIconKey, gliding: iconGlide } = useStaggered(

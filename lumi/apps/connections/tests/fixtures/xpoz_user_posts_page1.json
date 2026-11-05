@@ -1,0 +1,58 @@
+{
+  "results": [
+    {
+      "id": "201",
+      "text": "Shipping day. Small steps count.",
+      "authorUsername": "Ateh",
+      "createdAt": "2026-10-25T09:00:00Z",
+      "likeCount": 10,
+      "retweetCount": 2,
+      "replyCount": 1,
+      "impressionCount": 500,
+      "quoteCount": 0,
+      "bookmarkCount": 3,
+      "lang": "en",
+      "isRetweet": false,
+      "conversationId": "201"
+    },
+    {
+      "id": "200",
+      "text": "Replying to a friend",
+      "authorUsername": "Ateh",
+      "createdAt": "2026-10-24T09:00:00Z",
+      "likeCount": 10,
+      "retweetCount": 2,
+      "replyCount": 1,
+      "impressionCount": 500,
+      "quoteCount": 0,
+      "bookmarkCount": 3,
+      "lang": "en",
+      "isRetweet": false,
+      "conversationId": "150",
+      "replyToTweetId": "150",
+      "replyToUsername": "friend",
+      "replyToUserId": "5"
+    },
+    {
+      "id": "199",
+      "text": "Thread part two",
+      "authorUsername": "Ateh",
+      "createdAt": "2026-10-23T09:00:00Z",
+      "likeCount": 10,
+      "retweetCount": 2,
+      "replyCount": 1,
+      "impressionCount": 500,
+      "quoteCount": 0,
+      "bookmarkCount": 3,
+      "lang": "en",
+      "isRetweet": false,
+      "conversationId": "198",
+      "replyToTweetId": "198",
+      "replyToUsername": "Ateh"
+    }
+  ],
+  "count": 3,
+  "dataSource": "live",
+  "has_more": true,
+  "next_page_cursor": "xcur_2"
+}

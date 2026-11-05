@@ -1,0 +1,40 @@
+{
+  "data": [
+    {
+      "platform": "instagram",
+      "platform_post_id": "7",
+      "social_account_id": "sa_1",
+      "platform_account_id": "9001",
+      "platform_url": "https://x.com/ateh/status/7",
+      "caption": "A reel caption",
+      "media": [],
+      "posted_at": "2026-10-20T10:00:00Z",
+      "metrics": {
+        "likes": 50,
+        "comments": 4,
+        "views": 1200,
+        "saved": 9,
+        "shares": 3
+      }
+    },
+    {
+      "platform": "youtube",
+      "platform_post_id": "8",
+      "social_account_id": "sa_1",
+      "platform_account_id": "9001",
+      "platform_url": "https://x.com/ateh/status/8",
+      "caption": "Unsupported network",
+      "media": [],
+      "posted_at": "2026-10-20T10:00:00Z",
+      "metrics": {
+        "x": 1
+      }
+    }
+  ],
+  "meta": {
+    "cursor": "c",
+    "limit": 2,
+    "next": null,
+    "has_more": false
+  }
+}

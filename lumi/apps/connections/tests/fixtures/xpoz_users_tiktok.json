@@ -1,0 +1,14 @@
+{
+  "results": [
+    {
+      "username": "ateh.tt",
+      "nickname": "Ateh TT",
+      "avatar": "https://img.example/t.jpg",
+      "followerCount": 77
+    }
+  ],
+  "count": 1,
+  "dataSource": "live",
+  "has_more": false,
+  "next_page_cursor": null
+}

@@ -1,0 +1,94 @@
+{
+ "ids": [
+  "x:atehofficial",
+  "x:naval",
+  "instagram:mrbeast",
+  "x:naval",
+  "x:paulg",
+  "x:dhh",
+  "myspace:tom",
+  "x:not a handle!"
+ ],
+ "metadatas": [
+  {
+   "handle": "@AtehOfficial",
+   "platform": "x",
+   "display_name": "Ateh",
+   "avatar_url": "https://pbs.example/ateh.jpg",
+   "followers": 1200,
+   "selected_query": "ia",
+   "origin": "selected",
+   "ts": 1768478400
+  },
+  {
+   "handle": "naval",
+   "platform": "x",
+   "display_name": "Naval",
+   "avatar_url": "https://pbs.example/naval.jpg",
+   "followers": 2400000,
+   "selected_query": "ia",
+   "origin": "selected",
+   "ts": 1768564800
+  },
+  {
+   "handle": "MrBeast",
+   "platform": "instagram",
+   "display_name": "",
+   "avatar_url": "",
+   "followers": -1,
+   "selected_query": "ia",
+   "origin": "selected",
+   "ts": 1768651200
+  },
+  {
+   "handle": "naval",
+   "platform": "x",
+   "display_name": "",
+   "avatar_url": "",
+   "followers": 2300000,
+   "selected_query": "ia",
+   "origin": "selected",
+   "ts": 1768400000
+  },
+  {
+   "handle": "paulg",
+   "platform": "x",
+   "display_name": "",
+   "avatar_url": "",
+   "followers": -1,
+   "selected_query": "ia",
+   "origin": "live",
+   "ts": 1768478400
+  },
+  {
+   "handle": "dhh",
+   "platform": "x",
+   "display_name": "",
+   "avatar_url": "",
+   "followers": -1,
+   "selected_query": "ia",
+   "origin": "cache",
+   "ts": 1768478400
+  },
+  {
+   "handle": "tom",
+   "platform": "myspace",
+   "display_name": "",
+   "avatar_url": "",
+   "followers": -1,
+   "selected_query": "ia",
+   "origin": "selected",
+   "ts": 1768478400
+  },
+  {
+   "handle": "not a handle!",
+   "platform": "x",
+   "display_name": "",
+   "avatar_url": "",
+   "followers": -1,
+   "selected_query": "ia",
+   "origin": "selected",
+   "ts": 1768478400
+  }
+ ]
+}

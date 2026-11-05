@@ -1,0 +1,54 @@
+{
+  "results": [
+    {
+      "id": "198",
+      "text": "Thread part one",
+      "authorUsername": "Ateh",
+      "createdAt": "2026-10-22T09:00:00Z",
+      "likeCount": 10,
+      "retweetCount": 2,
+      "replyCount": 1,
+      "impressionCount": 500,
+      "quoteCount": 0,
+      "bookmarkCount": 3,
+      "lang": "en",
+      "isRetweet": false,
+      "conversationId": "198"
+    },
+    {
+      "id": "197",
+      "text": "My take on this",
+      "authorUsername": "Ateh",
+      "createdAt": "2026-10-21T09:00:00Z",
+      "likeCount": 10,
+      "retweetCount": 2,
+      "replyCount": 1,
+      "impressionCount": 500,
+      "quoteCount": 0,
+      "bookmarkCount": 3,
+      "lang": "en",
+      "isRetweet": false,
+      "conversationId": "197",
+      "quotedTweetId": "77"
+    },
+    {
+      "id": "120",
+      "text": "Too old for the cutoff",
+      "authorUsername": "Ateh",
+      "createdAt": "2026-08-01T09:00:00Z",
+      "likeCount": 10,
+      "retweetCount": 2,
+      "replyCount": 1,
+      "impressionCount": 500,
+      "quoteCount": 0,
+      "bookmarkCount": 3,
+      "lang": "en",
+      "isRetweet": false,
+      "conversationId": "120"
+    }
+  ],
+  "count": 3,
+  "dataSource": "live",
+  "has_more": false,
+  "next_page_cursor": null
+}

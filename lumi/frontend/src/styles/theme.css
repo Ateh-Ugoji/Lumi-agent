@@ -3,6 +3,7 @@
    Matched to HTML version exactly.
    ═══════════════════════════════════════ */
 body.light {
+  color-scheme: light;
   --bg: #f5f4f0;
   --text: #0a0a0a;
   --text-dim: rgba(10, 10, 10, 0.62);

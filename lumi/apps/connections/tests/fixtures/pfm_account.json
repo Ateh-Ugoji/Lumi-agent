@@ -1,0 +1,13 @@
+{
+  "id": "sa_1",
+  "platform": "x",
+  "username": "Ateh",
+  "user_id": "9001",
+  "status": "connected",
+  "external_id": "lumi-profile-1",
+  "profile_photo_url": "https://img.example/p.jpg",
+  "access_token": "FAKE-PLATFORM-ACCESS-TOKEN",
+  "refresh_token": "FAKE-PLATFORM-REFRESH-TOKEN",
+  "access_token_expires_at": "2026-12-01T00:00:00Z",
+  "metadata": {}
+}

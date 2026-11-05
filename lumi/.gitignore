@@ -2,9 +2,14 @@
 __pycache__/
 *.pyc
 .env
+.env.*
+*.whl
 .ruff_cache/
 .pytest_cache/
 *.db
+
+# Local Chroma vector store (CHROMA_PATH)
+.chroma/
 
 # Frontend
 node_modules/
@@ -21,3 +26,5 @@ memory.md
 *.log
 _purge_p16.py
 temp-agents.md
+.pgdata/
+staticfiles/

@@ -305,7 +305,7 @@
     border-radius 0.15s ease;
 }
 
-/* Lumi green focus outline (exact ChatBar ring) */
+/* Lumi green focus outline (shared focus ring) */
 .composerBox:focus-within {
   background: rgba(255, 255, 255, 0.09);
   border-color: rgba(255, 255, 255, 0.22);
@@ -538,6 +538,26 @@
   height: 100%;
   border-radius: 999px;
   background: currentColor;
+}
+
+.micTranscribing {
+  opacity: 0.8;
+  cursor: wait;
+}
+
+.micSpinner {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  border-top-color: var(--text);
+  animation: spin 700ms linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* ── Send button — original reference: tactile square ── */

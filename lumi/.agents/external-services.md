@@ -29,7 +29,7 @@ Social media API for connecting social accounts, fetching posts/metrics, and pub
 3. PFM redirects back to our registered callback with `accountIds` on success.
 4. We call `get_social_account(id)` for each id to get real account details, then create/update the matching `Profile` row keyed by `pfm_account_id`.
 
-**A profile cannot exist before step 4** — `pfm_account_id` is `NOT NULL` + unique, and it doesn't exist until the OAuth flow actually completes. There's no "pending" profile state; `connect_account` (the agent tool) only starts the flow and hands back a URL, it never touches the database. See `app/tools/connect.py` and `app/routers/pfm.py`.
+**A profile cannot exist before step 4** — `pfm_account_id` is `NOT NULL` + unique, and it doesn't exist until the OAuth flow actually completes. There's no "pending" profile state; `connect_account` (the agent tool) only starts the flow and hands back a URL, it never touches the database. See `legacy/app/tools/connect.py` and `legacy/app/routers/pfm.py`.
 
 ### What Post for Me stores for us
 
@@ -137,7 +137,7 @@ There is no webhook, push, or dedicated "tracked results" endpoint anywhere in t
 
 `posts` stays exactly as-is: PFM-backfilled, `profile_id`-owned, powers voice extraction only. Xpoz results don't go there — they're not content the profile authored, and `posts.profile_id` is `NOT NULL` for exactly that reason (every row really is "this profile's own post").
 
-A separate table, `listening_matches` (`app/models/listening.py`), holds Xpoz-sourced results. **This is a starting scaffold, not a fixed contract** — whoever implements the listening logic has more context on what the input/output actually looks like and should feel free to add/rename/drop columns to fit. Current shape:
+A separate table, `listening_matches` (`legacy/app/models/listening.py`), holds Xpoz-sourced results. **This is a starting scaffold, not a fixed contract** — whoever implements the listening logic has more context on what the input/output actually looks like and should feel free to add/rename/drop columns to fit. Current shape:
 
 | Column | Notes |
 |---|---|
@@ -152,18 +152,18 @@ A separate table, `listening_matches` (`app/models/listening.py`), holds Xpoz-so
 | `discovered_at` | when our poll found it, defaults to now |
 | `alerted_at` / `alert_dismissed` | same alert-once pattern as `posts` |
 
-Migration applied (`alembic/versions/46283ff46bfd_add_listening_matches_table.py`).
+Migration applied (`legacy/alembic/versions/46283ff46bfd_add_listening_matches_table.py`).
 
 ### Handoff — what exists, what's needed, what's not a blocker
 
 **Exists already, nothing to wait on:**
 - `listening_matches` table, migrated against the real DB (adjust the model and re-migrate as needed — see `CONTRIBUTING.md`'s "Database changes" workflow, same process as every other table).
 - `repurpose_caption` already accepts raw `source_text` — feeding a match into a repurpose needs zero changes there, regardless of what `listening_matches`' final columns look like.
-- `app/background/poller.py` already runs a tick loop per active `poll_config` row — the listening poll should extend this tick, not add a second loop.
+- `legacy/app/background/poller.py` already runs a tick loop per active `poll_config` row — the listening poll should extend this tick, not add a second loop.
 - `XPOZ_API_KEY` is in `config.py`/`.env.example` already (optional field, won't break anyone's `.env` until it's required).
 
 **Needs building (not done, no code to work around):**
-- `app/services/xpoz.py` — an `XpozClient`, following the same shape as `PFMClient` (one `httpx.AsyncClient`, bearer auth, one method for now: fetch a user's recent tweets).
+- `legacy/app/services/xpoz.py` — an `XpozClient`, following the same shape as `PFMClient` (one `httpx.AsyncClient`, bearer auth, one method for now: fetch a user's recent tweets).
 - Somewhere to store which handles a profile is listening to — not built yet, no fixed shape assumed. A JSON column on `poll_config` is one option; a separate table is another. Implementer's call.
 - A tool (or the poller extension above) that calls `XpozClient`, applies the threshold check, and writes to `listening_matches`.
 - A decision on how `GET /profiles/{id}/alerts/unread` surfaces these alongside (or separately from) `posts`-based alerts.
@@ -387,10 +387,10 @@ neatlogs.init(api_key=os.environ["NEATLOGS_API_KEY"], instrumentations=["openai"
 
 ## What actually shipped — implementation notes (2026-10-21)
 
-The sections above are the pre-build contract; where reality diverged (verified against `app/agent/providers.py` + `app/agent/loop.py` today, the code wins):
+The sections above are the pre-build contract; where reality diverged (verified against `legacy/app/agent/providers.py` + `legacy/app/agent/loop.py` today, the code wins):
 
 **Groq models (§ "Groq / Post for Me" model list):** the spec'd `llama-3.3-70b-versatile` / `llama-3.1-8b-instant` were never adopted. The chain is `qwen/qwen3.8-27b` (primary; measured ~7,000-input-token request wall — a 413 above it) → `openai/gpt-oss-120b` (second candidate, ~8k wall, tool-calling verified). The small/large split the spec wanted exists as `TIER_MODELS` (`providers.py:22`): `small: openai/gpt-oss-20b`, `large: openai/gpt-oss-120b`, pinned per repurpose call via `model=` (same IDs on Groq and OpenRouter, so a tier applies to whichever provider answers). Above both sits the optional OpenLux provider (`OPENLUX_API_KEY` + `OPENLUX_MODEL`, prepended only when set).
 
-**Fallback (§ "OpenRouter" — "The fallback is handled in Python"):** implemented as a nested chain, not the try/except pseudo-code below that line — for each provider in order (OpenLux → Groq → OpenRouter), try each of its `models` in order on any `openai.APIError`; a qwen 413/429 falls to `gpt-oss-120b` **before** the OpenRouter leg is touched; all candidates exhausted → `RuntimeError("all LLM providers failed")`. The "don't hardcode a single model / use the `models` array" advice was realized at the chain level rather than per-request, and request size is additionally bounded by the request-fit trim (`MAX_REQUEST_TOKENS = 6_700` estimated whole-request tokens incl. tool specs, `app/agent/loop.py`). Both landed 2026-10-21, pinned by `tests/test_provider_fallback.py` + `tests/test_context_budget.py`.
+**Fallback (§ "OpenRouter" — "The fallback is handled in Python"):** implemented as a nested chain, not the try/except pseudo-code below that line — for each provider in order (OpenLux → Groq → OpenRouter), try each of its `models` in order on any `openai.APIError`; a qwen 413/429 falls to `gpt-oss-120b` **before** the OpenRouter leg is touched; all candidates exhausted → `RuntimeError("all LLM providers failed")`. The "don't hardcode a single model / use the `models` array" advice was realized at the chain level rather than per-request, and request size is additionally bounded by the request-fit trim (`MAX_REQUEST_TOKENS = 6_700` estimated whole-request tokens incl. tool specs, `legacy/app/agent/loop.py`). Both landed 2026-10-21, pinned by `legacy/tests/test_provider_fallback.py` + `legacy/tests/test_context_budget.py`.
 
 **Environment Variables Summary (table above):** stale rows — `XPOZ_API_KEY` *is* in `config.py`/`.env.example` now (optional); missing `OPENLUX_API_KEY`/`OPENLUX_MODEL` (optional), `GOOGLE_OAUTH_CLIENT_ID`/`GOOGLE_OAUTH_CLIENT_SECRET` (optional MCP connectors), and the `MCP_*` switches. See `AGENTS.md` §2 for the current table (env var **names** only — values never enter this repo).

@@ -1,0 +1,30 @@
+{
+  "results": [
+    {
+      "id": "3430102783691229105",
+      "username": "lagos_eats",
+      "caption": "Three spots in Yaba you have not tried yet",
+      "createdAt": "1792830720",
+      "likeCount": 4210,
+      "commentCount": 87,
+      "videoPlayCount": 91200,
+      "mediaType": "CAROUSEL_ALBUM",
+      "codeUrl": "https://www.instagram.com/p/DPq8mQ9jKxR/",
+      "profilePicUrl": "https://scontent.cdninstagram.com/avatar/lagos_eats.jpg"
+    },
+    {
+      "id": "3430102783691229106",
+      "username": "yaba_bites",
+      "caption": "The jollof ranking nobody asked for",
+      "createdAt": "1792749600",
+      "likeCount": 912,
+      "commentCount": 24,
+      "videoPlayCount": null,
+      "mediaType": "IMAGE",
+      "codeUrl": null,
+      "profilePicUrl": null
+    }
+  ],
+  "has_more": false,
+  "next_page_cursor": null
+}

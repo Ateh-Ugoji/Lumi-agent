@@ -154,7 +154,7 @@ Rule of thumb: **one Jev call to decide > one Xpoz call to check.**
 > (`MVP_XPOZ_BUDGET`, default 100), each platform's price charged on its query, and
 > the fan-out stops honestly when the next platform's cost won't fit. Cache keys are
 > `platform:query`, the local-db layer stays X-only, and every result row carries
-> `platform` (legacy rows default `x`). Tests: `tests/test_handle_search_platforms.py`.
+> `platform` (legacy rows default `x`). Tests: `legacy/tests/test_handle_search_platforms.py`.
 
 Xpoz also exposes **user search for other platforms** (verified in the OpenAPI spec):
 `/api/data/instagram/users/live` (**12 credits**), `/api/data/tiktok/users/live` (**5**),
@@ -177,7 +177,7 @@ Xpoz also exposes **user search for other platforms** (verified in the OpenAPI s
 
 ## 6. The @-handle search MVP (built)
 
-**Location: `lumi/mvp/handle_search/` — born as a standalone side project (still runnable on its own at :8010); wired into the main app 2026-10-21.** The main backend mounts the same handlers under `/handles/search|saved|select|stats` via `app/routers/handles.py` (a thin delegation shim — zero logic duplication, one API base for the chat frontend), and the chat composer's typed `@` menu (`PromptBar.tsx`) is the real search UI: instant 0-credit paint from the saved-handles snapshot + a 300 ms-debounced refine, picking inserts `@handle ` (no auto-send) and POSTs `/handles/select`; sending then follows prompt rule 13 (`save_user_request` → `check_niche_trends`).
+**Location: `lumi/mvp/handle_search/` — born as a standalone side project (still runnable on its own at :8010); wired into the main app 2026-10-21.** The main backend mounts the same handlers under `/handles/search|saved|select|stats` via `legacy/app/routers/handles.py` (a thin delegation shim — zero logic duplication, one API base for the chat frontend), and the chat composer's typed `@` menu (`PromptBar.tsx`) is the real search UI: instant 0-credit paint from the saved-handles snapshot + a 300 ms-debounced refine, picking inserts `@handle ` (no auto-send) and POSTs `/handles/select`; sending then follows prompt rule 13 (`save_user_request` → `check_niche_trends`).
 
 ```
 mvp/handle_search/
@@ -228,7 +228,7 @@ uv run uvicorn mvp.handle_search.server:app --port 8010
    live pull (pfp, display name, follower count), *not just the one the user selects* — so the
    handle DB keeps expanding with every search. Cache-only results not yet remembered are
    persisted the same way. Each row records `origin: live | cache | selected | niche` and a
-   timestamp. The **main app feeds the same store** (`app/services/handle_db.py`, add-if-absent,
+   timestamp. The **main app feeds the same store** (`legacy/app/services/handle_db.py`, add-if-absent,
    never raises): `check_niche_trends` persists every tracked account (bounded enrichment —
    picture/name/followers via the verified user search for handles the store has never seen,
    exact username match only, ≤2 credits each, `HANDLE_DB_ENRICH_LIMIT` per scan, `0` off) plus
@@ -258,12 +258,12 @@ uv run uvicorn mvp.handle_search.server:app --port 8010
 new scanned handles enriched per scan; `0` disables), `HANDLE_SEARCH_DB` (optional, defaults to
 `lumi.db`).
 
-**Tests:** `tests/test_handle_search_mvp.py` — Xpoz fully mocked; covers db-as-head-start merge
+**Tests:** `legacy/tests/test_handle_search_mvp.py` — Xpoz fully mocked; covers db-as-head-start merge
 (db hits never gate live), the free db fallback when live is off, live-on-miss, cache reuse,
 prefix-chain reuse, budget exhaustion, key rotation, handle remembering, auto-persistence of
 every live pull (pfp + followers, without selection), and the TTL real-time refresh (stale →
 re-query, fresh negative cache → no re-burn, stale + budget spent → honest fallback).
-`tests/test_handle_db.py` — the main-app side: MVP-compatible row shape, add-if-absent,
+`legacy/tests/test_handle_db.py` — the main-app side: MVP-compatible row shape, add-if-absent,
 enrichment rules (exact match only, cap, off), never-raises, and both listening tools wired
 (every scanned handle + author persisted; a scan survives a handle-DB failure). Both suites
 must stay green with **no network**.
@@ -315,7 +315,7 @@ Constraints: `UNIQUE(platform, handle_lower)`; index on `handle_lower` (btree se
 
 ### 7.4 Rollout steps (each independently verifiable)
 
-1. `app/models/handles.py` + Alembic revision (`down_revision='b7d2e5f8a3c1'`), copy-tested up/down.
+1. `legacy/app/models/handles.py` + Alembic revision (`down_revision='b7d2e5f8a3c1'`), copy-tested up/down.
 2. `scripts/backfill_handles.py` — seed from `listening_matches.author_handle` (9 distinct today),
    `profiles.handle` (2), and `@mention` regex over `posts`/`user_activity` captions. Idempotent.
 3. Writers 1–3 above, each behind the same upsert-by-unique-key pattern.
@@ -329,7 +329,7 @@ Constraints: `UNIQUE(platform, handle_lower)`; index on `handle_lower` (btree se
 
 - [x] Verified plan/credits/keyword facts (pricing page + OpenAPI + live probes)
 - [x] New key + Chroma credentials stored in `.env` only
-- [x] @-handle search MVP built + tested (`mvp/handle_search/`, `tests/test_handle_search_mvp.py`)
+- [x] @-handle search MVP built + tested (`mvp/handle_search/`, `legacy/tests/test_handle_search_mvp.py`)
 - [ ] Jev cache-adequacy gate (after MVP validation — needs a $ decision? no: Jev is ~free; just build)
 - [ ] `xpoz_call_count` meter in the main app's `XpozClient`
 - [ ] `social_handles` migration + backfill (§7) — **gated on your go** (schema change)
